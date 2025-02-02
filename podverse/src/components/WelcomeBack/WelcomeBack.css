@@ -1,0 +1,22 @@
+h1 {
+    font-size: 32px;
+    line-height: 48px;
+    color: #000;
+    font-family: "Inria Serif", serif;
+    left: 59px;
+}
+
+h2 {
+    font-size: 20px;
+    line-height: 30px;
+    color: #9095A0FF;
+    font-family: "Inria Serif", serif;
+    left: 58px;
+}
+.ml-59px {
+    margin-left: 59px;
+}
+.ml-58px {
+    margin-left: 58px;
+}
+

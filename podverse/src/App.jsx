@@ -1,11 +1,10 @@
-import './App.css'
+import WelcomeBack from "./components/WelcomeBack/WelcomeBack"
 
 function App() {
   
-
   return (
     <>
-      <h1>HELLO RABEECCCA CHUSSSSSS&#129400;	&#128514;MHMMMM WORKING</h1>
+      <WelcomeBack></WelcomeBack>
     </>
   )
 }
