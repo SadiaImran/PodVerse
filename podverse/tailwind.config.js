@@ -11,12 +11,21 @@ export default {
         'neutral-500' : '#c9cacd',
         'primary-500' :'#806fe1'
       },
-      fontFamily :{
-        InriaSerif : ['Inria Serif', 'serif'],
-        OpenSans :['Open Sans', 'sans-serif'],
-        Rubik :['Rubik', 'serif']
-      }
     },
+    fontFamily :{
+      InriaSerif : ['Inria Serif', 'serif'],
+      OpenSans :['Open Sans', 'sans-serif'],
+      Rubik :['Rubik', 'serif']
+    },
+    container : {
+      center : true ,
+      padding : "1rem",
+      screens :{
+        lg : "1124px" ,
+        xl : "1124px" , 
+        "2xl" : "1124px",
+      }
+    }
   },
   plugins: [],
 }
