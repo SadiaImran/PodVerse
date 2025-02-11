@@ -14,6 +14,7 @@ export default {
       fontFamily :{
         InriaSerif : ['Inria Serif', 'serif'],
         OpenSans :['Open Sans', 'sans-serif'],
+        Rubik :['Rubik', 'serif']
       }
     },
   },
