@@ -2,7 +2,7 @@
 function TermsCondition() {
 
     return (
-        <><div className='centered-div'>
+        <><div className='container'>
             <p className='text-sm text-center font-OpenSans font-medium text-neutral-500 leading-6'>
                 By continuing you agree to our <br />
                 <span className='text-neutral-700 font-Rubik font-medium'>
