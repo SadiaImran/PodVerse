@@ -1,18 +1,17 @@
-import LetsGetStarted from "./components/comp-signup/LetsGetStarted"
-import WelcomeBack from "./components/comp-signin/WelcomeBack"
-import AlreadyHaveAnAccount from "./components/comp-signup/AlreadyHaveAnAccount"
-import TermsCondition from "./components/comp-signin/Terms&Conditions"
+import AuthButton from "./components/comp-signin/AuthButton";
 
 function App() {
-  
   return (
     <>
-      <LetsGetStarted></LetsGetStarted>
-      <WelcomeBack></WelcomeBack>
-      <AlreadyHaveAnAccount></AlreadyHaveAnAccount>
-      <TermsCondition></TermsCondition>
+      <AuthButton 
+        bgColor="bg-primary-500" 
+        textColor="text-white" 
+        borderColor="border-primary-500"
+        text="Log in with Email" 
+        icon="&#128386;"
+      />
     </>
-  )
+  );
 }
 
-export default App
+export default App;
