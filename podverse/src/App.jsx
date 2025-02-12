@@ -1,4 +1,4 @@
-import AuthButton from "./components/comp-signin/AuthButton";
+import AuthButton from "./components/shared/AuthButton";
 import { FaRegEnvelope } from "react-icons/fa";
 import { FaGoogle } from "react-icons/fa";
 import { FaFacebookF } from "react-icons/fa";
