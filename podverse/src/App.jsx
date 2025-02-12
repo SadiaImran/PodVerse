@@ -1,10 +1,13 @@
-import AuthButton from "./components/shared/AuthButton";
+
 import { FaRegEnvelope } from "react-icons/fa";
 import { FaGoogle } from "react-icons/fa";
 import { FaFacebookF } from "react-icons/fa";
+import { MdOutlineLock } from "react-icons/md";
 import AuthWelcome from "./components/shared/AuthWelcome"
 import AccountPrompt from "./components/shared/AccountPrompt"
 import TermsCondition from "./components/comp-signin/Terms&Conditions"
+import AuthFields from "./components/shared/AuthFields";
+import AuthButton from "./components/shared/AuthButton";
 import AuthCarousel from "./components/shared/AuthCarousel";
 import TopBar from "./components/shared/TopBar";
 
@@ -58,6 +61,8 @@ function App() {
         text="Sign Up with Facebook"
         IconComponent={FaFacebookF}
       />
+      <AuthFields type="email" purpose="signin" placeholder="What is your email?" IconComponent={FaRegEnvelope}></AuthFields>
+      <AuthFields type="password" purpose="signin" placeholder="Enter your password" IconComponent={MdOutlineLock}></AuthFields>
       <TopBar></TopBar>
       <AuthCarousel></AuthCarousel>
     </>
