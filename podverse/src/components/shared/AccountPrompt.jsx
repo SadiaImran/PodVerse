@@ -14,8 +14,5 @@ function AccountPrompt(props){
     quesText : PropTypes.string , 
     buttonText : PropTypes.string
  }
- AccountPrompt.defaultProps = {
-    quesText : "Already Have an Account ?" ,
-    buttonText : "Log in"
- }
+
 export default AccountPrompt;

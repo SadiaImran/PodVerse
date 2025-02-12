@@ -21,9 +21,5 @@ AuthWelcome.propTypes = {
   title: PropTypes.string,
   subtitle: PropTypes.string
 }
-AuthWelcome.defaultProps = {
-  title: "Let's Get Started",
-  subtitle: "Create your account"
-}
 
 export default AuthWelcome
