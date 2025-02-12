@@ -1,12 +1,15 @@
-import AuthButton from "./components/comp-signin/AuthButton";
-import { FaRegEnvelope } from "react-icons/fa";
-import { FaGoogle } from "react-icons/fa";
-import { FaFacebookF } from "react-icons/fa";
-import { FaApple } from "react-icons/fa";
+
+import { FaRegEnvelope , FaGoogle , FaFacebookF , FaApple } from "react-icons/fa";
+import { MdOutlineLock } from "react-icons/md";
+
 import AuthWelcome from "./components/shared/AuthWelcome"
 import AccountPrompt from "./components/shared/AccountPrompt"
 import TermsCondition from "./components/comp-signin/Terms&Conditions"
 import RememberMeForgotPass from "./components/comp-signin/Remember&ForgotPass";
+import AuthFields from "./components/shared/AuthFields";
+import AuthButton from "./components/shared/AuthButton";
+import AuthCarousel from "./components/shared/AuthCarousel";
+import TopBar from "./components/shared/TopBar";
 
 function App() {
   return (
@@ -14,7 +17,7 @@ function App() {
       <AuthWelcome title="Let&apos;s Get Started &#x1F680;" subtitle="Sign up your account"></AuthWelcome>
       <AuthWelcome title="Welcome back &#128075;" subtitle="Log in your account"></AuthWelcome>
       <AccountPrompt quesText = "Don't Have an account ?" buttonText="Sign up"></AccountPrompt>
-      <AccountPrompt ></AccountPrompt>
+      <AccountPrompt quesText = "Already Have an Account ?" buttonText="Log in"></AccountPrompt>
       <TermsCondition></TermsCondition>
       <AuthButton
         bgColor="bg-primary-500"
@@ -81,6 +84,10 @@ function App() {
       
       <RememberMeForgotPass></RememberMeForgotPass>
       
+      <AuthFields type="email" purpose="signin" placeholder="What is your email?" IconComponent={FaRegEnvelope}></AuthFields>
+      <AuthFields type="password" purpose="signin" placeholder="Enter your password" IconComponent={MdOutlineLock}></AuthFields>
+      <TopBar></TopBar>
+      <AuthCarousel></AuthCarousel>
     </>
   );
 }
