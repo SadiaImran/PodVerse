@@ -6,6 +6,7 @@ import AuthWelcome from "./components/shared/AuthWelcome"
 import AccountPrompt from "./components/shared/AccountPrompt"
 import TermsCondition from "./components/comp-signin/Terms&Conditions"
 import AuthCarousel from "./components/shared/AuthCarousel";
+import TopBar from "./components/shared/TopBar";
 
 function App() {
   return (
@@ -57,6 +58,7 @@ function App() {
         text="Sign Up with Facebook"
         IconComponent={FaFacebookF}
       />
+      <TopBar></TopBar>
       <AuthCarousel></AuthCarousel>
     </>
   );
