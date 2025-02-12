@@ -2,10 +2,18 @@ import AuthButton from "./components/comp-signin/AuthButton";
 import { FaRegEnvelope } from "react-icons/fa";
 import { FaGoogle } from "react-icons/fa";
 import { FaFacebookF } from "react-icons/fa";
+import AuthWelcome from "./components/shared/AuthWelcome"
+import AccountPrompt from "./components/shared/AccountPrompt"
+import TermsCondition from "./components/comp-signin/Terms&Conditions"
 
 function App() {
   return (
     <>
+      <AuthWelcome title="Let&apos;s Get Started &#x1F680;" subtitle="Sign up your account"></AuthWelcome>
+      <AuthWelcome title="Welcome back &#128075;" subtitle="Log in your account"></AuthWelcome>
+      <AccountPrompt quesText = "Don't Have an account ?" buttonText="Sign up"></AccountPrompt>
+      <AccountPrompt ></AccountPrompt>
+      <TermsCondition></TermsCondition>
       <AuthButton
         bgColor="bg-primary-500"
         textColor="text-white"
@@ -48,6 +56,7 @@ function App() {
         text="Sign Up with Facebook"
         IconComponent={FaFacebookF}
       />
+      
     </>
   );
 }
