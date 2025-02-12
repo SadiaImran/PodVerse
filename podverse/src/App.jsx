@@ -2,9 +2,11 @@ import AuthButton from "./components/comp-signin/AuthButton";
 import { FaRegEnvelope } from "react-icons/fa";
 import { FaGoogle } from "react-icons/fa";
 import { FaFacebookF } from "react-icons/fa";
+import { FaApple } from "react-icons/fa";
 import AuthWelcome from "./components/shared/AuthWelcome"
 import AccountPrompt from "./components/shared/AccountPrompt"
 import TermsCondition from "./components/comp-signin/Terms&Conditions"
+import RememberMeForgotPass from "./components/comp-signin/Remember&ForgotPass";
 
 function App() {
   return (
@@ -56,6 +58,28 @@ function App() {
         text="Sign Up with Facebook"
         IconComponent={FaFacebookF}
       />
+      <AuthButton
+        bgColor="bg-white-500"
+        textColor="text-black"
+        borderColor="border-black"
+        text="Log in with Apple"
+        IconComponent={FaApple}
+      />
+      <AuthButton
+        bgColor="bg-white-500"
+        textColor="text-black"
+        borderColor="border-black"
+        text="Sign up with Apple"
+        IconComponent={FaApple}
+      />
+      <AuthButton
+        bgColor="bg-primary-500"
+        textColor="text-white"
+        borderColor="border-primary-500"
+        text="Continue"
+      />
+      
+      <RememberMeForgotPass></RememberMeForgotPass>
       
     </>
   );
