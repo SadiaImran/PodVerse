@@ -16,9 +16,12 @@ function App() {
     <>
       <AuthWelcome title="Let&apos;s Get Started &#x1F680;" subtitle="Sign up your account"></AuthWelcome>
       <AuthWelcome title="Welcome back &#128075;" subtitle="Log in your account"></AuthWelcome>
+      
       <AccountPrompt quesText = "Don't Have an account ?" buttonText="Sign up"></AccountPrompt>
       <AccountPrompt quesText = "Already Have an Account ?" buttonText="Log in"></AccountPrompt>
+
       <TermsCondition></TermsCondition>
+
       <AuthButton
         bgColor="bg-primary-500"
         textColor="text-white"
