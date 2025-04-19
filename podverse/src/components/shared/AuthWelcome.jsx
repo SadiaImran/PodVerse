@@ -7,7 +7,9 @@ function AuthWelcome(props) {
         `text-3xl 
           font-InriaSerif 
           font-bold 
-          text-neutral-900`}>{props.title}</h1>
+          text-neutral-900
+          bg-light-deepPurple
+          `}>{props.title}</h1>
       <h2 className=
       {`text-xl 
         font-medium 
