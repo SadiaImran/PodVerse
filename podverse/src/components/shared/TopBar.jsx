@@ -6,7 +6,7 @@ function TopBar() {
 
       <div className="flex items-center gap-3 ml-16">
         <img src="./src/assets/images/icon-logo.png" alt="Logo" className="h-8 w-8" />
-        <span className="text-xl font-semibold font-InriaSerif text-neutral-800">PodVerse</span>
+        <span className="text-xl font-semibold font-HeadingPoppins text-neutral-800">PodVerse</span>
       </div>
 
       <div className="flex items-center gap-4 mr-16">

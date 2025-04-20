@@ -67,7 +67,7 @@ function AuthCarousel() {
             key={slideIndex}
             onClick={() => goToSlide(slideIndex)}
             className={`text-2xl cursor-pointer ${
-              slideIndex === currentIndex ? "text-primary-500" : "text-gray-400"
+              slideIndex === currentIndex ? "text-purple-300" : "text-gray-400"
             }`}
           >
             <RxDotFilled />
