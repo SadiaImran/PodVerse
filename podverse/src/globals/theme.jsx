@@ -10,6 +10,7 @@ const theme = {
       softBlue: '#ACBFEC',
       skyBlue: '#6280E4',
       deepBlue: '#0F3995',
+      lightPurple : "#7d6ce3",
   
       // UI Mapping
       background: '#F9F5EB',
