@@ -40,3 +40,39 @@
 .read-the-docs {
   color: #888;
 }
+
+@font-face {
+  font-family: 'Poppins';
+  src: url('./assets/fonts/font-poppins-bold.ttf') format('truetype');
+  font-weight: bold;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'DM Sans';
+  src: url('./assets/fonts/font-dmsans-regular.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'DM Sans';
+  src: url('./assets/fonts/font-dmsans-medium.ttf') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Inria Serif';
+  src: url('./assets/fonts/font-inriaserif-italic.ttf') format('truetype');
+  font-weight: normal;
+  font-style: italic;
+}
+
+@font-face {
+  font-family: 'Roboto';
+  src: url('./assets/fonts/font-roboto-regular.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
