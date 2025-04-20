@@ -14,9 +14,11 @@ export default {
       },
     },
     fontFamily :{
-      InriaSerif : ['Inria Serif', 'serif'],
-      OpenSans :['Open Sans', 'sans-serif'],
-      Rubik :['Rubik', 'serif']
+      headingPoppins: ['Poppins', 'sans-serif'], 
+      subheadingDMSans: ['DM Sans', 'sans-serif'],   
+      bodyRoboto: ['Roboto', 'sans-serif'],            
+      quoteInria: ['Inria Serif', 'serif'],             
+      labelDMSans: ['DM Sans', 'sans-serif'], 
     },
     container : {
       center : true ,
