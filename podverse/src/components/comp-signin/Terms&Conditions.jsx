@@ -3,11 +3,11 @@ function TermsCondition() {
 
     return (
         <><div className='container'>
-            <p className='text-sm text-center font-OpenSans font-medium text-neutral-500 leading-6'>
+            <p className='text-sm text-center font-bodyRoboto font-medium text-neutral-500 leading-6'>
                 By continuing you agree to our <br />
-                <span className='text-neutral-700 font-Rubik font-medium'>
+                <span className='text-neutral-800 font-bodyRoboto font-bold'>
                 Terms & Conditions
-                </span> and <span className='text-neutral-700 font-Rubik font-medium'>Privacy Policy</span>
+                </span> and <span className='text-neutral-800 font-Rubik font-bold'>Privacy Policy</span>
             </p>
         </div>
          </>

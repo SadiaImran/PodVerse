@@ -10,11 +10,14 @@ import AuthFields from "./components/shared/AuthFields";
 import AuthButton from "./components/shared/AuthButton";
 import AuthCarousel from "./components/shared/AuthCarousel";
 import TopBar from "./components/shared/TopBar";
+import SignUpScreen from "./screens/screen-signup";
+import SignUpScreenEmail from "./screens/screen-signup-email";
 
 function App() {
   return (
     <>
-      <AuthWelcome title="Let&apos;s Get Started &#x1F680;" subtitle="Sign up your account"></AuthWelcome>
+    <SignUpScreen/>
+      {/* <AuthWelcome title="Let&apos;s Get Started &#x1F680;" subtitle="Sign up your account"></AuthWelcome>
       <AuthWelcome title="Welcome back &#128075;" subtitle="Log in your account"></AuthWelcome>
       
       <AccountPrompt quesText = "Don't Have an account ?" buttonText="Sign up"></AccountPrompt>
@@ -90,7 +93,7 @@ function App() {
       <AuthFields type="email" purpose="signin" placeholder="What is your email?" IconComponent={FaRegEnvelope}></AuthFields>
       <AuthFields type="password" purpose="signin" placeholder="Enter your password" IconComponent={MdOutlineLock}></AuthFields>
       <TopBar></TopBar>
-      <AuthCarousel></AuthCarousel>
+      <AuthCarousel></AuthCarousel> */}
     </>
   );
 }
