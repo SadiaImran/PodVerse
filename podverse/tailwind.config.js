@@ -22,6 +22,7 @@ export default {
           softBlue: theme.colors.softBlue,
           skyBlue: theme.colors.skyBlue,
           deepBlue: theme.colors.deepBlue,
+          lightPurple: theme.colors.lightPurple,
           background: theme.colors.background,
           text: theme.colors.text,
           primary: theme.colors.primary,
