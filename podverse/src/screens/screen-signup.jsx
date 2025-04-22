@@ -21,7 +21,7 @@ function SignUpScreen(){
                     className="w-[90%] max-w-xl"
                     />
                 </div>
-                <div className="w-full max-w-lg min-h-[540px] border rounded-lg border-gray-200 shadow-md p-16 flex flex-col justify-between mx-auto">
+                <div className="w-full max-w-lg min-h-[540px] border rounded-lg border-gray-200 shadow-md p-8 flex flex-col justify-between mx-auto mt-[-15px]">
                     <AuthWelcome title="Let&apos;s Get Started &#x1F680;" subtitle="Sign up your account" />
                     <div className="space-y-6 mt-12">
                         <AuthButton
