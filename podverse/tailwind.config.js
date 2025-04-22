@@ -33,7 +33,9 @@ export default {
           buttonText: theme.colors.button.text,
         },
         // 🌚 Dark Theme 
-        dark: {},
+        dark: {
+          
+        }
       },
     },
     fontFamily :{
