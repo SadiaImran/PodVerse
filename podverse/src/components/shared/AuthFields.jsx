@@ -2,7 +2,7 @@ import PropTypes from 'prop-types'
 import { useState } from 'react'
 import { FaEye, FaEyeSlash } from 'react-icons/fa'
 
-function AuthFields({ type, purpose, placeholder, IconComponent }) {
+function AuthFields({ type, purpose, placeholder, IconComponent, value, onChange }) {
   const [showPassword, setShowPassword] = useState(false)
 
   const isPasswordField = type === 'password'
@@ -17,6 +17,8 @@ function AuthFields({ type, purpose, placeholder, IconComponent }) {
         id={`${purpose}-${type}`}
         placeholder={placeholder}
         className="bg-neutral-100 outline-none w-full"
+        value={value}
+        onChange={onChange}
       />
       {isPasswordField && (
         <button
@@ -36,6 +38,8 @@ AuthFields.propTypes = {
   purpose: PropTypes.string.isRequired,
   placeholder: PropTypes.string,
   IconComponent: PropTypes.elementType.isRequired,
+  value: PropTypes.string,
+  onChange: PropTypes.func,
 }
 
 export default AuthFields
