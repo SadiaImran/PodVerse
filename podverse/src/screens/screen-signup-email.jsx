@@ -55,7 +55,7 @@ function SignUpScreenEmail() {
           />
         </div>
 
-        <div className="w-full max-w-lg min-h-[540px] border rounded-lg border-gray-200 shadow-md p-16 flex flex-col justify-between mx-auto">
+        <div className="w-full max-w-lg min-h-[540px] border rounded-lg border-gray-200 shadow-md p-8 flex flex-col justify-between mx-auto mt-[-15px]">
           {isLoading ? (
             <div className="flex flex-col h-full space-y-4">
             {/* Keep welcome text at top */}
