@@ -1,7 +1,7 @@
-import theme from './src/globals/theme.jsx'; // Use ES Module import
+const theme = require('./src/globals/theme.jsx');
 
 /** @type {import('tailwindcss').Config} */
-export default {
+module.exports = {
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",

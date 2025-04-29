@@ -5,16 +5,15 @@ function AuthWelcome(props) {
     <><div className='centered-div'>
       <h1 className={
         `text-3xl 
-          font-InriaSerif 
+          font-HeadingPoppins
           font-bold 
           text-neutral-900
-          bg-light-deepPurple
           `}>{props.title}</h1>
       <h2 className=
       {`text-xl 
         font-medium 
-        font-InriaSerif 
-        text-neutral-500`}
+        font-subheadingDMSans 
+        text-neutral-500 mt-2`}
       >{props.subtitle}</h2></div>
     </>
   )
