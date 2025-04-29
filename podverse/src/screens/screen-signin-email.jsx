@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from 'react-router-dom';
 import TopBar from "../components/shared/TopBar.jsx";
 import AuthWelcome from "../components/shared/AuthWelcome.jsx";
 import AuthButton from "../components/shared/AuthButton.jsx";
@@ -16,6 +17,8 @@ function SignInScreenEmail() {
   const [isLoading, setIsLoading] = useState(false);
   const [emailError, setEmailError] = useState("");
   const [passwordError, setPasswordError] = useState("");
+
+  const navigate = useNavigate();
 
   // Dummy users for matching
   const dummyUsers = [
@@ -54,6 +57,7 @@ function SignInScreenEmail() {
       // If everything is good, proceed to next logic
       setIsLoading(false);
       alert("Successfully signed in!");
+      navigate("/home");
     }, 1000);
   };
 
