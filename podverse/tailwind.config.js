@@ -33,7 +33,9 @@ module.exports = {
           buttonText: theme.colors.button.text,
         },
         // 🌚 Dark Theme 
-        dark: {},
+        dark: {
+          
+        }
       },
     },
     fontFamily :{
