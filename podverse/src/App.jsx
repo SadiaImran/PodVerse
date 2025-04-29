@@ -10,13 +10,28 @@ import AuthFields from "./components/shared/AuthFields";
 import AuthButton from "./components/shared/AuthButton";
 import AuthCarousel from "./components/shared/AuthCarousel";
 import TopBar from "./components/shared/TopBar";
+import SignUpScreen from "./screens/screen-signup";
+import SignUpScreenEmail from "./screens/screen-signup-email";
+import EmailVerification from "./components/popups/popup-verify-code";
+import SignInScreen from "./screens/screen-signin";
+import SignInScreenEmail from "./screens/screen-signin-email";
+import { useState } from "react";
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import HomeScreen from "./screens/screen-home";
 
 function App() {
   return (
-    <div className="bg-light-cream h-screen w-screen">
-    <HomeScreen></HomeScreen>
-    </div>
+    <Router>
+    <Routes>
+      <Route path="/" element={<SignInScreen />} />
+      <Route path="/signin-email" element={<SignInScreenEmail />} />
+      <Route path="/signup" element={<SignUpScreen />} />
+      <Route path="/signup-email" element={<SignUpScreenEmail />} />
+    </Routes>
+    </Router>
+    //<div className="bg-light-cream h-screen w-screen">
+    //<HomeScreen></HomeScreen>
+    //</div>
       /* <AuthWelcome title="Let&apos;s Get Started &#x1F680;" subtitle="Sign up your account"></AuthWelcome>
       <AuthWelcome title="Welcome back &#128075;" subtitle="Log in your account"></AuthWelcome>
       
@@ -94,7 +109,8 @@ function App() {
       <AuthFields type="password" purpose="signin" placeholder="Enter your password" IconComponent={MdOutlineLock}></AuthFields>
       <TopBar></TopBar>
       <AuthCarousel></AuthCarousel> */
-  );
+ 
+);
 }
 
 export default App;
