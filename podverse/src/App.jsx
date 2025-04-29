@@ -17,6 +17,7 @@ import SignInScreen from "./screens/screen-signin";
 import SignInScreenEmail from "./screens/screen-signin-email";
 import { useState } from "react";
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import HomeScreen from "./screens/screen-home";
 
 function App() {
   return (
@@ -28,7 +29,88 @@ function App() {
       <Route path="/signup-email" element={<SignUpScreenEmail />} />
     </Routes>
     </Router>
-  );
+    //<div className="bg-light-cream h-screen w-screen">
+    //<HomeScreen></HomeScreen>
+    //</div>
+      /* <AuthWelcome title="Let&apos;s Get Started &#x1F680;" subtitle="Sign up your account"></AuthWelcome>
+      <AuthWelcome title="Welcome back &#128075;" subtitle="Log in your account"></AuthWelcome>
+      
+      <AccountPrompt quesText = "Don't Have an account ?" buttonText="Sign up"></AccountPrompt>
+      <AccountPrompt quesText = "Already Have an Account ?" buttonText="Log in"></AccountPrompt>
+
+      <TermsCondition></TermsCondition>
+
+      <AuthButton
+        bgColor="bg-primary-500"
+        textColor="text-white"
+        borderColor="border-primary-500"
+        text="Log in with Email"
+        IconComponent={FaRegEnvelope}
+      />
+      <AuthButton
+        bgColor="bg-primary-500"
+        textColor="text-white"
+        borderColor="border-primary-500"
+        text="Sign Up with Email"
+        IconComponent={FaRegEnvelope}
+      />
+      <AuthButton
+        bgColor="bg-white-500"
+        textColor="text-red-500"
+        borderColor="border-red-500"
+        text="Log in with Google"
+        IconComponent={FaGoogle}
+      />
+      <AuthButton
+        bgColor="bg-white-500"
+        textColor="text-red-500"
+        borderColor="border-red-500"
+        text="Sign Up with Google"
+        IconComponent={FaGoogle}
+      />
+      <AuthButton
+        bgColor="bg-white-500"
+        textColor="text-blue-600"
+        borderColor="border-blue-600"
+        text="Log in with Facebook"
+        IconComponent={FaFacebookF}
+      />
+      <AuthButton
+        bgColor="bg-white-500"
+        textColor="text-blue-600"
+        borderColor="border-blue-600"
+        text="Sign Up with Facebook"
+        IconComponent={FaFacebookF}
+      />
+      <AuthButton
+        bgColor="bg-white-500"
+        textColor="text-black"
+        borderColor="border-black"
+        text="Log in with Apple"
+        IconComponent={FaApple}
+      />
+      <AuthButton
+        bgColor="bg-white-500"
+        textColor="text-black"
+        borderColor="border-black"
+        text="Sign up with Apple"
+        IconComponent={FaApple}
+      />
+      <AuthButton
+        bgColor="bg-primary-500"
+        textColor="text-white"
+        borderColor="border-primary-500"
+        text="Continue"
+      />
+      
+      <RememberMeForgotPass></RememberMeForgotPass>
+      
+      <AuthFields type="email" purpose="signin" placeholder="What is your email?" IconComponent={FaRegEnvelope}></AuthFields>
+      <AuthFields type="password" purpose="signin" placeholder="Enter your password" IconComponent={MdOutlineLock}></AuthFields>
+      <TopBar></TopBar>
+      <AuthCarousel></AuthCarousel> */
+ 
+);
 }
 
 export default App;
