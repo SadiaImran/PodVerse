@@ -13,6 +13,7 @@ module.exports = {
         // 🌞 Light Theme
         light: {
           black: theme.colors.black,
+          lightGrey: theme.colors.lightGrey,
           grey: theme.colors.grey,
           charcoal: theme.colors.charcoal,
           cream: theme.colors.cream,

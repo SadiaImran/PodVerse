@@ -27,6 +27,7 @@ const theme = {
   colors: {
     black: '#1C1C1C',
     grey: '#6A6A6A',
+    lightGrey: '#f3f4f6',
     charcoal: '#3E3F5B',
     cream: '#F9F5EB',
     deepPurple: '#2F2867',
