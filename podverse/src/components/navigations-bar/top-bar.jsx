@@ -6,7 +6,7 @@ import Logo from "../../assets/images/icon-logo.svg";
 
 export default function TopBar({ open }) {
   return (
-    <nav className="flex items-center justify-between px-4 py-4 shadow-md font-subheadingDMSans bg-white w-full">
+    <nav className="flex items-center justify-between px-4 py-4 shadow-md font-subheadingDMSans w-full ">
       
       {/* Left Section */}
       <div className="flex items-center gap-4 flex-shrink-0">
@@ -14,7 +14,7 @@ export default function TopBar({ open }) {
         {!open && (
           <div className="hidden md:flex items-center gap-2 mr-6">
             <img src={Logo} alt="Logo" className="w-10 md:w-12" />
-            <span className="text-lg font-bold text-light-charcoal font-headingPoppins tracking-wider">
+            <span className="text-lg font-bold text-light-purple font-headingPoppins tracking-wider">
               POD<span className="text-light-purple">VERSE</span>
             </span>
           </div>

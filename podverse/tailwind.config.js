@@ -13,15 +13,13 @@ module.exports = {
         // 🌞 Light Theme
         light: {
           black: theme.colors.black,
+          lightGrey: theme.colors.lightGrey,
           grey: theme.colors.grey,
           charcoal: theme.colors.charcoal,
           cream: theme.colors.cream,
           deepPurple: theme.colors.deepPurple,
           purple: theme.colors.purple,
           lavender: theme.colors.lavender,
-          softBlue: theme.colors.softBlue,
-          skyBlue: theme.colors.skyBlue,
-          deepBlue: theme.colors.deepBlue,
           lightPurple: theme.colors.lightPurple,
           background: theme.colors.background,
           text: theme.colors.text,
