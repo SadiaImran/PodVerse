@@ -60,11 +60,11 @@ export default function LeftSideBar({ open, setOpen }) {
       {/* Sidebar */}
       <aside
         className={`fixed md:static top-0 left-0 h-screen z-40
-          ${open ? "w-full md:w-72" : "w-full md:w-16"}
+          ${open ? "w-full md:w-72 " : "w-full md:w-16 rounded-r-xl"}
           ${open ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
           transition-all duration-500 py-3
-          bg-light-cream shadow-lg shadow-gray-500/30
-          flex flex-col gap-4 md:gap-10 lg:gap-12 rounded-r-xl
+          bg-light-background shadow-lg shadow-gray-500/30
+          flex flex-col gap-4 md:gap-10 lg:gap-12 
         `}
       >
         {/* Logo Section */}
@@ -78,7 +78,7 @@ export default function LeftSideBar({ open, setOpen }) {
                   alt="Logo"
                   className="transition-all duration-300 w-12 md:w-8"
                 />
-                <span className="text-base font-bold text-light-charcoal font-headingPoppins tracking-wider">
+                <span className="text-lg font-bold text-light-purple font-headingPoppins tracking-wider">
                   POD<span className="text-light-purple">VERSE</span>
                 </span>
               </>
