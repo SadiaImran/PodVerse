@@ -7,9 +7,6 @@ module.exports = {
     deepPurple: "#673ab7",
     purple: "#9c27b0",
     lavender: "#e6e6fa",
-    softBlue: "#89cff0",
-    skyBlue: "#87ceeb",
-    deepBlue: "#00008b",
     lightPurple: "#dabfff",
     background: "#ffffff",
     text: "#000000",
@@ -33,9 +30,6 @@ const theme = {
     deepPurple: '#2F2867',
     purple: '#6057C7',
     lavender: '#A388E7',
-    softBlue: '#ACBFEC',
-    skyBlue: '#6280E4',
-    deepBlue: '#0F3995',
     lightPurple: "#7d6ce3",
 
     // UI Mapping

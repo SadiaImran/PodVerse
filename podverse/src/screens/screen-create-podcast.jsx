@@ -12,7 +12,7 @@ const CreatePodcastPage = () => {
       <LeftSidebar open={open} setOpen={setOpen}/>
       <div className="flex flex-col flex-1 overflow-hidden">
         <Topbar open={open}/>
-        <main className="flex-1 overflow-y-auto p-8 md:p-10 space-y-12 bg-gray-50">
+        <main className="flex-1 overflow-y-auto p-8 md:p-10 space-y-12 bg-light">
           <CreatePodcastIntro />
           <RecentPodcasts />
           <SamplePodcasts />
