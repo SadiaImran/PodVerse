@@ -6,7 +6,7 @@ import Logo from "../../assets/images/icon-logo.svg";
 
 export default function TopBar({ open }) {
   return (
-    <nav className="flex items-center justify-between px-4 py-4 shadow-md font-subheadingDMSans w-full ">
+    <nav className="containerr flex items-center justify-between px-4 py-4 shadow-md font-subheadingDMSans w-full ">
       
       {/* Left Section */}
       <div className="flex items-center gap-4 flex-shrink-0">

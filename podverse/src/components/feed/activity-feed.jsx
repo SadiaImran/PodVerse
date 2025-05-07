@@ -7,21 +7,21 @@ const ActivityFeed = () => {
       creator: "TechTalks with Sara",
       podcastTitle: "The Future of AI",
       description: "A visual look into how AI is transforming industries.",
-      videoUrl: "/videos/future-of-ai.mp4",
+      videoUrl: "https://pixabay.com/videos/download/video-41758_source.mp4 ",
     },
     {
       id: 2,
       creator: "MindCast by Leo",
       podcastTitle: "Mental Fitness",
       description: "Visual tips to keep your mind sharp in 2025.",
-      videoUrl: "/videos/mental-fitness.mp4",
+      videoUrl: "https://pixabay.com/videos/download/video-41758_source.mp4",
     },
   ];
 
   return (
     <div className="space-y-6">
       {posts.map((post) => (
-        <div key={post.id} className="bg-white p-6 rounded-xl shadow-md max-w-3xl mx-auto ">
+        <div key={post.id} className="bg-white p-6 rounded-2xl shadow-md w-full max-w-3xl mx-auto border border-[#d4d2cc] ">
           <video
             controls
             className="w-full max-h-[900px] rounded-md object-cover"
