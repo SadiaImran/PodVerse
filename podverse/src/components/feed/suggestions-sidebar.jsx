@@ -1,4 +1,6 @@
-import Photo from '../../assets/images/Photo.png';
+import ProfileJeena from '../../assets/images/icon-profile-jeena.png';
+import ProfileOlive from '../../assets/images/icon-profile-olive.png';
+import ProfileSally from '../../assets/images/icon-profile-sally.png';
 // SuggestionsSidebar.jsx - More responsive design
 import { HiOutlineUserCircle } from "react-icons/hi";
 
@@ -7,17 +9,17 @@ const SuggestionsSidebar = () => {
     {
       name: "Creative Minds",
       bio: "Design & storytelling",
-      image: Photo, 
+      image: ProfileSally, 
     },
     {
       name: "Finance Pulse",
       bio: "Smart money tips",
-      image: Photo, 
+      image: ProfileOlive, 
     },
     {
       name: "The Space Show",
       bio: "Cosmic discoveries",
-      image: Photo, 
+      image: ProfileJeena, 
     },
   ];
 
