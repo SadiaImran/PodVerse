@@ -22,6 +22,7 @@ module.exports = {
           lavender: theme.colors.lavender,
           lightPurple: theme.colors.lightPurple,
           background: theme.colors.background,
+          screenBackground : theme.colors.screenBackground ,
           text: theme.colors.text,
           primary: theme.colors.primary,
           secondary: theme.colors.secondary,
