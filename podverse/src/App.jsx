@@ -1,10 +1,8 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-
 import SignUpScreen from "./screens/screen-signup";
 import SignUpScreenEmail from "./screens/screen-signup-email";
 import SignInScreen from "./screens/screen-signin";
 import SignInScreenEmail from "./screens/screen-signin-email";
-import HomeScreen from "./screens/screen-home";
 import CreatePodcastPage from './screens/screen-create-podcast';
 import ActivityFeedPage from './screens/screen-activity-feed';
 
