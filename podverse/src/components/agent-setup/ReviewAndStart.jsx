@@ -35,7 +35,7 @@ const ReviewAndStart = ({ formData, goBack }) => {
       <div className="flex justify-between pt-4">
         <button 
           onClick={goBack} 
-          className="text-light-purple font-medium hover:underline"
+          className="text-gray-600 font-medium hover:underline"
         >
           ← Back
         </button>

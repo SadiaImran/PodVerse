@@ -35,8 +35,8 @@ const KnowledgeBaseSetup = ({ formData, setFormData, goNext, goBack }) => {
         </div>
   
         <div className="flex justify-between">
-          <button onClick={goBack} className="text-gray-600 hover:underline">
-            Back
+          <button onClick={goBack} className="text-gray-600 font-medium hover:underline">
+          ← Back
           </button>
           <button
             onClick={goNext}
