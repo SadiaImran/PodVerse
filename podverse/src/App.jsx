@@ -7,11 +7,13 @@ import SignInScreenEmail from "./screens/screen-signin-email";
 import HomeScreen from "./screens/screen-home";
 import CreatePodcastPage from './screens/screen-create-podcast';
 import ActivityFeedPage from './screens/screen-activity-feed';
+import AgentSetupFlow from './screens/screen-agent-setup';
 
 function App() {
   return (
+    <AgentSetupFlow></AgentSetupFlow>
     // <ActivityFeedPage></ActivityFeedPage>
-    <CreatePodcastPage></CreatePodcastPage>
+    // <CreatePodcastPage></CreatePodcastPage>
     // <div className="bg-light-cream h-screen w-screen">
     //   <Router>
     //   <Routes>
