@@ -86,8 +86,8 @@ const VoiceCustomization = ({ formData, setFormData, goNext, goBack }) => {
 
       {/* Navigation Buttons */}
       <div className="flex justify-between pt-4">
-        <button onClick={goBack} className="text-gray-600 hover:underline">
-          Back
+        <button onClick={goBack} className="text-gray-600 font-medium hover:underline">
+        ← Back
         </button>
         <button
           onClick={goNext}
