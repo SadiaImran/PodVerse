@@ -53,6 +53,68 @@ function PanelRecording() {
     }
     return () => clearInterval(playbackInterval);
   }, [isPlaying, isRecording, playbackRate, elapsedTime]);
+
+  // MIC BUTTON — now only toggles recording, not timer
+const handleMicPress = () => {
+  if (!isRecording) {
+    setIsRecording(true);
+    setIsPaused(false);
+  } else {
+    setIsRecording(false);
+    setIsPaused(false);
+    setActiveSpeaker(null);
+  }
+};
+
+// PLAYBACK START — controls only playback
+const handlePlaybackStart = () => {
+  if (elapsedTime > 0) {
+    setIsPlaying(true);
+  }
+};
+
+// "START" BUTTON — use this for full session + timer start
+const handleStartSession = () => {
+  if (!isRecording) {
+    setElapsedTime(0); // Reset timer when session starts
+    setConversationHistory([]);
+    setActiveSpeaker(selectedSpeakerId);
+    setIsRecording(true);
+    setIsPaused(false);
+    simulateSpeaking(); // start conversation
+  }
+};
+
+// Playback pause logic
+const handlePlaybackPause = () => {
+  setIsPlaying(false);
+};
+
+// Recording timer — only runs if isRecording is true AND playback is false
+useEffect(() => {
+  let interval;
+  if (isRecording && !isPaused && !isPlaying) {
+    interval = setInterval(() => {
+      setElapsedTime(prev => prev + 1);
+    }, 1000);
+  }
+  return () => clearInterval(interval);
+}, [isRecording, isPaused, isPlaying]);
+
+// Playback timer — only runs when playing, not recording
+useEffect(() => {
+  let playbackInterval;
+  if (isPlaying && !isRecording) {
+    playbackInterval = setInterval(() => {
+      setCurrentPlaybackTime(prev => {
+        const newTime = prev + playbackRate;
+        return newTime >= elapsedTime ? elapsedTime : newTime;
+      });
+    }, 1000);
+  }
+  return () => clearInterval(playbackInterval);
+}, [isPlaying, isRecording, playbackRate, elapsedTime]);
+
   
   // Format time as MM:SS
   const formatTime = (seconds) => {
@@ -165,26 +227,14 @@ function PanelRecording() {
     }
   };
   
-  // Simulate starting recording
+  // Start recording user's voice
   const handleStartRecording = () => {
     setIsRecording(true);
-    setIsPaused(false);
-    setIsPlaying(false);
-    
-    // Start with the first speaker (usually host)
-    const firstSpeaker = speakers.find(s => s.id === 'host') || speakers[0];
-    setSelectedSpeakerId(firstSpeaker.id);
-    
-    setTimeout(() => {
-      simulateSpeaking();
-    }, 1500);
   };
   
-  // Simulate stopping recording
+  // Stop recording user's voice
   const handleStopRecording = () => {
     setIsRecording(false);
-    setIsPaused(false);
-    setActiveSpeaker(null);
   };
   
   // Simulate pausing recording
@@ -200,19 +250,7 @@ function PanelRecording() {
     }
   };
   
-  // Handle playback controls
-  const handlePlaybackStart = () => {
-    if (elapsedTime > 0 && !isRecording) {
-      setIsPlaying(true);
-      if (currentPlaybackTime >= elapsedTime) {
-        setCurrentPlaybackTime(0);
-      }
-    }
-  };
-  
-  const handlePlaybackPause = () => {
-    setIsPlaying(false);
-  };
+
   
   const handlePlaybackSeek = (e) => {
     const seekTime = parseInt(e.target.value);
@@ -306,7 +344,7 @@ function PanelRecording() {
   return (
     <div className="w-full h-full ">
       {/* Main content area */}
-      <div className="flex flex-col lg:flex-row h-full">
+      <div className="flex flex-col-reverse lg:flex-row h-full">
         {/* Left Panel - Transcription */}
         <div className="w-full lg:w-1/2 h-full border-r border-gray-200 overflow-hidden flex flex-col">
           <div className="p-4 border-b border-gray-200">
@@ -366,27 +404,11 @@ function PanelRecording() {
             </div>
           </div>
           
-          <div className="p-6 border-t border-gray-200 bg-white">
+          <div className="p-7 border-t border-gray-200 bg-white">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium text-gray-600">Total Time:</span>
                 <span className="text-sm font-mono">{formatTime(elapsedTime)}</span>
-              </div>
-              
-              <div className="flex items-center gap-2">
-                <button 
-                  className="text-gray-600 hover:text-gray-800 p-2"
-                  title="Download Transcript"
-                >
-                  <FiDownload size={16} />
-                </button>
-                <button 
-                  onClick={handleResetSession}
-                  className="text-gray-600 hover:text-gray-800 p-2"
-                  title="Reset Session"
-                >
-                  <FiRefreshCw size={16} />
-                </button>
               </div>
             </div>
           </div>
@@ -406,7 +428,7 @@ function PanelRecording() {
                   onClick={() => setShowAddSpeakerModal(true)}
                   className="bg-light-purple hover:bg-light-lightPurple text-light-lightGrey font-subheadingDMSans px-3 py-2 rounded-xl text-sm flex items-center gap-1"
                 >
-                  <FiPlus size={14} />
+                  <FiPlus size={14} onClick={handlePlaybackStart}/>
                   Add Speaker
                 </button>
               </div>
@@ -579,7 +601,7 @@ function PanelRecording() {
                           : 'bg-green-500 text-white hover:bg-green-600'
                       }`}
                     >
-                      <FiPlay size={20} />
+                      <FiPlay size={20} onClick={handleStartSession}/>
                     </button>
                   ) : (
                     <button 
@@ -623,78 +645,51 @@ function PanelRecording() {
           </div>
           
           {/* Recording controls */}
-          <div className="p-4 border-t border-gray-200 bg-white">
-            <div className="flex items-center justify-between">
-              {/* Recording control */}
-              <div>
-                {!isRecording ? (
-                  <button 
-                    onClick={handleStartRecording}
-                    disabled={isPlaying}
-                    className={`text-white w-12 h-12 rounded-full flex items-center justify-center transition-colors ${
-                      isPlaying ? 'bg-gray-400' : 'bg-purple-600 hover:bg-purple-700'
-                    }`}
-                  >
-                    <FiMic size={20} />
-                  </button>
-                ) : isPaused ? (
-                  <button 
-                    onClick={handlePauseRecording}
-                    className="bg-green-500 text-white w-12 h-12 rounded-full flex items-center justify-center hover:bg-green-600 transition-colors"
-                  >
-                    <FiPlay size={20} />
-                  </button>
-                ) : (
-                  <button 
-                    onClick={handlePauseRecording}
-                    className="bg-yellow-500 text-white w-12 h-12 rounded-full flex items-center justify-center hover:bg-yellow-600 transition-colors"
-                  >
-                    <FiPause size={20} />
-                  </button>
-                )}
-              </div>
-              
-              {/* Center controls */}
-              <div className="flex items-center gap-4">
-                <button 
-                  className="flex items-center gap-1 text-sm bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded-lg"
-                  onClick={() => {}}
-                >
-                  <FiHeadphones size={16} />
-                  <span>Preview</span>
-                </button>
-                
-                {isRecording && (
-                  <button 
-                    onClick={handleStopRecording}
-                    className="flex items-center gap-1 text-sm bg-red-100 text-red-600 hover:bg-red-200 px-4 py-2 rounded-lg"
-                  >
-                    <FiStopCircle size={16} />
-                    <span>End Recording</span>
-                  </button>
-                )}
-                
-                <button 
-                  className="flex items-center gap-1 text-sm bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded-lg"
-                  onClick={() => {}}
-                >
-                  <FiSave size={16} />
-                  <span>Save</span>
-                </button>
-              </div>
-              
-              {/* Right volume control */}
-              <div className="flex items-center gap-2">
-                <FiVolume2 size={18} className="text-gray-600" />
-                <input 
-                  type="range" 
-                  min="0" 
-                  max="100" 
-                  defaultValue="80"
-                  className="w-24 accent-purple-600" 
-                />
-              </div>
-            </div>
+          <div className="p-4 border-t border-gray-200 bg-white flex items-center justify-center gap-6">
+            {/* Mic Button */}
+            <button
+              onClick={() => {
+                if (isRecording) {
+                  handleStopRecording();
+                } else {
+                  handleStartRecording();
+                }
+              }}
+              className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors ${
+                isRecording ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-purple-600 hover:bg-purple-700 text-white'
+              }`}
+              title={isRecording ? 'Stop Recording User Voice' : 'Start Recording User Voice'}
+            >
+              <FiMic size={24} onClick={handleMicPress} />
+            </button>
+
+            {/* Play/Pause Button */}
+            <button
+              onClick={() => {
+                if (isPlaying) {
+                  handlePlaybackPause();
+                } else {
+                  handlePlaybackStart();
+                }
+              }}
+              className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors ${
+                isPlaying
+                  ? 'bg-yellow-500 hover:bg-yellow-600 text-white'
+                  : 'bg-green-500 hover:bg-green-600 text-white'
+              }`}
+              title={isPlaying ? 'Pause Podcast' : 'Start Podcast'}
+            >
+              {isPlaying ? <FiPause size={24} /> : <FiPlay size={24} />}
+            </button>
+
+            {/* Reset Button */}
+            <button
+              onClick={handleResetSession}
+              className="w-14 h-14 rounded-full flex items-center justify-center bg-gray-300 hover:bg-gray-400 text-gray-700 transition-colors"
+              title="Reset Session"
+            >
+              <FiRefreshCw size={24} />
+            </button>
           </div>
         </div>
       </div>
