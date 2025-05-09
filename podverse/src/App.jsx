@@ -5,12 +5,11 @@ import SignInScreen from "./screens/screen-signin";
 import SignInScreenEmail from "./screens/screen-signin-email";
 import CreatePodcastPage from './screens/screen-create-podcast';
 import ActivityFeedPage from './screens/screen-activity-feed';
-import PodcastRecordingUI from './screens/screen-recording-podcast';
-import PodcastRecordingPage from './screens/screen-podcast-recording-page';
+import ScreenRecording from './screens/screen-recording'
 
 function App() {
   return (
-    <PodcastRecordingPage/>
+    <ScreenRecording/>
     //<ActivityFeedPage></ActivityFeedPage>
     //<CreatePodcastPage></CreatePodcastPage>
     // <div className="bg-light-cream h-screen w-screen">
