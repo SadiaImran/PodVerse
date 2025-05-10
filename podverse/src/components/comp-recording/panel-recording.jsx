@@ -13,6 +13,10 @@ function PanelRecording() {
   const [conversationHistory, setConversationHistory] = useState([]);
   const [activeSpeaker, setActiveSpeaker] = useState(null);
   const [isAiThinking, setIsAiThinking] = useState(false);
+  const resetFlagRef = useRef(false);
+  const pausedRef = useRef(false);
+
+
   
   // Multiple speakers
   const [speakers, setSpeakers] = useState([
@@ -72,18 +76,24 @@ const handlePlaybackStart = () => {
     setIsPlaying(true);
   }
 };
-
-// "START" BUTTON — use this for full session + timer start
 const handleStartSession = () => {
   if (!isRecording) {
-    setElapsedTime(0); // Reset timer when session starts
-    setConversationHistory([]);
-    setActiveSpeaker(selectedSpeakerId);
-    setIsRecording(true);
+    resetFlagRef.current = false;                  // Allow simulation
+    setElapsedTime(0);                             // Reset timer
+    setConversationHistory([]);                    // Clear previous transcript
+    setSelectedSpeakerId('host');                  // Ensure speaker is set
+    setActiveSpeaker('host');                      // Set visible speaker
+    setIsRecording(true);                          // Start recording
     setIsPaused(false);
-    simulateSpeaking(); // start conversation
+    setTimeout(() => {
+      if (resetFlagRef.current || !isRecording || pausedRef.current) return;
+      simulateSpeaking();
+    }, 2000);
+    
   }
 };
+
+
 
 // Playback pause logic
 const handlePlaybackPause = () => {
@@ -130,8 +140,15 @@ useEffect(() => {
   
   // Simulate user speaking
   const simulateSpeaking = () => {
+    if (resetFlagRef.current || !isRecording || pausedRef.current) return;
+
+
     if (isRecording && !isPaused) {
       const currentSpeaker = findSpeaker(selectedSpeakerId);
+      if (!currentSpeaker) {
+        console.warn('No speaker selected.');
+        return;
+      }
       
       let phrases = [];
       if (currentSpeaker.type === 'human') {
@@ -194,14 +211,20 @@ useEffect(() => {
             if (nextSpeaker.type === 'ai') {
               setIsAiThinking(true);
               setTimeout(() => {
+                if (resetFlagRef.current || !isRecording || pausedRef.current) return;
                 setIsAiThinking(false);
                 simulateSpeaking();
               }, 2000);
+              
             } else {
               // If human, wait a bit and then simulate speaking
               setTimeout(() => {
+                if (resetFlagRef.current || !isRecording || pausedRef.current) return;
                 simulateSpeaking();
-              }, 1500);
+              }, 2000);
+              
+              
+              
             }
           }
         }, 3000);
@@ -218,9 +241,11 @@ useEffect(() => {
             setIsAiThinking(true);
             
             setTimeout(() => {
-              setIsAiThinking(false);
+              if (resetFlagRef.current || !isRecording || pausedRef.current) return;
               simulateSpeaking();
             }, 2000);
+            
+            
           }
         }, 3000);
       }
@@ -232,23 +257,41 @@ useEffect(() => {
     setIsRecording(true);
   };
   
-  // Stop recording user's voice
   const handleStopRecording = () => {
-    setIsRecording(false);
+    setIsRecording(false);           // Stop session
+    setIsPaused(false);              // Reset pause state
+    resetFlagRef.current = true;     // Cancel future simulateSpeaking
+    setActiveSpeaker(null);          // Clear active speaker UI
+    setIsAiThinking(false);          // Stop AI thinking animation
+    pausedRef.current = false;       // Ensure resume doesn't re-trigger
+    setSelectedSpeakerId(null);      
   };
   
-  // Simulate pausing recording
   const handlePauseRecording = () => {
-    setIsPaused(!isPaused);
-    if (!isPaused) {
-      setActiveSpeaker(null);
-    } else {
-      setActiveSpeaker(selectedSpeakerId);
-      setTimeout(() => {
-        simulateSpeaking();
-      }, 1000);
-    }
+    setIsPaused((prevPaused) => {
+      const newPaused = !prevPaused;
+      pausedRef.current = newPaused;
+  
+      if (newPaused) {
+        // Pausing
+        setActiveSpeaker(null);
+        setIsAiThinking(false);
+        setSelectedSpeakerId(null);
+      } else {
+        // Resuming
+        setTimeout(() => {
+          if (!resetFlagRef.current && !pausedRef.current && isRecording) {
+            simulateSpeaking();
+          }
+        }, 1000);
+      }
+  
+      return newPaused;
+    });
   };
+  
+  
+  
   
 
   
@@ -274,14 +317,17 @@ useEffect(() => {
   // Simulate resetting session
   const handleResetSession = () => {
     if (window.confirm("Are you sure you want to restart the session? All recorded content will be lost.")) {
+      resetFlagRef.current = true;
       setIsRecording(false);
       setIsPaused(false);
       setIsPlaying(false);
       setElapsedTime(0);
       setCurrentPlaybackTime(0);
       setConversationHistory([]);
-      setActiveSpeaker(null);
-    }
+      setActiveSpeaker(null);             // Clear speaker
+      setIsAiThinking(false);             // Stop AI thinking animation
+      setSelectedSpeakerId(null);         // Deselect speaker to avoid lingering avatar
+    }   
   };
   
   // Add new speaker
@@ -315,8 +361,11 @@ useEffect(() => {
       
       // Simulate new speaker talking
       setTimeout(() => {
+        if (resetFlagRef.current || !isRecording || pausedRef.current) return;
         simulateSpeaking();
-      }, 500);
+      }, 2000);
+      
+      
     } else {
       setSelectedSpeakerId(speakerId);
     }
@@ -509,7 +558,8 @@ useEffect(() => {
             <div className="mb-6">
               <h3 className="text-lg font-semibold font-subheadingDMSans text-gray-700 mb-3">Active Speaker</h3>
               <div className="bg-gray-100 rounded-lg p-4">
-                {activeSpeaker ? (
+              {activeSpeaker && !resetFlagRef.current && !isPaused ? (
+
                   <div>
                     <div className="flex items-center gap-3 mb-4">
                       <div className={`w-10 h-10 rounded-full bg-${findSpeaker(activeSpeaker)?.color}-500 flex items-center justify-center text-white`}>
@@ -528,7 +578,7 @@ useEffect(() => {
                       />
                     </div>
                   </div>
-                ) : isAiThinking ? (
+                ) : isAiThinking && !isPaused ? (
                   <div>
                     <div className="flex items-center gap-3 mb-4">
                       <div className={`w-10 h-10 rounded-full bg-${findSpeaker(selectedSpeakerId)?.color}-500 flex items-center justify-center text-white`}>
@@ -556,147 +606,145 @@ useEffect(() => {
               </div>
             </div>
             
-            {/* Enhanced playback controls */}
-            <div className="mb-6">
-              <h3 className="text-lg font-medium text-gray-700 mb-3">Playback Controls</h3>
-              
-              <div className="bg-gray-100 rounded-lg p-4">
-                {/* Progress bar */}
-                <div className="mb-4">
-                  <input
-                    type="range"
-                    min="0"
-                    max={elapsedTime || 1}
-                    value={isPlaying ? currentPlaybackTime : isRecording ? elapsedTime : currentPlaybackTime}
-                    onChange={handlePlaybackSeek}
-                    disabled={isRecording}
-                    className="w-full accent-purple-600"
-                  />
-                  
-                  <div className="flex justify-between text-sm text-gray-600 mt-2">
-                    <span className="font-mono">{formatTime(isPlaying ? currentPlaybackTime : isRecording ? elapsedTime : currentPlaybackTime)}</span>
-                    <span className="font-mono">{formatTime(elapsedTime)}</span>
-                  </div>
-                </div>
-                
-                {/* Playback buttons */}
-                <div className="flex items-center justify-center gap-4">
-                  <button 
-                    onClick={handleSkipBackward}
-                    disabled={isRecording || currentPlaybackTime === 0}
-                    className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                      isRecording || currentPlaybackTime === 0 ? 'text-gray-400' : 'text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    <FiSkipBack size={18} />
-                  </button>
-                  
-                  {!isPlaying ? (
-                    <button 
-                      onClick={handlePlaybackStart}
-                      disabled={isRecording || elapsedTime === 0}
-                      className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                        isRecording || elapsedTime === 0
-                          ? 'bg-gray-300 text-gray-500'
-                          : 'bg-green-500 text-white hover:bg-green-600'
-                      }`}
-                    >
-                      <FiPlay size={20} onClick={handleStartSession}/>
-                    </button>
-                  ) : (
-                    <button 
-                      onClick={handlePlaybackPause}
-                      className="w-12 h-12 bg-yellow-500 text-white rounded-full flex items-center justify-center hover:bg-yellow-600"
-                    >
-                      <FiPause size={20} />
-                    </button>
-                  )}
-                  
-                  <button 
-                    onClick={handleSkipForward}
-                    disabled={isRecording || currentPlaybackTime >= elapsedTime}
-                    className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                      isRecording || currentPlaybackTime >= elapsedTime ? 'text-gray-400' : 'text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    <FiSkipForward size={18} />
-                  </button>
-                </div>
-                
-                {/* Playback speed */}
-                <div className="mt-4 flex items-center justify-center gap-2">
-                  <FiClock size={14} className="text-gray-600" />
-                  <select
-                    value={playbackRate}
-                    onChange={(e) => setPlaybackRate(parseFloat(e.target.value))}
-                    disabled={isRecording}
-                    className="text-sm bg-white border border-gray-300 rounded px-2 py-1"
-                  >
-                    <option value="0.5">0.5x</option>
-                    <option value="0.75">0.75x</option>
-                    <option value="1">1x</option>
-                    <option value="1.25">1.25x</option>
-                    <option value="1.5">1.5x</option>
-                    <option value="2">2x</option>
-                  </select>
-                </div>
-              </div>
-            </div>
+{/* Unified Controls */}
+<div className="mb-6">
+  <h3 className="text-lg font-medium text-gray-700 mb-3">Controls</h3>
+
+  <div className="bg-gray-100 rounded-lg p-6 flex flex-col items-center gap-4">
+
+    {/* Progress Bar */}
+    <div className="w-full">
+      <input
+        type="range"
+        min="0"
+        max={elapsedTime || 1}
+        value={isPlaying ? currentPlaybackTime : isRecording ? elapsedTime : currentPlaybackTime}
+        onChange={handlePlaybackSeek}
+        disabled={isRecording}
+        className="w-full accent-purple-600"
+      />
+      <div className="flex justify-between text-sm text-gray-600 mt-2">
+        <span className="font-mono">{formatTime(currentPlaybackTime)}</span>
+        <span className="font-mono">{formatTime(elapsedTime)}</span>
+      </div>
+    </div>
+
+    {/* Main Buttons */}
+    <div className="flex items-center justify-center gap-4">
+      {/* Skip Backward */}
+      <button
+        onClick={handleSkipBackward}
+        disabled={isRecording || currentPlaybackTime === 0}
+        className={`w-10 h-10 rounded-full flex items-center justify-center ${
+          isRecording || currentPlaybackTime === 0 ? 'text-gray-400' : 'text-gray-700 hover:bg-gray-200'
+        }`}
+        title="Skip Backward"
+      >
+        <FiSkipBack size={18} />
+      </button>
+
+      {/* RECORDING MODE */}
+      {isRecording ? (
+        <>
+          {/* Stop Recording */}
+          <button
+            onClick={handleStopRecording}
+            className="w-12 h-12 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600"
+            title="Stop Recording"
+          >
+            <FiStopCircle size={20} />
+          </button>
+
+          {/* Pause Recording */}
+          <button
+            onClick={handlePauseRecording}
+            className="w-12 h-12 bg-yellow-500 text-white rounded-full flex items-center justify-center hover:bg-yellow-600"
+            title="Pause Recording"
+          >
+            <FiPause size={20} />
+          </button>
+        </>
+      ) : elapsedTime === 0 ? (
+        // If nothing has been recorded yet, show "Start Recording"
+        <button
+          onClick={handleStartSession}
+          className="w-12 h-12 bg-purple-600 text-white rounded-full flex items-center justify-center hover:bg-purple-700"
+          title="Start Recording"
+        >
+          <FiMic size={20} />
+        </button>
+      ) : (
+        // PLAYBACK MODE
+        <>
+          {!isPlaying ? (
+            <button
+              onClick={handlePlaybackStart}
+              disabled={elapsedTime === 0}
+              className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                elapsedTime === 0 ? 'bg-gray-300 text-gray-500' : 'bg-green-500 hover:bg-green-600 text-white'
+              }`}
+              title="Play"
+            >
+              <FiPlay size={20} />
+            </button>
+          ) : (
+            <button
+              onClick={handlePlaybackPause}
+              className="w-12 h-12 bg-yellow-500 text-white rounded-full flex items-center justify-center hover:bg-yellow-600"
+              title="Pause Playback"
+            >
+              <FiPause size={20} />
+            </button>
+          )}
+
+          {/* Stop Playback */}
+          <button
+            onClick={() => {
+              setIsPlaying(false);
+              setCurrentPlaybackTime(0);
+            }}
+            className="w-12 h-12 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600"
+            title="Stop Playback"
+          >
+            <FiStopCircle size={20} />
+          </button>
+        </>
+      )}
+
+      {/* Restart Session */}
+      <button
+        onClick={handleResetSession}
+        className="w-12 h-12 rounded-full flex items-center justify-center bg-gray-300 hover:bg-gray-400 text-gray-700 transition-colors"
+        title="Restart Session"
+      >
+        <FiRefreshCw size={20} />
+      </button>
+
+      {/* Skip Forward */}
+      <button
+        onClick={handleSkipForward}
+        disabled={isRecording || currentPlaybackTime >= elapsedTime}
+        className={`w-10 h-10 rounded-full flex items-center justify-center ${
+          isRecording || currentPlaybackTime >= elapsedTime ? 'text-gray-400' : 'text-gray-700 hover:bg-gray-200'
+        }`}
+        title="Skip Forward"
+      >
+        <FiSkipForward size={18} />
+      </button>
+    </div>
+  </div>
+</div>
+
+
+
           </div>
           
-          {/* Recording controls */}
-          <div className="p-4 border-t border-gray-200 bg-white flex items-center justify-center gap-6">
-            {/* Mic Button */}
-            <button
-              onClick={() => {
-                if (isRecording) {
-                  handleStopRecording();
-                } else {
-                  handleStartRecording();
-                }
-              }}
-              className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors ${
-                isRecording ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-purple-600 hover:bg-purple-700 text-white'
-              }`}
-              title={isRecording ? 'Stop Recording User Voice' : 'Start Recording User Voice'}
-            >
-              <FiMic size={24} onClick={handleMicPress} />
-            </button>
-
-            {/* Play/Pause Button */}
-            <button
-              onClick={() => {
-                if (isPlaying) {
-                  handlePlaybackPause();
-                } else {
-                  handlePlaybackStart();
-                }
-              }}
-              className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors ${
-                isPlaying
-                  ? 'bg-yellow-500 hover:bg-yellow-600 text-white'
-                  : 'bg-green-500 hover:bg-green-600 text-white'
-              }`}
-              title={isPlaying ? 'Pause Podcast' : 'Start Podcast'}
-            >
-              {isPlaying ? <FiPause size={24} /> : <FiPlay size={24} />}
-            </button>
-
-            {/* Reset Button */}
-            <button
-              onClick={handleResetSession}
-              className="w-14 h-14 rounded-full flex items-center justify-center bg-gray-300 hover:bg-gray-400 text-gray-700 transition-colors"
-              title="Reset Session"
-            >
-              <FiRefreshCw size={24} />
-            </button>
-          </div>
         </div>
       </div>
       
       {/* Recording indicator */}
       {isRecording && (
-        <div className="fixed top-4 right-4 bg-red-500 text-white px-3 py-1 rounded-full text-sm flex items-center gap-1 animate-pulse">
+        <div className="fixed top-[100px] right-6 bg-red-500 text-white px-2 py-1 rounded-full text-sm flex items-center gap-1 animate-pulse">
           <div className="w-2 h-2 bg-white rounded-full"></div>
           {isPaused ? 'Recording Paused' : 'Recording'}
         </div>
