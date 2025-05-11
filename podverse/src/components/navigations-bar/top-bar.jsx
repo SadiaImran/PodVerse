@@ -1,12 +1,12 @@
 import { FaChevronDown } from "react-icons/fa";
 import { FiSearch } from "react-icons/fi";
 import { HiOutlineBell } from "react-icons/hi2";
-import { HiOutlineUserCircle } from "react-icons/hi";
+import ProfileMarry from "../../assets/images/icon-profile-marry.png"
 import Logo from "../../assets/images/icon-logo.svg";
 
 export default function TopBar({ open }) {
   return (
-    <nav className="flex items-center justify-between px-4 py-4 shadow-md font-subheadingDMSans w-full ">
+    <nav className="containerr flex items-center justify-between px-4 py-4 shadow-md font-subheadingDMSans w-full ">
       
       {/* Left Section */}
       <div className="flex items-center gap-4 flex-shrink-0">
@@ -38,7 +38,7 @@ export default function TopBar({ open }) {
         <div className="flex items-center gap-4 flex-shrink-0 ml-2">
           {/* Notification Icon */}
           <div className="relative">
-            <HiOutlineBell className="text-light-charcoal text-2xl cursor-pointer" />
+            <HiOutlineBell className="text-light-charcoal w-8 h-8 cursor-pointer" />
             <span className="absolute top-0 right-0 text-xs text-white bg-red-500 rounded-full px-1">
               3
             </span>
@@ -46,7 +46,8 @@ export default function TopBar({ open }) {
 
           {/* Profile Section */}
           <div className="flex items-center gap-2 cursor-pointer">
-            <HiOutlineUserCircle className="text-3xl text-light-charcoal" />
+            
+            <img src = {ProfileMarry} className="w-8 h-8 text-light-charcoal flex-shrink-0" />
             <span className="text-sm text-gray-800 font-medium hidden sm:block">
               Amanda Smith
             </span>
