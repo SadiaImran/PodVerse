@@ -9,6 +9,7 @@ module.exports = {
     lavender: "#e6e6fa",
     lightPurple: "#dabfff",
     background: "#ffffff",
+    screenBackground : "#f3f2ee",
     text: "#000000",
     primary: "#4f46e5",
     secondary: "#64748b",
