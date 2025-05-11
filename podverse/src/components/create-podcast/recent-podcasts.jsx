@@ -1,25 +1,117 @@
-const RecentPodcasts = () => {
-    // Replace with actual dynamic content later
-    const podcasts = [1, 2, 3]; 
-  
-    return (
-      <div>
-        <h2 className="text-2xl font-semibold mb-4">Your Recent Podcasts</h2>
-        <div className="flex space-x-4 overflow-x-auto pb-2">
-          {podcasts.map((_, i) => (
-            <div key={i} className="min-w-[250px] bg-white shadow-md rounded-lg p-4">
-              <video
-                src="https://youtu.be/L7iPWDIQU2s?si=ySvCyhgrKc91Vs_O"
-                controls
-                className="rounded-lg w-full"
-              />
-              <p className="mt-2 font-medium">Podcast {i + 1}</p>
-            </div>
-          ))}
+import { useState } from "react";
+import { Podcast, Eye, ThumbsUp, MessageCircle } from "lucide-react";
+import placeholderImage from "../../assets/images/create-video-placeholder.png";
+
+const RecentPodcast = ({ hasPodcasts }) => {
+  const [activeTab, setActiveTab] = useState("uploaded");
+  const uploadedPodcasts = [1, 2];
+  const draftPodcasts = [3, 4];
+
+  const renderCard = (id, isDraft = false) => (
+    <div className="flex bg-white rounded-xl shadow-md p-4 gap-4 items-start">
+      <div className="relative w-48 h-28 overflow-hidden rounded-lg">
+        {isDraft ? (
+          <div className="w-full h-full bg-gray-200 flex items-center justify-center text-gray-500 text-sm">
+            Draft Video
+          </div>
+        ) : (
+          <video controls className="w-full h-full object-cover rounded-md">
+            <source src={`/user-videos/user${id}.mp4`} type="video/mp4" />
+          </video>
+        )}
+      </div>
+      <div className="flex flex-col justify-between flex-1">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <Podcast className="text-light-purple w-5 h-5" />
+            <span className="font-semibold text-gray-800">
+              {isDraft ? `Draft Podcast ${id}` : `My Podcast ${id}`}
+            </span>
+          </div>
+          <p className="text-sm text-gray-600">
+            {isDraft
+              ? "This podcast is in draft status."
+              : `Description of podcast ${id}.`}
+          </p>
+        </div>
+        {!isDraft && (
+          <div className="flex gap-2 text-xs mt-3">
+            <span className="bg-light-cream text-light-grey yellow-800 px-2 py-1 rounded-full flex items-center gap-1">
+              <Eye size={14} /> 100 views
+            </span>
+            <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full flex items-center gap-1">
+              <ThumbsUp size={14} /> 100 likes
+            </span>
+            <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded-full flex items-center gap-1">
+              <MessageCircle size={14} /> 20 comments
+            </span>
+          </div>
+        )}
+        <div className="flex items-center gap-2 mt-3">
+          <img
+            src="https://randomuser.me/api/portraits/women/68.jpg"
+            alt="Elizabeth Lee"
+            className="w-7 h-7 rounded-full"
+          />
+          <span className="text-xs text-gray-500">Elizabeth Lee · 1h ago</span>
         </div>
       </div>
-    );
-  };
-  
-  export default RecentPodcasts;
-  
+    </div>
+  );
+
+  return (
+    <div>
+      {hasPodcasts ? (
+        <>
+          {/* Tabs */}
+          <div className="flex space-x-6 border-b border-gray-200 text-gray-600 font-medium mb-6">
+            <button
+              className={`pb-2 ${
+                activeTab === "uploaded"
+                  ? "border-b-2 border-light-purple text-light-purple"
+                  : "hover:text-light-purple"
+              }`}
+              onClick={() => setActiveTab("uploaded")}
+            >
+              Uploaded
+            </button>
+            <button
+              className={`pb-2 ${
+                activeTab === "drafts"
+                  ? "border-b-2 border-light-purple text-light-purple"
+                  : "hover:text-light-purple"
+              }`}
+              onClick={() => setActiveTab("drafts")}
+            >
+              Drafts
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="space-y-6">
+            {(activeTab === "uploaded" ? uploadedPodcasts : draftPodcasts).map(
+              (id) => renderCard(id, activeTab === "drafts")
+            )}
+          </div>
+        </>
+      ) : (
+        <div className="flex flex-col items-center justify-center text-center">
+          <img
+            src={placeholderImage}
+            alt="Create video"
+            className="w-60 mb-8"
+          />
+          <h2 className="text-2xl font-bold text-gray-800 mb-3">
+            Create your first podcast
+          </h2>
+          <p className="text-gray-500 text-base max-w-md">
+            You haven’t created any podcasts yet. Tap “Record New” above to get
+            started!
+          </p>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default RecentPodcast;
