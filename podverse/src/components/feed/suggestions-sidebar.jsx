@@ -1,27 +1,72 @@
+import ProfileJeena from '../../assets/images/icon-profile-jeena.png';
+import ProfileOlive from '../../assets/images/icon-profile-olive.png';
+import ProfileSally from '../../assets/images/icon-profile-sally.png';
+// SuggestionsSidebar.jsx - More responsive design
+import { HiOutlineUserCircle } from "react-icons/hi";
+
 const SuggestionsSidebar = () => {
-    const creators = [
-      { name: "Creative Minds", bio: "Design & storytelling" },
-      { name: "Finance Pulse", bio: "Smart money tips" },
-      { name: "The Space Show", bio: "Cosmic discoveries" },
-    ];
-  
-    return (
-      <div className="bg-white p-6 rounded-xl shadow-sm">
-        <h3 className="text-2xl font-bold text-gray-800 mb-8">✨ Top Creators to Follow</h3>
-        <div className="space-y-4">
-          {creators.map((creator, idx) => (
-            <div key={idx} className="flex items-center justify-between">
-              <div>
-                <p className="text-lg font-semibold text-gray-700">{creator.name}</p>
-                <p className="text-gray-500 text-sm">{creator.bio}</p>
-              </div>
-              <button className="text-base font-semibold text-light-purple bg-light-lightGrey rounded-md p-2 px-3 hover:bg-gray-200 transition">Follow</button>
+  const creators = [
+    {
+      name: "Creative Minds",
+      bio: "Design & storytelling",
+      image: ProfileSally, 
+    },
+    {
+      name: "Finance Pulse",
+      bio: "Smart money tips",
+      image: ProfileOlive, 
+    },
+    {
+      name: "The Space Show",
+      bio: "Cosmic discoveries",
+      image: ProfileJeena, 
+    },
+  ];
+
+  return (
+    <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-300">
+      <h3 className="text-lg font-subheadingDMSans font-semibold text-light-black mb-4">Add to your feed</h3>
+
+      <div className="flex flex-col gap-4">
+        {creators.map((creator, idx) => (
+          <div key={idx} className="flex items-center gap-3">
+            {/* Profile Image - smaller on mobile */}
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
+              {creator.image ? (
+                <img
+                  src={creator.image}
+                  alt={creator.name}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <HiOutlineUserCircle className="w-full h-full text-gray-400" />
+              )}
             </div>
-          ))}
-        </div>
+
+            {/* Name & Bio */}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-gray-800 leading-tight truncate">
+                {creator.name}
+              </p>
+              <p className="text-xs text-gray-500 truncate">{creator.bio}</p>
+            </div>
+
+            {/* Follow Button -  */}
+            <button className="text-xs sm:text-sm font-medium font-headingPoppins border rounded-full px-3 sm:px-4 py-2 hover:bg-light-purple hover:text-light-lightGrey transition whitespace-nowrap">
+              + Follow
+            </button>
+          </div>
+        ))}
       </div>
-    );
-  };
-  
-  export default SuggestionsSidebar;
-  
+
+      {/* Footer */}
+      <div className="mt-4 ml-4">
+        <button className="text-sm text-light-purple hover:underline font-medium">
+          View all recommendations →
+        </button>
+      </div>
+    </div>
+  );
+};
+
+export default SuggestionsSidebar;

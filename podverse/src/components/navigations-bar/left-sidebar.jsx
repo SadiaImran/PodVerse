@@ -1,4 +1,5 @@
 import Logo from "../../assets/images/icon-logo.svg";
+import ProfileMarry from "../../assets/images/icon-profile-marry.png"
 import {
   HiOutlineHome,
   HiOutlineMicrophone,
@@ -102,7 +103,7 @@ export default function LeftSideBar({ open, setOpen }) {
 
         {/* Footer */}
         <div className="p-4 flex items-center gap-2 cursor-pointer">
-          <HiOutlineUserCircle className="w-8 h-8 text-light-charcoal flex-shrink-0" />
+          <img src = {ProfileMarry} className={`max-w-12 max-h-12 text-light-charcoal flex-shrink-0 pr-2`} />
           {open && (
             <div className="flex items-center justify-between w-full">
               <div>

@@ -9,8 +9,6 @@ const BaseLayout = ({ children }) => {
     <div className="flex h-screen  overflow-hidden bg-light-[#f3f2ee] flex-col md:flex-row">
       {/* Left Sidebar */}
       <LeftSidebar open={open} setOpen={setOpen} />
-
-      {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-auto">
         <Topbar open={open} />
 
