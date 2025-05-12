@@ -8,7 +8,7 @@ const RecentPodcast = ({ hasPodcasts }) => {
   const draftPodcasts = [3, 4];
 
   const renderCard = (id, isDraft = false) => (
-    <div className="flex bg-white rounded-xl shadow-md p-4 gap-4 items-start">
+    <div className="inline-flex bg-gray-50 rounded-2xl shadow-md p-4 gap-4 items-start justify-center ">
       <div className="relative w-48 h-28 overflow-hidden rounded-lg">
         {isDraft ? (
           <div className="w-full h-full bg-gray-200 flex items-center justify-center text-gray-500 text-sm">
@@ -88,7 +88,7 @@ const RecentPodcast = ({ hasPodcasts }) => {
           </div>
 
           {/* Content */}
-          <div className="space-y-6">
+          <div className="flex flex-col md:flex-row gap-12">
             {(activeTab === "uploaded" ? uploadedPodcasts : draftPodcasts).map(
               (id) => renderCard(id, activeTab === "drafts")
             )}

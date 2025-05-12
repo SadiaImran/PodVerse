@@ -1,5 +1,7 @@
 import Logo from "../../assets/images/icon-logo.svg";
+import { useNavigate } from "react-router-dom";
 import ProfileMarry from "../../assets/images/icon-profile-marry.png"
+
 import {
   HiOutlineHome,
   HiOutlineMicrophone,
@@ -12,26 +14,32 @@ import {
 import { IoAnalyticsOutline, IoSettingsOutline } from "react-icons/io5";
 
 const navItems = [
-  { Icon: HiOutlineHome, label: "Home" },
-  { Icon: HiOutlineMicrophone, label: "Create Podcasts" },
-  { Icon: HiOutlineFolderOpen, label: "My Library" },
-  { Icon: IoAnalyticsOutline, label: "Analytics" },
+  { Icon: HiOutlineHome, label: "Home" , navigateTo: "/home"},
+  { Icon: HiOutlineMicrophone, label: "Create Podcasts" , navigateTo: "/create-podcast" },
+  { Icon: HiOutlineFolderOpen, label: "My Library" , navigateTo: "/library" },
+  { Icon: IoAnalyticsOutline, label: "Analytics" , navigateTo:"/analytics"},
 ];
 
-const NavItem = ({ Icon, label, open }) => (
-  <li
-    className={`flex items-center ${open ? "gap-4" : "justify-center"} cursor-pointer group relative py-2 hover:border-2 hover:border-light-lightPurple rounded-lg duration-200`}
-  >
-    <Icon className="w-7 h-7 text-light-charcoal flex-shrink-0" />
-    {open ? (
-      <span className="text-lg text-light-charcoal font-medium font-subheadingDMSans">{label}</span>
-    ) : (
-      <span className="absolute left-16 bg-white text-black px-2 py-1 text-xs rounded shadow-md hidden group-hover:block z-50">
-        {label}
-      </span>
-    )}
-  </li>
-);
+const NavItem = ({ navItem, open }) => {
+  const navigate = useNavigate(); // Ensure useNavigate is inside the Router context
+
+  return (
+    <li
+      className={`flex items-center ${open ? "gap-4" : "justify-center"} cursor-pointer group relative py-2 
+      hover:border-2 hover:border-light-lightPurple rounded-lg duration-200`}
+      onClick={() => navigate(navItem.navigateTo)} // Navigate to the specified route
+    >
+      <navItem.Icon className="w-7 h-7 text-light-charcoal flex-shrink-0" />
+      {open ? (
+        <span className="text-lg text-light-charcoal font-medium font-subheadingDMSans">{navItem.label}</span>
+      ) : (
+        <span className="absolute left-16 bg-white text-black px-2 py-1 text-xs rounded shadow-md hidden group-hover:block z-50">
+          {navItem.label}
+        </span>
+      )}
+    </li>
+  );
+};
 
 export default function LeftSideBar({ open, setOpen }) {
   return (
@@ -97,7 +105,7 @@ export default function LeftSideBar({ open, setOpen }) {
         {/* Navigation Items */}
         <ul className="flex-1 space-y-3 px-3">
           {navItems.map((item, index) => (
-            <NavItem key={index} Icon={item.Icon} label={item.label} open={open} />
+            <NavItem key={index} navItem = {item} open={open} />
           ))}
         </ul>
 

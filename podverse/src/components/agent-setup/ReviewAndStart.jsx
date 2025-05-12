@@ -1,7 +1,11 @@
 import { CheckCircle, FileText, User, Mic, Info } from "lucide-react";
 import { IoMdArrowRoundBack } from "react-icons/io";
+import { useNavigate } from "react-router-dom";
 
 const ReviewAndStart = ({ formData, goBack }) => {
+
+  const navigate = useNavigate();
+
   return (
     <div className="flex flex-col md:flex-row gap-8">
       {/* Left Section - Review Summary */}
@@ -60,6 +64,7 @@ const ReviewAndStart = ({ formData, goBack }) => {
           </button>
           <button
             className="bg-light-purple text-white px-8 py-2 rounded-xl shadow-md hover:bg-purple-700 transition-all"
+            onClick={() => {navigate('/start-recording')}}
           >
             Start Recording
           </button>
