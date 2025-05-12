@@ -10,20 +10,23 @@ import ScreenRecording from './screens/screen-recording'
 
 function App() {
   return (
-    <ScreenRecording/>
+    //<ScreenRecording/>
     //<AgentSetupFlow></AgentSetupFlow>
     //<ActivityFeedPage></ActivityFeedPage>
     //<CreatePodcastPage></CreatePodcastPage>
     // <div className="bg-light-cream h-screen w-screen">
-    //   <Router>
-    //   <Routes>
-    //     <Route path="/" element={<SignInScreen />} />
-    //     <Route path="/signin-email" element={<SignInScreenEmail />} />
-    //     <Route path="/signup" element={<SignUpScreen />} />
-    //     <Route path="/signup-email" element={<SignUpScreenEmail />} />
-    //     <Route path="/home" element={<HomeScreen/>}></Route>
-    //   </Routes>
-    //   </Router>
+      <Router>
+      <Routes>
+        <Route path="/" element={<SignInScreen />} />
+        <Route path="/signin-email" element={<SignInScreenEmail />} />
+        <Route path="/signup" element={<SignUpScreen />} />
+        <Route path="/signup-email" element={<SignUpScreenEmail />} />
+        <Route path="/home" element={<ActivityFeedPage/>}></Route>
+        <Route path="/create-podcast" element={<CreatePodcastPage/>}></Route>
+        <Route path="/agent-setup" element={<AgentSetupFlow/>}></Route>
+        <Route path="/start-recording" element={<ScreenRecording/>}></Route>        
+      </Routes>
+      </Router>
     // </div>
   );
 }

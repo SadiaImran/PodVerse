@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Circle } from "lucide-react"; // Using only Circle from lucide
 import BaseLayout from "../components/layouts/BaseLayout";
 import RecentPodcasts from "../components/create-podcast/recent-podcasts"; // Importing RecentPodcast component
@@ -8,6 +9,8 @@ const CreatePodcastPage = () => {
   const [activeTab, setActiveTab] = useState("library");
   const hasPodcasts = true; // Change this flag to true to test recent podcasts
 
+  const navigate = useNavigate();
+
   return (
     <BaseLayout>
       <main className="flex-1 overflow-y-auto p-6 md:p-10 bg-light space-y-8">
@@ -15,7 +18,9 @@ const CreatePodcastPage = () => {
         {/* Top Header */}
         <div className="flex justify-between items-center">
           <div className="text-2xl font-bold text-gray-800">Library</div>
-          <button className="flex items-center gap-2 bg-light-purple text-white px-4 py-2 rounded-lg font-semibold hover:scale-105 shadow-lg transition duration-300">
+          <button 
+          onClick={() => navigate("/agent-setup")}
+          className="flex items-center gap-2 bg-light-purple text-white px-4 py-2 rounded-lg font-semibold hover:scale-105 shadow-lg transition duration-300">
             <span className="relative w-5 h-5">
               <Circle className="w-5 h-5 text-white" />
               <span className="absolute top-1/2 left-1/2 w-2.5 h-2.5 bg-white rounded-full transform -translate-x-1/2 -translate-y-1/2"></span>
