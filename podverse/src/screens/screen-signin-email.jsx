@@ -37,6 +37,7 @@ function SignInScreenEmail() {
   };
 
   const handleContinue = () => {
+    navigate("/home");
     setIsLoading(true);
 
     setTimeout(() => {
@@ -57,7 +58,7 @@ function SignInScreenEmail() {
       // If everything is good, proceed to next logic
       setIsLoading(false);
       alert("Successfully signed in!");
-      navigate("/home");
+      
     }, 1000);
   };
 
