@@ -9,22 +9,46 @@ import EmailVerification from "../components/popups/popup-verify-code.jsx";
 import mediaPerson from "../assets/images/image.png";
 import { FaRegEnvelope, FaGoogle, FaFacebookF, FaApple } from "react-icons/fa";
 import { MdOutlineLock } from "react-icons/md";
+import { sendOtpToEmail } from "../api/auth"; 
+import { useNavigate } from "react-router-dom";
+
+
+
+
 
 function SignUpScreenEmail() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showVerification, setShowVerification] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [otpVerified, setOtpVerified] = useState(false);
+  const [signupComplete, setSignupComplete] = useState(false);
+  
+  const navigate = useNavigate();
+
+  const handleFinalSignup = async () => {
+    setIsLoading(true);
+    setSignupComplete(true);
+    setTimeout(() => {
+      navigate("/home");
+    }, 1000);
+  };
+  
+
+  const handleContinue = async () => {
+    if (!email || !password) return alert("Email and password required");
+  
+    try {
+      await sendOtpToEmail(email, password);  // send both email and password
+      setShowVerification(true);
+    } catch (err) {
+      alert(err.response?.data?.msg || "Failed to send OTP");
+    }
+  };
 
   const handleEmailChange = (e) => {
     const value = e.target.value;
     setEmail(value);
-
-    // Simple email validation
-    const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-    if (isValidEmail) {
-      setShowVerification(true);
-    }
   };
 
   const isStrongPassword = (pwd) => {
@@ -34,15 +58,7 @@ function SignUpScreenEmail() {
   const handlePasswordChange = (e) => {
     setPassword(e.target.value);
   };
-
-  const handleContinue = () => {
-    setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      // Continue with next logic here (e.g. show verification, move to next step)
-    }, 1000);
-  };
-
+  
   return (
     <div className="min-h-screen bg-white flex flex-col">
       <TopBar />
@@ -153,8 +169,12 @@ function SignUpScreenEmail() {
       </div>
 
       {showVerification && (
-        <EmailVerification onClose={() => setShowVerification(false)} />
-      )}
+  <EmailVerification 
+    email={email} 
+    onClose={() => setShowVerification(false)}
+    onVerified={handleFinalSignup}
+  />
+)}
     </div>
   );
 }
