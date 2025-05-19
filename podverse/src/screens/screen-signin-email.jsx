@@ -11,6 +11,9 @@ import mediaPerson from "../assets/images/image.png";
 import { FaRegEnvelope } from "react-icons/fa";
 import { MdOutlineLock } from "react-icons/md";
 
+import { login } from "../api/auth"; // import
+
+
 function SignInScreenEmail() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -20,11 +23,23 @@ function SignInScreenEmail() {
 
   const navigate = useNavigate();
 
-  // Dummy users for matching
-  const dummyUsers = [
-    { email: "user@gmail.com", password: "password@123" },
-    { email: "admin@gmail.com", password: "admin!2025" },
-  ];
+  const handleContinue = async () => {
+    try {
+      setIsLoading(true);
+      const res = await login(email, password);
+      localStorage.setItem("token", res.data.token);
+      navigate("/home");
+    } catch (err) {
+      if (err.response?.data?.msg === "User not found or not verified") {
+        setEmailError("Email not verified or doesn't exist.");
+      } else {
+        setPasswordError("Incorrect password.");
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
 
   const handleEmailChange = (e) => {
     setEmail(e.target.value);
@@ -34,32 +49,6 @@ function SignInScreenEmail() {
   const handlePasswordChange = (e) => {
     setPassword(e.target.value);
     setPasswordError(""); // Clear error on change
-  };
-
-  const handleContinue = () => {
-    navigate("/home");
-    setIsLoading(true);
-
-    setTimeout(() => {
-      const matchedUser = dummyUsers.find((user) => user.email === email);
-
-      if (!matchedUser) {
-        setEmailError("Couldn't find your email. Please check and try again.");
-        setIsLoading(false);
-        return;
-      }
-
-      if (matchedUser.password !== password) {
-        setPasswordError("Wrong password. Please try again.");
-        setIsLoading(false);
-        return;
-      }
-
-      // If everything is good, proceed to next logic
-      setIsLoading(false);
-      alert("Successfully signed in!");
-      
-    }, 1000);
   };
 
   return (

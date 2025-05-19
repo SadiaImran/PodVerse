@@ -24,21 +24,24 @@ function SignInScreen(){
                 <div className="w-full max-w-lg min-h-[540px] border rounded-lg border-gray-200 shadow-md p-8 flex flex-col justify-between mx-auto mt-[-15px]">
                     <AuthWelcome title="Welcome back &#x1F44B;" subtitle="Log in your account" />
                     <div className="space-y-6 mt-12">
-                        <AuthButton
-                            bgColor="bg-light-deepPurple"
-                            textColor="text-white"
-                            borderColor="border-light-deepPurple"
-                            text="Log in with Email"
-                            IconComponent={FaRegEnvelope}
-                            onClick={() => navigate('/signin-email')} // navigate on click
+                    <AuthButton
+                        bgColor="bg-light-deepPurple"
+                        textColor="text-white"
+                        borderColor="border-light-deepPurple"
+                        text="Log in with Email"
+                        IconComponent={FaRegEnvelope}
+                        onClick={() => navigate('/signin-email')}
                         />
+
                         <AuthButton
-                            bgColor="bg-white-500"
-                            textColor="text-red-500"
-                            borderColor="border-red-500"
-                            text="Log in with Google"
-                            IconComponent={FaGoogle}
+                        bgColor="bg-white"
+                        textColor="text-red-500"
+                        borderColor="border-red-500"
+                        text="Continue with Google"
+                        IconComponent={FaGoogle}
+                        isGoogle={true}
                         />
+
                         <TermsCondition />
                     </div>
                     <div className="mt-20">

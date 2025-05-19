@@ -6,7 +6,7 @@ function AccountPrompt(props) {
 
   const handleNavigation = () => {
     if (props.buttonText.toLowerCase().includes('sign up')) {
-      navigate('/signup');
+      navigate('/signup-email');
     } else if (props.buttonText.toLowerCase().includes('log in')) {
       navigate('/');
     }
