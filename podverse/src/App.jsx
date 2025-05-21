@@ -19,7 +19,7 @@ function App() {
     // <div className="bg-light-cream h-screen w-screen">
       <Router>
       <Routes>
-        <Route path="/" element={<SignInScreen />} />
+        <Route path="/" element={<SignInScreenEmail />} />
         <Route path="/signin-email" element={<SignInScreenEmail />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password/:token" element={<ResetPassword />} />

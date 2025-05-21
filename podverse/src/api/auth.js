@@ -10,7 +10,8 @@ export const sendOtpToEmail = (email, password) => API.post('/send-otp', { email
 export const verifyOTP = (email, otp) => API.post('/verify-otp', { email, otp });
 
 // Login
-export const login = (email, password) => API.post('/login', { email, password });
+export const login = (email, password, rememberMe) =>
+  API.post('/login', {email, password, rememberMe}, { withCredentials: true });
 
 // Google Login
 export const googleLogin = (idToken) => API.post('/google-login', { idToken });
@@ -19,5 +20,8 @@ export const sendForgotPasswordLink = (email, clientUrl) => API.post('/forgot-pa
 
 
 export const sendResetLink = (token, newPassword) => API.post(`/reset-password/${token}`, { newPassword });
+
+export const logout = () => API.post('/logout', {}, { withCredentials: true });
+export const authenticate = () => API.get('/authenticate', { withCredentials: true });
 
 
