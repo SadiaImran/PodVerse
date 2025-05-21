@@ -7,7 +7,15 @@ const UploadVoices = ({ formData, setFormData, handleVoiceUpload }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [playingIndex, setPlayingIndex] = useState(null);
+  const [clonedAudioUrl, setClonedAudioUrl] = useState(null);
+  const [cloneText, setCloneText] = useState("This is a test for cloning.");
+  const [clonedAudios, setClonedAudios] = useState([]);
+
+
   const audioRef = useRef(null);
+
+  // Add this state for enabling Clone button
+  const [canClone, setCanClone] = useState(false);
 
   const MAX_FILES = 10;
 
@@ -37,24 +45,26 @@ const UploadVoices = ({ formData, setFormData, handleVoiceUpload }) => {
 
   const handleFileChange = (fileList) => {
     if (!fileList || fileList.length === 0) return;
-    
-    // Filter for audio files only
-    const audioFiles = Array.from(fileList).filter(file => 
+
+    const audioFiles = Array.from(fileList).filter(file =>
       file.type.includes('audio/') && file.size <= 10 * 1024 * 1024
     );
-    
-    // Respect the maximum file limit
+
     const filesToAdd = audioFiles.slice(0, MAX_FILES - uploadedFiles.length);
-    
+
     if (filesToAdd.length > 0) {
       const newFiles = filesToAdd.map(file => ({
         file,
         id: Date.now() + Math.random().toString(36).substr(2, 9),
         url: URL.createObjectURL(file)
       }));
-      
-      setUploadedFiles(prev => [...prev, ...newFiles]);
-      
+
+      setUploadedFiles(prev => {
+        const updated = [...prev, ...newFiles];
+        console.log("Updated uploadedFiles:", updated);
+        return updated;
+      });
+
       // Also update the formData to maintain compatibility
       if (setFormData) {
         setFormData(prev => ({
@@ -131,6 +141,52 @@ const UploadVoices = ({ formData, setFormData, handleVoiceUpload }) => {
       };
     }
   };
+
+  const handleCheckFiles = () => {
+    if (uploadedFiles.length === 0) {
+      alert("Please upload at least one voice sample!");
+      setCanClone(false);
+    } else {
+      alert("Files uploaded! You can now clone.");
+      setCanClone(true);
+    }
+  };
+
+  const handleClone = async () => {
+  console.log("Cloning with text:", cloneText);
+  const formDataToSend = new FormData();
+
+  uploadedFiles.forEach(fileObj => {
+    formDataToSend.append("file_upload", fileObj.file);
+  });
+
+  formDataToSend.append("text", cloneText);
+
+  try {
+    const endpoint = "http://localhost:8000/voice-clone/";
+    const response = await fetch(endpoint, {
+      method: "POST",
+      body: formDataToSend,
+    });
+
+    if (response.ok) {
+      const result = await response.json();
+      console.log("Clone successful:", result);
+      const audioURL = "http://localhost:8000" + result.output_audio;
+
+      setClonedAudios(prev => [...prev, { text: cloneText, url: audioURL }]);
+
+    } else {
+      const errText = await response.text();
+      console.error("Clone error response:", errText);
+    }
+  } catch (error) {
+    console.error("Error in cloning:", error);
+  }
+};
+
+
+
 
   // Clean up object URLs when component unmounts
   useEffect(() => {
@@ -213,7 +269,53 @@ const UploadVoices = ({ formData, setFormData, handleVoiceUpload }) => {
           </div>
         </div>
       )}
+
+      <div className="mt-6">
+      <label className="block text-gray-700 font-medium mb-1">Enter Text for Cloning:</label>
+      <input
+        type="text"
+        value={cloneText}
+        onChange={(e) => setCloneText(e.target.value)}
+        className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:border-purple-500"
+        placeholder="Type a sentence to clone..."
+      />
+      </div>
+
+     {clonedAudios.length > 0 && (
+  <div className="mt-6">
+    <h3 className="text-md font-semibold text-gray-800 mb-2">Cloned Voice Outputs</h3>
+    <div className="space-y-4">
+      {clonedAudios.map((audio, index) => (
+        <div key={index} className="p-4 border rounded-lg bg-gray-50">
+          <p className="text-sm text-gray-700 mb-2">Text: "{audio.text}"</p>
+          <audio controls className="w-full">
+            <source src={audio.url} type="audio/wav" />
+            Your browser does not support the audio element.
+          </audio>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
+
+
       
+      <div className="mt-6 flex gap-3">
+        <button
+          onClick={handleCheckFiles}
+          className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition"
+        >
+          Check Files
+        </button>
+        <button
+          onClick={handleClone}
+          disabled={!canClone}
+          className={`px-4 py-2 rounded transition ${canClone ? "bg-purple-600 text-white hover:bg-purple-700" : "bg-gray-300 text-gray-500 cursor-not-allowed"}`}
+        >
+          Clone Voice
+        </button>
+      </div>
+
       <p className="text-xs text-gray-500 mt-3">Supported formats: .mp3, .wav. Max size: 10MB per file.</p>
   
     </div>

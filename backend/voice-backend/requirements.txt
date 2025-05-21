@@ -1,0 +1,4 @@
+fastapi
+uvicorn
+TTS
+python-multipart  # for file uploads
