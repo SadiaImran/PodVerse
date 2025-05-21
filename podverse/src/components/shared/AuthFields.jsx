@@ -26,7 +26,7 @@ function AuthFields({ type, purpose, placeholder, IconComponent, value, onChange
           onClick={() => setShowPassword(!showPassword)}
           className="focus:outline-none text-gray-500"
         >
-          {showPassword ? <FaEyeSlash /> : <FaEye />}
+          {showPassword ? <FaEye />: <FaEyeSlash /> }
         </button>
       )}
     </div>

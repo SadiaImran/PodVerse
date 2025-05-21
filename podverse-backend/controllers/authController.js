@@ -1,0 +1,198 @@
+
+const User = require("../models/User");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const sendOTP = require("../utils/sendOTP");
+const admin = require("../firebase");
+
+// controllers/authController.js
+const crypto = require("crypto");
+const sendResetLink = require("../utils/sendResetLink"); // we'll create this
+
+exports.sendForgotPasswordLink = async (req, res) => {
+    const { email, clientUrl } = req.body; // use clientUrl from request
+  
+    try {
+        const user = await User.findOne({ 
+            email: { $regex: new RegExp("^" + email + "$", "i") }
+          });
+          
+      console.log({user});
+      if (!user || !user.isVerified)
+        return res.status(404).json({ msg: "User not found or not verified" });
+  
+      const token = crypto.randomBytes(32).toString("hex");
+      user.resetPasswordToken = token;
+      user.resetPasswordExpires = Date.now() + 1000 * 60 * 30; // 30 mins
+      await user.save();
+  
+      const resetURL = `${clientUrl}/reset-password/${token}`;
+      await sendResetLink(email, resetURL);
+  
+      res.json({ msg: "Reset link sent to email." });
+    } catch (err) {
+      res.status(500).json({ msg: "Server error", error: err.message });
+    }
+  };
+  
+
+exports.resetPassword = async (req, res) => {
+    const { token } = req.params;
+    const { newPassword } = req.body;
+  
+    try {
+      const user = await User.findOne({
+        resetPasswordToken: token,
+        resetPasswordExpires: { $gt: Date.now() }
+      });
+  
+      if (!user) return res.status(400).json({ msg: "Invalid or expired token" });
+  
+      const hashed = await bcrypt.hash(newPassword, 10);
+      user.password = hashed;
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpires = undefined;
+      await user.save();
+  
+      res.json({ msg: "Password updated successfully" });
+    } catch (err) {
+      res.status(500).json({ msg: "Server error", error: err.message });
+    }
+  };
+  
+  
+  exports.login = async (req, res) => {
+    const { email, password, rememberMe } = req.body;
+  
+    try {
+      console.log("Incoming email:", email);
+      const user = await User.findOne({ email: email.toLowerCase().trim() });
+      console.log({user});
+  
+      if (!user || !user.isVerified) {
+        return res.status(400).json({ msg: "User not found or not verified" });
+      }
+  
+      const isMatch = await bcrypt.compare(password, user.password);
+      if (!isMatch) {
+        return res.status(400).json({ msg: "Invalid credentials" });
+      }
+  
+      const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
+        expiresIn: rememberMe ? "7d" : "1d",
+      });
+  
+      res.cookie("token", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "Strict",
+        maxAge: rememberMe ? 7 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000, // 7d or 1d
+      });
+  
+      res.status(200).json({ msg: "Login successful", user: { email: user.email, name: user.name } });
+  
+    } catch (err) {
+      console.error("Login error:", err);
+      res.status(500).json({ msg: "Server error" });
+    }
+  };
+  
+
+  exports.authenticate = (req, res, next) => {
+    const token = req.cookies.token;
+
+    if (!token) return res.status(401).json({ msg: "Unauthorized" });
+
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        req.userId = decoded.userId;
+        next();
+    } catch (err) {
+        return res.status(401).json({ msg: "Invalid token" });
+    }
+};
+
+  
+  exports.logout = (req, res) => {
+    res.clearCookie("token", { httpOnly: true, sameSite: "Strict", secure: process.env.NODE_ENV === "production" });
+    res.status(200).json({ msg: "Logged out successfully" });
+  };
+  
+  
+
+exports.googleLogin = async (req, res) => {
+    const { idToken } = req.body;
+    try {
+        const decoded = await admin.auth().verifyIdToken(idToken);
+        const email = decoded.email;
+
+        let user = await User.findOne({ email });
+        if (!user) {
+            user = new User({ email, isVerified: true, provider: "google" });
+            await user.save();
+        }
+
+        const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET);
+        res.json({ token });
+    } catch (err) {
+        res.status(500).json({ msg: "Google authentication failed", error: err.message });
+    }
+};
+
+// POST /send-otp
+exports.sendOtpToEmail = async (req, res) => {
+    const { email, password } = req.body; // get password here too
+
+    try {
+        // Check if email already exists verified
+        const existing = await User.findOne({ email });
+        if (existing && existing.isVerified) {
+            return res.status(400).json({ msg: "Email already registered" });
+        }
+
+        // Generate OTP
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+        // Send OTP email
+        await sendOTP(email, otp);
+
+        // Save or update temp user with OTP and password hash
+        let user = await User.findOne({ email });
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        if (user) {
+            // Update existing temp user
+            user.otp = otp;
+            user.password = hashedPassword;
+            user.isVerified = false;
+            await user.save();
+        } else {
+            // Create new temp user
+            user = new User({ email, otp, password: hashedPassword, isVerified: false });
+            await user.save();
+        }
+
+        res.json({ msg: "OTP sent successfully" });
+    } catch (err) {
+        res.status(500).json({ msg: "Failed to send OTP", error: err.message });
+    }
+};
+
+// POST /verify-otp
+exports.verifyOTP = async (req, res) => {
+    const { email, otp } = req.body;
+    try {
+        const user = await User.findOne({ email });
+        if (!user || user.otp !== otp) return res.status(400).json({ msg: "Invalid OTP" });
+
+        user.isVerified = true;
+        user.otp = "";
+        await user.save();
+
+        res.json({ msg: "Email verified successfully" });
+    } catch (err) {
+        res.status(500).json({ msg: "Server error", error: err.message });
+    }
+};
+
+

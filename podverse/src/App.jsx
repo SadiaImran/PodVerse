@@ -6,7 +6,9 @@ import SignInScreenEmail from "./screens/screen-signin-email";
 import CreatePodcastPage from './screens/screen-create-podcast';
 import ActivityFeedPage from './screens/screen-activity-feed';
 import AgentSetupFlow from './screens/screen-agent-setup';
-import ScreenRecording from './screens/screen-recording'
+import ScreenRecording from './screens/screen-recording';
+import ForgotPassword from './components/comp-signin/ForgotPassword';
+import ResetPassword from './components/comp-signin/ResetPassword';
 
 function App() {
   return (
@@ -17,8 +19,10 @@ function App() {
     // <div className="bg-light-cream h-screen w-screen">
       <Router>
       <Routes>
-        <Route path="/" element={<SignInScreen />} />
+        <Route path="/" element={<SignInScreenEmail />} />
         <Route path="/signin-email" element={<SignInScreenEmail />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password/:token" element={<ResetPassword />} />
         <Route path="/signup" element={<SignUpScreen />} />
         <Route path="/signup-email" element={<SignUpScreenEmail />} />
         <Route path="/home" element={<ActivityFeedPage/>}></Route>

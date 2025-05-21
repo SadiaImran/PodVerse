@@ -1,30 +1,51 @@
-import { useState } from "react";
-import TopBar from "../components/shared/TopBar.jsx";
-import AuthWelcome from "../components/shared/AuthWelcome.jsx";
-import AuthButton from "../components/shared/AuthButton.jsx";
-import TermsCondition from "../components/comp-signin/Terms&Conditions.jsx";
-import AccountPrompt from "../components/shared/AccountPrompt.jsx";
-import AuthFields from "../components/shared/AuthFields.jsx";
-import EmailVerification from "../components/popups/popup-verify-code.jsx";
-import mediaPerson from "../assets/images/image.png";
-import { FaRegEnvelope, FaGoogle, FaFacebookF, FaApple } from "react-icons/fa";
-import { MdOutlineLock } from "react-icons/md";
+// src/screens/SignUpScreenEmail.jsx
+
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import TopBar from '../components/shared/TopBar.jsx';
+import AuthWelcome from '../components/shared/AuthWelcome.jsx';
+import AuthButton from '../components/shared/AuthButton.jsx';
+import TermsCondition from '../components/comp-signin/Terms&Conditions.jsx';
+import AccountPrompt from '../components/shared/AccountPrompt.jsx';
+import AuthFields from '../components/shared/AuthFields.jsx';
+import EmailVerification from '../components/popups/popup-verify-code.jsx';
+import { FaRegEnvelope, FaGoogle, FaFacebookF, FaApple } from 'react-icons/fa';
+import { MdOutlineLock } from 'react-icons/md';
+import { sendOtpToEmail } from '../api/auth';
+import ImageCarousel from '../components/comp-signin/ImageCarousel.jsx';
 
 function SignUpScreenEmail() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showVerification, setShowVerification] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [otpVerified, setOtpVerified] = useState(false);
+  const [signupComplete, setSignupComplete] = useState(false);
+
+  const navigate = useNavigate();
+
+  const handleFinalSignup = async () => {
+    setIsLoading(true);
+    setSignupComplete(true);
+    setTimeout(() => {
+      navigate('/home');
+    }, 1000);
+  };
+
+  const handleContinue = async () => {
+    if (!email || !password) return alert('Email and password required');
+
+    try {
+      await sendOtpToEmail(email, password);
+      setShowVerification(true);
+    } catch (err) {
+      alert(err.response?.data?.msg || 'Failed to send OTP');
+    }
+  };
 
   const handleEmailChange = (e) => {
     const value = e.target.value;
     setEmail(value);
-
-    // Simple email validation
-    const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-    if (isValidEmail) {
-      setShowVerification(true);
-    }
   };
 
   const isStrongPassword = (pwd) => {
@@ -35,49 +56,30 @@ function SignUpScreenEmail() {
     setPassword(e.target.value);
   };
 
-  const handleContinue = () => {
-    setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      // Continue with next logic here (e.g. show verification, move to next step)
-    }, 1000);
-  };
-
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-100 via-purple-100 to-pink-100 flex flex-col">
       <TopBar />
-      <div className="flex flex-col lg:flex-row w-full max-w-6xl mx-auto items-start py-10 lg:py-32 px-4 gap-10">
-        <div className="hidden lg:flex w-1/2 justify-center self-start">
-          <img
-            src={mediaPerson}
-            alt="Illustration"
-            className="w-[90%] max-w-xl"
-          />
+      <div className="flex flex-col lg:flex-row w-full max-w-6xl mx-auto items-start py-10 lg:py-24 px-4 gap-36">
+        {/* Left Side - Image Carousel */}
+        <div className="hidden lg:flex w-1/2 h-[500px] overflow-hidden">
+          <ImageCarousel />
         </div>
 
-        <div className="w-full max-w-lg min-h-[540px] border rounded-lg border-gray-200 shadow-md p-8 flex flex-col justify-between mx-auto mt-[-15px]">
+        {/* Right Side - Sign-Up Form */}
+        <div className="w-full lg:w-1/2 flex items-center justify-center">
+        <div className="w-full max-w-lg p-12 rounded-2xl shadow-xl border border-gray-200 bg-white space-y-6">
           {isLoading ? (
             <div className="flex flex-col h-full space-y-4">
-            {/* Keep welcome text at top */}
-            <AuthWelcome
-                title="Let's Get Started 🚀"
-                subtitle="Signing you up..."
-            />
-
-            <div className="flex flex-1 items-center justify-center flex-col space-y-4 pt-28">
-            <div className="animate-spin rounded-full h-10 w-10 border-t-4 border-light-deepPurple border-solid"></div>
-            <p className="text-gray-500 text-sm">Just one second...</p>
+              <AuthWelcome title="Let's Get Started 🚀" subtitle="Signing you up..." />
+              <div className="flex flex-1 items-center justify-center flex-col space-y-4 pt-28">
+                <div className="animate-spin rounded-full h-10 w-10 border-t-4 border-light-deepPurple border-solid"></div>
+                <p className="text-gray-500 text-sm">Just one second...</p>
+              </div>
             </div>
-
-            </div>
-
           ) : (
             <>
-              <AuthWelcome
-                title="Let&apos;s Get Started 🚀"
-                subtitle="Sign up your account"
-              />
-              <div className="space-y-6 mt-12">
+              <AuthWelcome title="Let's Get Started" subtitle="Sign up your account" />
+              <div className="space-y-6 pt-4">
                 <AuthFields
                   type="email"
                   purpose="signin"
@@ -100,9 +102,7 @@ function SignUpScreenEmail() {
                   <div className="text-sm mt-[-20px]">
                     <div
                       className={`h-2 rounded-full mt-2 ${
-                        isStrongPassword(password)
-                          ? "bg-green-500 w-full"
-                          : "bg-red-500 w-1/3"
+                        isStrongPassword(password) ? 'bg-green-500 w-full' : 'bg-red-500 w-1/3'
                       }`}
                     ></div>
                     {isStrongPassword(password) ? (
@@ -112,24 +112,20 @@ function SignUpScreenEmail() {
                     ) : (
                       <div className="mt-2 space-y-1">
                         <p>
-                          <span className="text-red-500 font-medium">
-                            Your password is weak.{" "}
-                          </span>
+                          <span className="text-red-500 font-medium">Your password is weak. </span>
                           <span className="text-gray-500">
-                            Please choose a password that is at least{" "}
+                            Please choose a password that is at least{' '}
                           </span>
                           <span className="text-black font-medium">
                             8 characters long (letters, numbers, and symbols)
-                          </span>{" "}
-                          <span className="text-gray-500">
-                            to make it more secure.
-                          </span>
+                          </span>{' '}
+                          <span className="text-gray-500">to make it more secure.</span>
                         </p>
                       </div>
                     )}
                   </div>
                 )}
-
+                <div className= "pt-6">
                 <AuthButton
                   bgColor="bg-light-deepPurple"
                   textColor="text-white"
@@ -137,23 +133,26 @@ function SignUpScreenEmail() {
                   text="Continue"
                   onClick={handleContinue}
                 />
+                </div>
 
                 <TermsCondition />
               </div>
 
-              <div className="mt-20">
-                <AccountPrompt
-                  quesText="Already Have an Account ?"
-                  buttonText="Log in"
-                />
+              <div className="pt-10">
+                <AccountPrompt quesText="Already Have an Account ?" buttonText="Log in" />
               </div>
             </>
           )}
         </div>
+        </div>
       </div>
 
       {showVerification && (
-        <EmailVerification onClose={() => setShowVerification(false)} />
+        <EmailVerification
+          email={email}
+          onClose={() => setShowVerification(false)}
+          onVerified={handleFinalSignup}
+        />
       )}
     </div>
   );
