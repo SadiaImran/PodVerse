@@ -1,12 +1,31 @@
 import { useState, useRef, useEffect } from "react";
 import { IoMdClose } from "react-icons/io";
 
-export default function EmailVerification({ onClose = () => {} }) {
+import { verifyOTP } from "../../api/auth"; // add this
+
+
+
+export default function EmailVerification({ email,onClose, onVerified}) {
+
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [error, setError] = useState("");
   const [isVerified, setIsVerified] = useState(false);
   const [timer, setTimer] = useState(60);
   const inputs = useRef([]);
+
+  const handleVerify = async () => {
+    const code = otp.join("");
+    try {
+      await verifyOTP(email, code); // pass email and OTP
+      setIsVerified(true);
+      setError("");
+      alert("Email verified! You can now log in.");
+      onVerified();
+      onClose(); // close popup
+    } catch (err) {
+      setError("Incorrect code or expired.");
+    }
+  };
 
   useEffect(() => {
     const countdown = setInterval(() => {
@@ -31,19 +50,6 @@ export default function EmailVerification({ onClose = () => {} }) {
   const handleKeyDown = (e, index) => {
     if (e.key === "Backspace" && !otp[index] && index > 0) {
       inputs.current[index - 1].focus();
-    }
-  };
-
-  const handleVerify = () => {
-    const code = otp.join("");
-    const correctCode = "123456"; // mock correct code
-
-    if (code === correctCode) {
-      setIsVerified(true);
-      setError("");
-    } else {
-      setError("Please enter a valid code");
-      setIsVerified(false);
     }
   };
 
