@@ -24,12 +24,12 @@ const SuggestionsSidebar = () => {
   ];
 
   return (
-    <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-300">
+    <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border-[2.5px] border-gray-300 ">
       <h3 className="text-lg font-subheadingDMSans font-semibold text-light-black mb-4">Add to your feed</h3>
 
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col space-y-6">
         {creators.map((creator, idx) => (
-          <div key={idx} className="flex items-center gap-3">
+          <div key={idx} className="flex items-center gap-3 ">
             {/* Profile Image - smaller on mobile */}
             <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
               {creator.image ? (
@@ -45,10 +45,10 @@ const SuggestionsSidebar = () => {
 
             {/* Name & Bio */}
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-800 leading-tight truncate">
+              <p className="text-sm font-semibold text-gray-800 leading-tight ">
                 {creator.name}
               </p>
-              <p className="text-xs text-gray-500 truncate">{creator.bio}</p>
+              <p className="text-xs text-gray-500 ">{creator.bio}</p>
             </div>
 
             {/* Follow Button -  */}
