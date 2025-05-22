@@ -56,10 +56,10 @@ function SignInScreenEmail() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-100 via-purple-100 to-pink-100 flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-100 via-purple-100 to-pink-100 flex flex-col ">
       <TopBar />
 
-      <div className="flex flex-col lg:flex-row w-full max-w-6xl mx-auto items-start py-10 lg:py-24 px-4 gap-36">
+      <div className="flex flex-col lg:flex-row w-full max-w-6xl items-center justify-center mx-auto py-10 lg:py-24 px-4 gap-36">
         {/* Left: Image Carousel */}
         <div className="hidden lg:flex w-1/2 h-[500px]  overflow-hidden">
           <ImageCarousel />

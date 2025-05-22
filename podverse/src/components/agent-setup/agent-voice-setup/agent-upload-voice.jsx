@@ -1,3 +1,4 @@
+import axios from "axios";
 import { useState, useRef, useEffect } from "react";
 import { FaUpload, FaTimes, FaVolumeUp, FaPlay, FaPause } from "react-icons/fa";
 import { IoArrowBackOutline } from "react-icons/io5";
@@ -43,38 +44,48 @@ const UploadVoices = ({ formData, setFormData, handleVoiceUpload }) => {
     }
   };
 
-  const handleFileChange = (fileList) => {
-    if (!fileList || fileList.length === 0) return;
+ const handleFileChange = (fileList) => {
+  if (!fileList || fileList.length === 0) return;
 
-    const audioFiles = Array.from(fileList).filter(file =>
-      file.type.includes('audio/') && file.size <= 10 * 1024 * 1024
+  const audioFiles = Array.from(fileList).filter(file =>
+    file.type.includes('audio/') && file.size <= 10 * 1024 * 1024
+  );
+
+  const uniqueNewFiles = audioFiles.filter(newFile => {
+    return !uploadedFiles.some(existing =>
+      existing.file.name === newFile.name &&
+      existing.file.size === newFile.size
     );
+  });
 
-    const filesToAdd = audioFiles.slice(0, MAX_FILES - uploadedFiles.length);
+  const filesToAdd = uniqueNewFiles.slice(0, MAX_FILES - uploadedFiles.length);
 
-    if (filesToAdd.length > 0) {
-      const newFiles = filesToAdd.map(file => ({
-        file,
-        id: Date.now() + Math.random().toString(36).substr(2, 9),
-        url: URL.createObjectURL(file)
+  if (filesToAdd.length > 0) {
+    const newFiles = filesToAdd.map(file => ({
+      file,
+      id: Date.now() + Math.random().toString(36).substr(2, 9),
+      url: URL.createObjectURL(file)
+    }));
+
+    setUploadedFiles(prev => {
+      const updated = [...prev, ...newFiles];
+      console.log("Updated uploadedFiles:", updated);
+      return updated;
+    });
+
+    // Update formData
+    if (setFormData) {
+      setFormData(prev => ({
+        ...prev,
+        customVoiceFile: filesToAdd[0],
+        allVoiceFiles: [...(prev.allVoiceFiles || []), ...filesToAdd]
       }));
-
-      setUploadedFiles(prev => {
-        const updated = [...prev, ...newFiles];
-        console.log("Updated uploadedFiles:", updated);
-        return updated;
-      });
-
-      // Also update the formData to maintain compatibility
-      if (setFormData) {
-        setFormData(prev => ({
-          ...prev,
-          customVoiceFile: filesToAdd[0], // Keep the first file in customVoiceFile for compatibility
-          allVoiceFiles: [...(prev.allVoiceFiles || []), ...filesToAdd]
-        }));
-      }
     }
-  };
+  } else {
+    alert("Duplicate or invalid files were ignored.");
+  }
+};
+
 
   const removeFile = (id, e) => {
     e.stopPropagation();
@@ -142,15 +153,26 @@ const UploadVoices = ({ formData, setFormData, handleVoiceUpload }) => {
     }
   };
 
-  const handleCheckFiles = () => {
-    if (uploadedFiles.length === 0) {
-      alert("Please upload at least one voice sample!");
-      setCanClone(false);
-    } else {
-      alert("Files uploaded! You can now clone.");
+ const handleCheckFiles = async () => {
+  if (uploadedFiles.length === 0) {
+    alert("Please upload at least one voice sample!");
+    setCanClone(false);
+  } else {
+    alert("Files uploaded! You can now clone.");
+    try {
       setCanClone(true);
+      const audioURLs = await uploadToCloudinary();
+
+      // Save all audio URLs to your backend (optional)
+      await axios.post(`${import.meta.env.VITE_BACKEND_BASEURL}/api/audios`, { audioURLs });
+
+      console.log("Files uploaded to MongoDB and Cloudinary successfully");
+    } catch (error) {
+      console.error(error);
     }
-  };
+  }
+};
+
 
   const handleClone = async () => {
   console.log("Cloning with text:", cloneText);
@@ -185,6 +207,30 @@ const UploadVoices = ({ formData, setFormData, handleVoiceUpload }) => {
   }
 };
 
+ const uploadToCloudinary = async () => {
+  const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+  const resourceType = 'auto';
+  const api = `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`;
+
+  const uploadedUrls = [];
+
+  for (const fileObj of uploadedFiles) {
+    const data = new FormData();
+    data.append("file", fileObj.file);
+    data.append("upload_preset", "audios_preset");
+
+    try {
+      const res = await axios.post(api, data);
+      const { secure_url } = res.data;
+      console.log("Uploaded:", secure_url);
+      uploadedUrls.push(secure_url);
+    } catch (error) {
+      console.error("Cloudinary upload error:", error);
+    }
+  }
+
+  return uploadedUrls;
+};
 
 
 
