@@ -1,4 +1,4 @@
-import Logo from "../../assets/images/icon-logo.svg";
+import Logo from "../../assets/images/logo.png";
 import { useNavigate } from "react-router-dom";
 import ProfileMarry from "../../assets/images/icon-profile-marry.png"
 

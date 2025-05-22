@@ -2,7 +2,7 @@ import { FaChevronDown } from "react-icons/fa";
 import { FiSearch } from "react-icons/fi";
 import { HiOutlineBell } from "react-icons/hi2";
 import ProfileMarry from "../../assets/images/icon-profile-marry.png"
-import Logo from "../../assets/images/icon-logo.svg";
+import Logo from "../../assets/images/logo.png";
 import { logout } from "../../api/auth"; 
 import { useNavigate } from "react-router-dom";
 import { FiLogOut } from "react-icons/fi"
@@ -26,7 +26,7 @@ export default function TopBar({ open }) {
         {!open && (
           <div className="hidden md:flex items-center gap-2 mr-6">
             <img src={Logo} alt="Logo" className="w-10 md:w-12" />
-            <span className="text-lg font-bold text-light-purple font-headingPoppins tracking-wider">
+            <span className="text-lg font-bold text-light-charcoal font-headingPoppins tracking-wider">
               POD<span className="text-light-purple">VERSE</span>
             </span>
           </div>
