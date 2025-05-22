@@ -30,6 +30,8 @@ function PanelRecording() {
   const [showAddSpeakerModal, setShowAddSpeakerModal] = useState(false);
   const [newSpeakerName, setNewSpeakerName] = useState('');
   const [newSpeakerType, setNewSpeakerType] = useState('human');
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
   
   const audioPlayerRef = useRef(null);
   
