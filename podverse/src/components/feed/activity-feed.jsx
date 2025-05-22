@@ -19,9 +19,9 @@ const ActivityFeed = () => {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 ">
       {posts.map((post) => (
-        <div key={post.id} className="bg-white p-4 rounded-xl shadow-sm border border-[#d4d2cc] w-full mb-6">
+        <div key={post.id} className="bg-white p-4 rounded-xl shadow-sm border-[2.5px] border-gray-300 w-full mb-6">
           <video
             controls
             className="w-full rounded-md object-cover"

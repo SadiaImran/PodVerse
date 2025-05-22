@@ -18,7 +18,7 @@ export default function TopBar({ open }) {
     }
   }
   return (
-    <nav className="containerr flex items-center justify-between px-4 py-4 shadow-md font-subheadingDMSans w-full ">
+    <nav className="bg-white containerr flex items-center justify-between px-4 py-4 shadow-md font-subheadingDMSans w-full ">
       
       {/* Left Section */}
       <div className="flex items-center gap-4 flex-shrink-0">
@@ -41,7 +41,7 @@ export default function TopBar({ open }) {
           <input
             type="text"
             placeholder="Search..."
-            className="pl-8 pr-4 py-2 bg-light-cream rounded-lg outline-none w-full text-base text-light-black"
+            className="pl-8 pr-4 py-2 bg-light-background rounded-lg outline-none w-full text-base text-light-black"
           />
           <FiSearch className="absolute left-2 top-2.5 mt-0.5 text-light-grey" />
         </div>
@@ -67,7 +67,7 @@ export default function TopBar({ open }) {
           </div>
           <button
             onClick={handleLogout}
-            className="flex items-center gap-2 px-4 py-2 bg-light-purple hover:bg-light-lightPurple text-white text-sm font-medium rounded-md shadow transition duration-200"
+            className="flex items-center gap-2 px-4 py-2 hover:bg-light-background hover:text-light-charcoal hover:border-light-purple border-2 bg-light-purple text-white text-sm font-medium rounded-md shadow transition duration-200"
           >
             <FiLogOut className="text-lg" />
             Logout

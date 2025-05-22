@@ -26,7 +26,7 @@ const NavItem = ({ navItem, open }) => {
   return (
     <li
       className={`flex items-center ${open ? "gap-4" : "justify-center"} cursor-pointer group relative py-2 
-      hover:border-2 hover:border-light-lightPurple rounded-lg duration-200`}
+      hover:bg-indigo-50 rounded-lg duration-200`}
       onClick={() => navigate(navItem.navigateTo)} // Navigate to the specified route
     >
       <navItem.Icon className="w-7 h-7 text-light-charcoal flex-shrink-0" />
@@ -72,12 +72,12 @@ export default function LeftSideBar({ open, setOpen }) {
           ${open ? "w-full md:w-72 " : "w-full md:w-16 rounded-r-xl"}
           ${open ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
           transition-all duration-500 py-3
-          bg-light-background shadow-lg shadow-gray-500/30
+          bg-light-background shadow-md
           flex flex-col gap-4 md:gap-10 lg:gap-12 
         `}
       >
         {/* Logo Section */}
-        <div className="px-2 py-4 flex items-center justify-between">
+        <div className="px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             {/* Show logo and title only when sidebar is open */}
             {open && (
@@ -103,7 +103,7 @@ export default function LeftSideBar({ open, setOpen }) {
         </div>
 
         {/* Navigation Items */}
-        <ul className="flex-1 space-y-3 px-3">
+        <ul className="flex-1 space-y-3 px-6">
           {navItems.map((item, index) => (
             <NavItem key={index} navItem = {item} open={open} />
           ))}

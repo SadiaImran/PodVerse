@@ -8,8 +8,7 @@ module.exports = {
     purple: "#9c27b0",
     lavender: "#e6e6fa",
     lightPurple: "#dabfff",
-    background: "#ffffff",
-    screenBackground : "#f3f2ee",
+    background: "#FAFAFBFF",
     text: "#000000",
     primary: "#4f46e5",
     secondary: "#64748b",
@@ -34,7 +33,7 @@ const theme = {
     lightPurple: "#7d6ce3",
 
     // UI Mapping
-    background: '#F9F5EB',
+    background: '#FAFAFBFF',
     text: '#1C1C1C',
     primary: '#6057C7',     // purple
     secondary: '#6280E4',   // sky blue
