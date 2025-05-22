@@ -1,36 +1,42 @@
 import { button } from "@material-tailwind/react";
 import { HiOutlineUserCircle } from "react-icons/hi";
+import { useNavigate } from "react-router-dom";
 import { MdLibraryMusic, MdCreateNewFolder } from "react-icons/md";
 
-const PostBoxButton = ({Icon , label , library}) => (
-  <button className="flex items-center justify-center gap-2 py-2 px-3 rounded-lg hover:bg-light-cream transition">
+function PodcastPostBox () {
+ 
+  const PostBoxButton = ({Icon , label , library}) => (
+  <button className="flex items-center justify-center gap-2 py-2 px-3 rounded-lg hover:bg-indigo-50 transition"
+  onClick={() => {
+    library ? navigate('/create-podcast') : navigate('/agent-setup')
+  }}
+  >
           <Icon className={`text-2xl sm:text-3xl ${library ? "text-light-purple" : "text-green-600"}`} />
           <span className="whitespace-nowrap">{label}</span>
-        </button>
+  </button>
 );
  
-const PodcastPostBox = () => {
-  
+ const navigate = useNavigate();  
   return (
-    <div className="bg-white p-4 rounded-xl shadow-sm border border-[#d4d2cc] w-full mb-6">
+    <div className="bg-white p-4 rounded-xl shadow-sm border-[2.5px] border-gray-300 w-full mb-6">
       {/* Top section with improved mobile layout */}
       <div className="flex items-center gap-3 mb-4">
         {/* Avatar - fixed size, no mx-auto to align properly */}
-        <HiOutlineUserCircle className="text-4xl text-light-charcoal shrink-0" />
+        <HiOutlineUserCircle className="text-5xl text-light-charcoal shrink-0" />
 
         {/* Input field - better truncation */}
         <div className="flex-1 relative">
           <input
             type="text"
             placeholder="🎙️ What's brewing in your mind?"
-            className="w-full bg-gray-100 p-3 sm:p-4 rounded-full text-gray-600 outline-none hover:bg-gray-200 transition"
+            className="w-full bg-light-background border p-3 sm:p-4 rounded-full text-gray-600 outline-none hover:bg-gray-200 transition"
           />
         </div>
 
         {/* Post Button - hidden on very small screens, shown as icon */}
         <button
           type="button"
-          className="hidden sm:block bg-light-purple text-white px-4 py-2 rounded-full hover:bg-purple-700 transition whitespace-nowrap"
+          className="hidden sm:block bg-light-purple text-white px-4 py-2 rounded-full hover:bg-light-background hover:border-light-purple hover:border-2 hover:text-light-charcoal transition whitespace-nowrap"
         >
           Post
         </button>
