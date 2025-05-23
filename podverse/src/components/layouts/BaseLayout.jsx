@@ -6,7 +6,7 @@ const BaseLayout = ({ children }) => {
   const [open, setOpen] = useState(true);
 
   return (
-    <div className="flex h-screen  overflow-hidden bg-[#FAFAFBFF]flex-col md:flex-row">
+    <div className="flex h-screen  overflow-hidden bg-[#FAFAFBFF] flex-col md:flex-row">
       {/* Left Sidebar */}
       <LeftSidebar open={open} setOpen={setOpen} />
       <div className="flex-1 flex flex-col overflow-auto">
