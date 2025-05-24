@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import img1 from "../../assets/images/Chat-bot-amico.png";
-import img2 from "../../assets/images/Chat-bot-bro.png";
-import img3 from "../../assets/images/Podcast-audience-bro.png";
-import img4 from "../../assets/images/Podcast-audience-pana.png";
+import img1 from "../../assets/images/carousel-pic.png";
+import img2 from "../../assets/images/carousel-pic-1.png";
+import img3 from "../../assets/images/carousel-pic-2.png";
+import img4 from "../../assets/images/carousel-pic-3.png";
 
 const images = [img1, img2, img3, img4];
 
