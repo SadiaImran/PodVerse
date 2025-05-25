@@ -5,19 +5,89 @@ import { CgDetailsMore, CgSoftwareDownload } from "react-icons/cg";
 import { TbRewindBackward5, TbRewindForward5 } from "react-icons/tb";
 
 // SampleVoices component
-const SampleVoices = ({ voices, onViewVoice, activeVoice }) => {
-  const [selectedVoice, setSelectedVoice] = useState("rachel-legacy");
+const SampleVoices = ({onVoiceSelect}) => {
+  const [selectedVoice, setSelectedVoice] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [hoveredVoice, setHoveredVoice] = useState(null);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [visibleCategoryDropdowns, setVisibleCategoryDropdowns] = useState({});
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [voices, setVoices] = useState([]);
   
   const audioRef = useRef(null);
   const progressInterval = useRef(null);
 
-  // Initialize audio element with source when selected voice changes
+
+  // Fetch voices from database
+  useEffect(() => {
+    const fetchVoices = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch('http://localhost:8000/api/default-voices', {
+          method: 'GET',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        
+        if (data.success) {
+          // Transform database data to match UI requirements
+          const transformedVoices = data.data.map((voice, index) => ({
+            id: voice.id,
+            name: voice.name,
+            category: voice.category,
+            audioSrc: voice.audioSrc,
+            description: voice.description,
+            // Add default UI properties
+            color: getVoiceColor(index),
+            textColor: getVoiceTextColor(index),
+            duration: 30 // Default duration, will be updated when audio loads
+          }));
+          
+          setVoices(transformedVoices);
+          
+          // Set first voice as selected if none selected
+          if (transformedVoices.length > 0 && !selectedVoice) {
+            setSelectedVoice(transformedVoices[0].id);
+          }
+        } else {
+          throw new Error(data.message || 'Failed to fetch voices');
+        }
+      } catch (err) {
+        console.error('Error fetching voices:', err);
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchVoices();
+  }, []);
+
+  // Helper function to get voice colors (cycling through predefined colors)
+  const getVoiceColor = (index) => {
+    const colors = [
+      'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-pink-500',
+      'bg-yellow-500', 'bg-red-500', 'bg-indigo-500', 'bg-orange-500'
+    ];
+    return colors[index % colors.length];
+  };
+
+  const getVoiceTextColor = (index) => {
+    return 'text-white'; // All colors work well with white text
+  };
+
+
   useEffect(() => {
     if (audioRef.current) {
       const selectedVoiceData = voices.find(v => v.id === selectedVoice);
@@ -123,11 +193,20 @@ const SampleVoices = ({ voices, onViewVoice, activeVoice }) => {
   // Handle use voice
   const handleUseVoice = (voiceId) => {
     setSelectedVoice(voiceId);
-    // Call parent function to update active voice
-    if (onViewVoice) {
-      onViewVoice(voiceId);
-    }
   };
+
+  //handle view voice details
+  const handleViewVoice = (voiceId) => {
+  setSelectedVoice(voiceId);
+  const voice = voices.find(v => v.id === voiceId);
+  if (onVoiceSelect && voice) {
+    onVoiceSelect({
+      ...voice,
+      color: getVoiceColor(voices.indexOf(voice)), // Get background color
+      textColor: getVoiceTextColor(voices.indexOf(voice)) // Get text color
+    });
+  }
+};
 
   // Toggle category dropdown visibility
   const toggleCategoryDropdown = (voiceId) => {
@@ -149,14 +228,14 @@ const SampleVoices = ({ voices, onViewVoice, activeVoice }) => {
       />
       
       <div className="space-y-2">
-        {voices.map((voice) => (
+        {voices.map((voice , idx) => (
           <div 
             key={voice.id} 
-            className={`flex items-center justify-between p-2 border-b border-gray-200 hover:bg-gray-50 ${activeVoice === voice.id ? 'bg-green-50' : ''}`}
+            className={`flex items-center justify-between p-2 border-b border-gray-200 hover:bg-gray-50 ${selectedVoice === voice.id ? 'bg-green-50' : ''}`}
           >
             <div className="flex items-center gap-3">
               {/* Active voice indicator (green tick) */}
-              {activeVoice === voice.id && (
+              {selectedVoice === voice.id && (
                 <div className="flex-shrink-0">
                   <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center text-white">
                     <FaCheckCircle size={12} />
@@ -170,7 +249,7 @@ const SampleVoices = ({ voices, onViewVoice, activeVoice }) => {
                 onMouseEnter={() => setHoveredVoice(voice.id)}
                 onMouseLeave={() => setHoveredVoice(null)}
               >
-                <div className={`w-12 h-12 rounded-full ${voice.color} ${voice.textColor} flex items-center justify-center cursor-pointer`}>
+                <div className={`w-12 h-12 rounded-full ${getVoiceColor(idx)} ${getVoiceTextColor(idx)} flex items-center justify-center cursor-pointer`}>
                   {(hoveredVoice === voice.id || (isPlaying && selectedVoice === voice.id)) ? (
                     <button 
                       onClick={() => togglePlay(voice.id)}
@@ -197,10 +276,10 @@ const SampleVoices = ({ voices, onViewVoice, activeVoice }) => {
               </div>
             </div>
             
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-4">
               {/* Category tags */}
               <div className="relative">
-                <span className="px-3 py-1 bg-gray-100 text-gray-800 text-xs rounded-full">
+                <span className="px-3 py-1 bg-gray-100 text-gray-800 text-xs rounded-full mr-4">
                   {voice.category[0]}
                 </span>
                 
@@ -240,7 +319,7 @@ const SampleVoices = ({ voices, onViewVoice, activeVoice }) => {
                   <RiLoopLeftLine/> <span>Use</span>
                 </button>
                 <button 
-                  onClick={() => onViewVoice(voice.id)}
+                  onClick={() => handleViewVoice(voice.id)}
                   className="px-2 inline-flex items-center gap-2 py-1 border border-gray-300 rounded-md text-sm hover:bg-gray-50 transition-colors"
                 >
                   <CgDetailsMore className="text-xl" /> <span>View</span>
