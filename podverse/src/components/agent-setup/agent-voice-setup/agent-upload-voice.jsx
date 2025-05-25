@@ -447,7 +447,7 @@ const VoiceCloneControls = ({ uploadedFiles, onClone, canClone, onSaveVoice }) =
       formDataToSend.append("text", cloneText);
 
       try {
-        const endpoint = "http://localhost:5000/api/voice-clone/";
+        const endpoint = "http://localhost:8000/api/voice-clone/";
         const response = await fetch(endpoint, {
           method: "POST",
           body: formDataToSend,
@@ -456,7 +456,7 @@ const VoiceCloneControls = ({ uploadedFiles, onClone, canClone, onSaveVoice }) =
         if (response.ok) {
           const result = await response.json();
           console.log("Clone successful:", result);
-          const audioURL = "http://localhost:5000" + result.output_audio;
+          const audioURL = "http://localhost:8000" + result.output_audio;
 
           setClonedAudios(prev => [...prev, { text: cloneText, url: audioURL }]);
 
