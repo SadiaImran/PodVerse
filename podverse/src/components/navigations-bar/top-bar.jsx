@@ -3,14 +3,17 @@ import { FiSearch } from "react-icons/fi";
 import { HiOutlineBell } from "react-icons/hi2";
 import ProfileMarry from "../../assets/images/icon-profile-marry.png"
 import Logo from "../../assets/images/logo.png";
-import { logout } from "../../api/auth"; 
+import { logout as logoutAPI } from "../../api/auth"; 
+import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from "react-router-dom";
 import { FiLogOut } from "react-icons/fi"
 
 export default function TopBar({ open }) {
   const navigate = useNavigate();
+  const { logout } = useAuth();
   const handleLogout = async () => {
     try {
+      await logoutAPI();
       await logout();
       navigate('/signin-email'); // or wherever your login route is
     } catch (err) {
