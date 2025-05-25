@@ -9,6 +9,7 @@ const {
   resetPassword,
   authenticate,
   logout,
+  getUserProfile,
 } = require("../controllers/authController");
 
 // Existing routes
@@ -22,5 +23,8 @@ router.post("/reset-password/:token", resetPassword);
 // New routes
 router.get("/authenticate", authenticate); // Optional: for checking login status
 router.post("/logout", logout); // ✅ Add this route
+const authMiddleware = require("../middlewares/authMiddleware");
+
+router.get("/profile", authMiddleware, getUserProfile);
 
 module.exports = router;
