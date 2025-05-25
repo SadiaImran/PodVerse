@@ -2,6 +2,7 @@ import { FiMoon } from "react-icons/fi";
 import { IoMdSunny } from "react-icons/io"; // Import a sun icon for light mode
 import { useState } from "react";
 
+
 function TopBar() {
   const [isDarkMode, setIsDarkMode] = useState(false); // State to track theme
 
@@ -36,3 +37,4 @@ function TopBar() {
 }
 
 export default TopBar;
+

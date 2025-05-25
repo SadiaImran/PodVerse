@@ -7,12 +7,12 @@ import SamplePodcasts from "../components/create-podcast/sample-podcasts"; // Im
 
 const CreatePodcastPage = () => {
   const [activeTab, setActiveTab] = useState("library");
-  const hasPodcasts = true; // Change this flag to true to test recent podcasts
+  const hasPodcasts = false; // Change this flag to true to test recent podcasts
 
   const navigate = useNavigate();
 
   return (
-    <BaseLayout>
+    <BaseLayout homeScreen={false}>
       <main className="flex-1 overflow-y-auto p-6 md:p-10 bg-light space-y-8">
 
         {/* Top Header */}
