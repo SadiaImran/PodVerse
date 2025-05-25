@@ -1,16 +1,14 @@
-import dotenv from "dotenv";
+const dotenv = require("dotenv");
 dotenv.config();
 
-import express from "express";
-import bodyParser from "body-parser";
-import cors from "cors";
-import cookieParser from "cookie-parser";
+const express = require("express");
+const bodyParser = require("body-parser");
+const cors = require("cors");
+const cookieParser = require("cookie-parser");
 
-import { connectDB } from "../auth-backend/config/db.js";
-
-import authRoutes from "./routes/auth.js";
-
-import { errorHandler } from "./middlewares/error.js";
+const connectDB = require("./config/db");
+const authRoutes = require("./routes/auth"); // fixed: CommonJS syntax
+const { errorHandler } = require("./middlewares/error"); // fixed: CommonJS syntax
 
 const app = express();
 
