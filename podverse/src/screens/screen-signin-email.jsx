@@ -11,8 +11,9 @@ import AuthFields from "../components/shared/AuthFields.jsx";
 import { FaRegEnvelope, FaGoogle } from "react-icons/fa";
 import { MdOutlineLock } from "react-icons/md";
 import ImageCarousel from "../components/comp-signin/ImageCarousel.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
 
-import { login } from "../api/auth";
+import { login as loginAPI } from "../api/auth";
 
 function SignInScreenEmail() {
   const [email, setEmail] = useState("");
@@ -23,12 +24,13 @@ function SignInScreenEmail() {
   const [rememberMe, setRememberMe] = useState(false);
 
   const navigate = useNavigate();
+  const { login } = useAuth(); 
 
   const handleContinue = async () => {
     try {
       setIsLoading(true);
-      await login(email, password, rememberMe);
-
+      await loginAPI(email, password, rememberMe);
+      login();
       navigate("/home");
     } catch (err) {
       const msg = err.response?.data?.msg;

@@ -84,10 +84,11 @@ exports.resetPassword = async (req, res) => {
   
       res.cookie("token", token, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "Strict",
-        maxAge: rememberMe ? 7 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000, // 7d or 1d
+        secure: process.env.NODE_ENV === "production", // true only on HTTPS
+        sameSite: "Lax", // "Lax" is safer and works for most redirect flows
+        maxAge: rememberMe ? 7 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000
       });
+      
   
       res.status(200).json({ msg: "Login successful", user: { email: user.email, name: user.name } });
   
@@ -98,19 +99,22 @@ exports.resetPassword = async (req, res) => {
   };
   
 
-  exports.authenticate = (req, res, next) => {
+  exports.authenticate = (req, res) => {
     const token = req.cookies.token;
+    console.log("Cookies:", req.cookies);
+    console.log("Token:", token);
 
+  
     if (!token) return res.status(401).json({ msg: "Unauthorized" });
-
+  
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        req.userId = decoded.userId;
-        next();
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      res.status(200).json({ msg: "Authenticated", userId: decoded.userId });
     } catch (err) {
-        return res.status(401).json({ msg: "Invalid token" });
+      return res.status(401).json({ msg: "Invalid token" });
     }
-};
+  };
+  
 
   
   exports.logout = (req, res) => {
