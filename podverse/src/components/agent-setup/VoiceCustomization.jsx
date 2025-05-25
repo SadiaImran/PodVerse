@@ -5,7 +5,7 @@ import { PiSpeakerHighBold } from "react-icons/pi";
 import { HiOutlineUpload } from "react-icons/hi";
 
 import SampleVoices from "./agent-voice-setup/agent-sample-voice";
-import UploadVoices from "./agent-voice-setup/agent-upload-voice";
+import VoiceUploadSystem from "./agent-voice-setup/agent-upload-voice";
 
 // Main component
 const VoiceCustomization = ({ goNext, goBack }) => {
@@ -70,11 +70,14 @@ const VoiceCustomization = ({ goNext, goBack }) => {
       
             {/* Custom Upload */}
             <div
-              onClick={() => setFormData({
-                ...formData,
-                customVoiceUpload: true,
-                sampleVoice: false
-              })}
+              onClick={() => {
+                setFormData({
+                  ...formData,
+                  customVoiceUpload: true,
+                  sampleVoice: false,
+                });
+                console.log("FormData after clicking Upload Your Voice:", formData);
+              }}
               className={`flex-1 cursor-pointer p-4 border rounded-lg transition-all ${
                 formData.customVoiceUpload
                   ? "border-purple-500 bg-purple-50"
@@ -102,12 +105,12 @@ const VoiceCustomization = ({ goNext, goBack }) => {
       
           {formData.customVoiceUpload && (
   
-            <UploadVoices 
+            <VoiceUploadSystem 
               formData={formData}
               setFormData={setFormData}
               hamdleVoiceUpload={handleVoiceUpload}
             >
-            </UploadVoices>
+            </VoiceUploadSystem>
           )}
         </div>
 

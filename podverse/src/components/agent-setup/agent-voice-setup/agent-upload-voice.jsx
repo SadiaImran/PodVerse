@@ -3,7 +3,7 @@ import { Upload, X, Play, Pause, Mic, Square, Download, Save, FileAudio, Clock, 
 import { IoMdArrowRoundBack } from "react-icons/io";
 import { PiSpeakerHighBold } from "react-icons/pi";
 import { HiOutlineUpload } from "react-icons/hi";
-
+import { uploadToCloudinary } from "../../../utils/uploadToCloudinary";
 
 // Recording Component
 const VoiceRecorder = ({ onRecordingComplete }) => {
@@ -505,70 +505,70 @@ const VoiceCloneControls = ({ uploadedFiles, onClone, canClone, onSaveVoice }) =
     setCloneText(sampleTexts[randomIndex]);
   };
 
-  const uploadToCloudinary = async () => {
-  const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
-  const resourceType = 'auto';
-  const api = `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`;
+//   const uploadToCloudinary = async () => {
+//   const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+//   const resourceType = 'auto';
+//   const api = `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`;
 
-  const uploadedUrls = [];
+//   const uploadedUrls = [];
 
-  for (const fileObj of uploadedFiles) {
-    const data = new FormData();
-    data.append("file", fileObj.file);
-    data.append("upload_preset", "audios_preset");
+//   for (const fileObj of uploadedFiles) {
+//     const data = new FormData();
+//     data.append("file", fileObj.file);
+//     data.append("upload_preset", "audios_preset");
 
-    try {
-      const res = await axios.post(api, data);
-      const { secure_url } = res.data;
-      console.log("Uploaded:", secure_url);
-      uploadedUrls.push(secure_url);
-    } catch (error) {
-      console.error("Cloudinary upload error:", error);
-    }
-  }
+//     try {
+//       const res = await axios.post(api, data);
+//       const { secure_url } = res.data;
+//       console.log("Uploaded:", secure_url);
+//       uploadedUrls.push(secure_url);
+//     } catch (error) {
+//       console.error("Cloudinary upload error:", error);
+//     }
+//   }
 
-  return uploadedUrls;
-};
-  const handleCheckFiles = async () => {
-  if (uploadedFiles.length === 0) {
-    alert("Please upload at least one voice sample!");
-    setCanClone(false);
-  } 
-  // else {
-  //   try {
-  //     const audioURLs = await uploadToCloudinary();
-  //     console.log("Uploaded to Cloudinary:", audioURLs);
+//   return uploadedUrls;
+// };
+//   const handleCheckFiles = async () => {
+//   if (uploadedFiles.length === 0) {
+//     alert("Please upload at least one voice sample!");
+//     setCanClone(false);
+//   } 
+//   // else {
+//   //   try {
+//   //     const audioURLs = await uploadToCloudinary();
+//   //     console.log("Uploaded to Cloudinary:", audioURLs);
 
-  //     const voicesPayload = audioURLs.map((url, index) => ({
-  //       name: `Matilda`,  
-  //       category: ["English", "American", "Female", "Informative", "Educational"],  
-  //       audioSrc: url,
-  //       description: "A professional woman with a pleasing alto pitch. Suitable for many use cases."
-  //     }));
+//   //     const voicesPayload = audioURLs.map((url, index) => ({
+//   //       name: `Matilda`,  
+//   //       category: ["English", "American", "Female", "Informative", "Educational"],  
+//   //       audioSrc: url,
+//   //       description: "A professional woman with a pleasing alto pitch. Suitable for many use cases."
+//   //     }));
 
-  //     console.log("Sending to backend:", voicesPayload);
+//   //     console.log("Sending to backend:", voicesPayload);
 
-  //     const backendUrl = `${import.meta.env.VITE_BACKEND_BASEURL}/api/default-voices`;
-  //     const response = await axios.post(backendUrl, voicesPayload);
-  //     console.log("Backend response:", response.data);
+//   //     const backendUrl = `${import.meta.env.VITE_BACKEND_BASEURL}/api/default-voices`;
+//   //     const response = await axios.post(backendUrl, voicesPayload);
+//   //     console.log("Backend response:", response.data);
       
-  //     setCanClone(true);
-  //     alert("Files uploaded successfully! You can now clone.");
-  //   } catch (error) {
-  //     console.error("Error during upload:", error);
-  //     if (error.response) {
-  //       console.error("Backend error response:", error.response.data);
-  //       console.error("Status:", error.response.status);
-  //       console.error("Headers:", error.response.headers);
-  //     } else if (error.request) {
-  //       console.error("No response received from server. Request:", error.request);
-  //     } else {
-  //       console.error("Error message:", error.message);
-  //     }
-  //     alert("Error uploading files. Please check console for details.");
-  //   }
-  // }
-};
+//   //     setCanClone(true);
+//   //     alert("Files uploaded successfully! You can now clone.");
+//   //   } catch (error) {
+//   //     console.error("Error during upload:", error);
+//   //     if (error.response) {
+//   //       console.error("Backend error response:", error.response.data);
+//   //       console.error("Status:", error.response.status);
+//   //       console.error("Headers:", error.response.headers);
+//   //     } else if (error.request) {
+//   //       console.error("No response received from server. Request:", error.request);
+//   //     } else {
+//   //       console.error("Error message:", error.message);
+//   //     }
+//   //     alert("Error uploading files. Please check console for details.");
+//   //   }
+//   // }
+// };
 
   return (
     <div className="border border-gray-200 rounded-lg p-6 bg-gradient-to-br from-purple-50 to-pink-50">
@@ -600,12 +600,19 @@ const VoiceCloneControls = ({ uploadedFiles, onClone, canClone, onSaveVoice }) =
       {/* Action Buttons */}
       <div className="flex gap-3 mb-6">
         <button
-          onClick={handleClone}
-          disabled={!canClone || isCloning || uploadedFiles.length === 0}
-          className={`flex items-center gap-2 px-6 py-3 rounded-lg transition-colors ${
-            canClone && !isCloning && uploadedFiles.length > 0
-              ? "bg-purple-600 text-white hover:bg-purple-700"
-              : "bg-gray-300 text-gray-500 cursor-not-allowed"
+          // onClick={handleClone}
+          onClick={async () => {
+            try {
+    const uploadedUrls = await uploadToCloudinary(uploadedFiles, "audios_preset"); // or videos_preset, etc.
+    console.log("Uploaded:", uploadedUrls);
+  } catch (error) {
+    alert("Upload failed. See console.");
+  }
+
+          }}
+          
+          className={`flex items-center gap-2 px-6 py-3 rounded-lg transition-colors 
+            bg-purple-600 text-white hover:bg-purple-700"
           }`}
         >
               <FileAudio size={16} />
@@ -695,7 +702,7 @@ const FilesList = ({ files, onDelete }) => {
 
 // Main Component
 const VoiceUploadSystem = ({ formData, setFormData, handleVoiceUpload }) => {
-  const [uploadedFiles, setUploadedFiles] = useState([]);  // Initialize as empty array
+  const [uploadedFiles, setUploadedFiles] = useState([]); // Initialize as empty array
   const [canClone, setCanClone] = useState(false);
   const [activeTab, setActiveTab] = useState('record');
 
@@ -721,7 +728,6 @@ const VoiceUploadSystem = ({ formData, setFormData, handleVoiceUpload }) => {
     }
 
     try {
-      // Here you would implement the actual save functionality
       console.log("Saving voice model with files:", uploadedFiles);
       alert("Voice model saved successfully!");
     } catch (error) {
@@ -738,6 +744,7 @@ const VoiceUploadSystem = ({ formData, setFormData, handleVoiceUpload }) => {
       }
       return prev.filter(f => f.id !== fileId);
     });
+  };
 
   return (
     <div className="w-full max-w-6xl space-y-6">
@@ -747,49 +754,47 @@ const VoiceUploadSystem = ({ formData, setFormData, handleVoiceUpload }) => {
         <p className="text-light-grey font-bodyRoboto">Record your voice or upload audio files to create a custom voice model</p>
       </div>
 
-        <div className="flex flex-col md:flex-row gap-4 justify-center ">
-          
-          {/* Use Sample Voice */}
-          <div
+      <div className="flex flex-col md:flex-row gap-4 justify-center">
+        {/* Use Sample Voice */}
+        <div
           onClick={() => setActiveTab('record')}
-          className={`px-6 py-2 rounded-md transition-colors  ${
-      activeTab === 'record'
-        ? 'border-2 border-blue-300 shadow-sm font-medium'
-        : 'text-gray-600 hover:text-gray-800'
-    }`}
-          >
-            <div className="flex items-start gap-3">
-              <div className=" bg-blue-100 text-blue-600 p-2 rounded-full">
-                <Mic className="h-6 w-6" />
-              </div>
-              <div>
-                <h4 className="font-medium text-lg">Record Voice</h4>
-                <p className="text-gray-600 text-sm">Record just here.</p>
-              </div>
+          className={`px-6 py-2 rounded-md transition-colors ${
+            activeTab === 'record'
+              ? 'border-2 border-blue-300 shadow-sm font-medium'
+              : 'text-gray-600 hover:text-gray-800'
+          }`}
+        >
+          <div className="flex items-start gap-3">
+            <div className="bg-blue-100 text-blue-600 p-2 rounded-full">
+              <Mic className="h-6 w-6" />
             </div>
-          </div>
-    
-          {/* Custom Upload */}
-          <div
-            onClick={() => setActiveTab('upload')}
-    className={`px-6 py-2 rounded-md transition-colors ${
-      activeTab === 'upload'
-        ? 'border-2 border-green-200 shadow-sm font-medium'
-        : 'text-gray-600 hover:text-gray-800'
-    }`}
-          >
-            <div className="flex items-start gap-3">
-              <div className="flex-shrink-0 bg-green-100 text-green-600 p-2 rounded-full">
-                <Upload className="h-6 w-6" />
-              </div>
-              <div>
-                <h4 className="font-medium text-lg">Upload Your Voice</h4>
-                <p className="text-sm text-gray-500">Choose your own voice.</p>
-              </div>
+            <div>
+              <h4 className="font-medium text-lg">Record Voice</h4>
+              <p className="text-gray-600 text-sm">Record just here.</p>
             </div>
           </div>
         </div>
-  
+
+        {/* Custom Upload */}
+        <div
+          onClick={() => setActiveTab('upload')}
+          className={`px-6 py-2 rounded-md transition-colors ${
+            activeTab === 'upload'
+              ? 'border-2 border-green-200 shadow-sm font-medium'
+              : 'text-gray-600 hover:text-gray-800'
+          }`}
+        >
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0 bg-green-100 text-green-600 p-2 rounded-full">
+              <Upload className="h-6 w-6" />
+            </div>
+            <div>
+              <h4 className="font-medium text-lg">Upload Your Voice</h4>
+              <p className="text-sm text-gray-500">Choose your own voice.</p>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Content based on active tab */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -824,5 +829,5 @@ const VoiceUploadSystem = ({ formData, setFormData, handleVoiceUpload }) => {
     </div>
   );
 };
-}
-export default VoiceUploadSystem ;
+
+export default VoiceUploadSystem;
