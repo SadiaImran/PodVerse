@@ -26,7 +26,7 @@ const SampleVoices = ({onVoiceSelect}) => {
     const fetchVoices = async () => {
       try {
         setLoading(true);
-        const response = await fetch('http://localhost:5000/api/default-voices', {
+        const response = await fetch('http://localhost:8000/api/default-voices', {
           method: 'GET',
           credentials: 'include',
           headers: {

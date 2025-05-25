@@ -9,7 +9,6 @@ import cookieParser from "cookie-parser";
 import { connectDB } from "../auth-backend/config/db.js";
 
 import authRoutes from "./routes/auth.js";
-import defaultVoicesRoutes from "./routes/defaultVoices-route.js";
 
 import { errorHandler } from "./middlewares/error.js";
 
@@ -27,7 +26,6 @@ app.use(cookieParser());
 
 // Routes
 app.use("/api/auth", authRoutes);
-app.use("/api/default-voices", defaultVoicesRoutes);
 
 // Error handler middleware
 app.use(errorHandler);
