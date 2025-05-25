@@ -1,18 +1,30 @@
-from fastapi import FastAPI, UploadFile , Form
+from fastapi import FastAPI, UploadFile, Form, Request
 from typing import List
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-import shutil, os
-from uuid import uuid4
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from app.coqui_pipeline import clone_voice  
+from uuid import uuid4
+import shutil, os
+from dotenv import load_dotenv
+# from app.coqui_pipeline import clone_voice  
+from router.default_voices_route import router as default_voices_router
+
+from config import db  
+
+load_dotenv()
 
 app = FastAPI()
+@app.on_event("startup")
+async def startup_event():
+    try:
+        await db.command("ping")
+        print("🟢 MongoDB connected successfully!")
+    except Exception as e:
+        print("🔴 MongoDB connection failed:", e)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:5173"],
     allow_credentials=True,  
     allow_methods=["*"],
     allow_headers=["*"],
@@ -32,7 +44,7 @@ async def voice_clone_upload(file_upload: List[UploadFile], text: str = Form(...
 
     for file in file_upload:
         data = await file.read()
-        save_to = UPLOAD_DIR + "/" + file.filename
+        save_to = os.path.join(UPLOAD_DIR, file.filename)
         file_paths.append(save_to)
 
         with open(save_to, "wb") as f:
@@ -48,3 +60,10 @@ async def voice_clone_upload(file_upload: List[UploadFile], text: str = Form(...
         "output_audio": f"/{output_path}" 
     })
 
+# Routers
+app.include_router(default_voices_router, prefix="/api/default-voices")
+
+# Global error handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(status_code=500, content={"detail": str(exc)})

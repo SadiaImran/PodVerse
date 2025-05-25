@@ -5,73 +5,11 @@ import { PiSpeakerHighBold } from "react-icons/pi";
 import { HiOutlineUpload } from "react-icons/hi";
 
 import SampleVoices from "./agent-voice-setup/agent-sample-voice";
-import UploadVoices from "./agent-voice-setup/agent-upload-voice";
+import VoiceUploadSystem from "./agent-voice-setup/agent-upload-voice";
 
 // Main component
 const VoiceCustomization = ({ goNext, goBack }) => {
-  // Sample voice data with audio samples
-  const voices = [
-    { 
-      id: "rachel-legacy", 
-      name: "Rachel (Legacy)", 
-      category: ["Narration", "American", "Calm", "Lady"],
-      color: "bg-rose-100",
-      textColor: "text-rose-600",
-      audioSrc: "https://example.com/rachel-sample.mp3",
-      duration: 3, // in seconds
-      description: "A smooth, professional female voice with a warm tone. Perfect for narration and storytelling."
-    },
-    { 
-      id: "drew-legacy", 
-      name: "Drew (Legacy)", 
-      category: ["News", "American", "Middle-aged", "Male"],
-      color: "bg-amber-100",
-      textColor: "text-amber-600",
-      audioSrc: "https://example.com/drew-sample.mp3",
-      duration: 4, // in seconds
-      description: "A clear, articulate male voice with authority. Ideal for news reading and formal presentations."
-    },
-    { 
-      id: "clyde-legacy", 
-      name: "Clyde (Legacy)", 
-      category: ["Characters", "American", "Middle-aged", "Male"],
-      color: "bg-red-100",
-      textColor: "text-red-600",
-      audioSrc: "https://example.com/clyde-sample.mp3",
-      duration: 5, // in seconds
-      description: "A versatile character voice with distinctive personality. Great for entertainment and gaming."
-    },
-    { 
-      id: "paul-legacy", 
-      name: "Paul (Legacy)", 
-      category: ["News", "American", "Middle-aged", "Male"],
-      color: "bg-pink-100",
-      textColor: "text-pink-600",
-      audioSrc: "https://example.com/paul-sample.mp3",
-      duration: 3, // in seconds
-      description: "A deep, resonant male voice with gravitas. Perfect for documentary narration and serious content."
-    },
-    { 
-      id: "aria", 
-      name: "Aria", 
-      category: ["Social media", "American", "Middle-aged", "Male"],
-      color: "bg-indigo-100",
-      textColor: "text-indigo-600",
-      audioSrc: "https://example.com/aria-sample.mp3",
-      duration: 4, // in seconds
-      description: "An upbeat, energetic voice with youthful appeal. Ideal for social media content and casual explainers."
-    },
-    { 
-      id: "domi-legacy", 
-      name: "Domi (Legacy)", 
-      category: ["Narration", "American", "Middle-aged", "Male"],
-      color: "bg-orange-100",
-      textColor: "text-orange-600",
-      audioSrc: "https://example.com/domi-sample.mp3",
-      duration: 3, // in seconds
-      description: "A smooth, calming voice with excellent pacing. Great for guided meditations and educational content."
-    },
-  ];
+  const [selectedVoiceData, setSelectedVoiceData] = useState(null);
 
   const [formData, setFormData] = useState({
     customVoiceUpload: false,
@@ -79,9 +17,6 @@ const VoiceCustomization = ({ goNext, goBack }) => {
     selectedVoice: "",
     customVoiceFile: null
   });
-
-  const [selectedVoiceForPreview, setSelectedVoiceForPreview] = useState("");
-  const currentVoice = voices.find(v => v.id === selectedVoiceForPreview);
   
   const handleVoiceUpload = (e) => {
     const file = e.target.files[0];
@@ -95,17 +30,14 @@ const VoiceCustomization = ({ goNext, goBack }) => {
   };
 
   // Handle view voice - update the preview panel
-  const handleViewVoice = (voiceId) => {
-    setSelectedVoiceForPreview(voiceId);
-    setFormData({
-      ...formData,
-      selectedVoice: voiceId
-    });
+  const handleViewVoice = (voice) => {
+    setSelectedVoiceData(voice);
+
   };
 
   return (
     <div className="flex flex-col md:flex-row gap-8">
-      <div className="space-y-5 flex flex-col justify-between flex-[2] bg-white p-6 rounded-xl shadow-md border border-gray-100">
+      <div className="space-y-5 flex flex-col justify-between flex-[2] bg-white p-6 rounded-3xl shadow-md border-2 border-gray-300">
         <h2 className="text-2xl font-semibold text-gray-800">Choose or Upload AI Voice</h2>
         
         {/* Voice Selection Mode Toggle */}
@@ -138,11 +70,14 @@ const VoiceCustomization = ({ goNext, goBack }) => {
       
             {/* Custom Upload */}
             <div
-              onClick={() => setFormData({
-                ...formData,
-                customVoiceUpload: true,
-                sampleVoice: false
-              })}
+              onClick={() => {
+                setFormData({
+                  ...formData,
+                  customVoiceUpload: true,
+                  sampleVoice: false,
+                });
+                console.log("FormData after clicking Upload Your Voice:", formData);
+              }}
               className={`flex-1 cursor-pointer p-4 border rounded-lg transition-all ${
                 formData.customVoiceUpload
                   ? "border-purple-500 bg-purple-50"
@@ -165,21 +100,17 @@ const VoiceCustomization = ({ goNext, goBack }) => {
         {/* Display appropriate content based on selection */}
         <div className="w-full">
           {formData.sampleVoice && (
-            <SampleVoices 
-              voices={voices} 
-              onViewVoice={handleViewVoice} 
-              activeVoice={formData.selectedVoice} 
-            />
+            <SampleVoices onVoiceSelect={setSelectedVoiceData}  />
           )}
       
           {formData.customVoiceUpload && (
   
-            <UploadVoices 
+            <VoiceUploadSystem 
               formData={formData}
               setFormData={setFormData}
               hamdleVoiceUpload={handleVoiceUpload}
             >
-            </UploadVoices>
+            </VoiceUploadSystem>
           )}
         </div>
 
@@ -206,46 +137,40 @@ const VoiceCustomization = ({ goNext, goBack }) => {
           <p className="text-base text-gray-500">See details about your selected voice</p>
         </div>
         
-        {currentVoice ? (
-          <div className="p-6">
-            {/* Voice Card */}
-            <div className="mb-4 flex items-center gap-4">
-              <div className={`w-16 h-16 rounded-full ${currentVoice.color} ${currentVoice.textColor} flex items-center justify-center text-xl font-medium`}>
-                {currentVoice.name.charAt(0)}
-              </div>
-              <div>
-                <h3 className="text-xl font-semibold">{currentVoice.name}</h3>
-                <div className="flex flex-wrap gap-2 mt-1">
-                  {currentVoice.category.map((label, idx) => (
-                    <span key={idx} className="text-xs bg-gray-100 rounded-full px-3 py-1">{label}</span>
-                  ))}
+        {selectedVoiceData ? (
+              <div className="p-6">
+                <div className="mb-4 flex items-center justify-center gap-4">
+                  <div className={`px-6 py-4 rounded-full ${selectedVoiceData.color} ${selectedVoiceData.textColor} flex items-center justify-center text-xl font-medium`}>
+                    {selectedVoiceData.name.charAt(0)}
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-semibold">{selectedVoiceData.name}</h3>
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {selectedVoiceData.category.map((label, idx) => (
+                        <span key={idx} className="text-xs bg-gray-100 rounded-full px-3 py-1">{label}</span>
+                      ))}
+                    </div>
+                  </div>
                 </div>
+                {selectedVoiceData.description && (
+                  <div className="mb-6">
+                    <h4 className="text-sm font-medium text-gray-700 mb-2">Description</h4>
+                    <p className="text-gray-600">{selectedVoiceData.description}</p>
+                  </div>
+                )}
+                <audio controls src={selectedVoiceData.audioSrc} className="w-full mt-2" />
               </div>
-            </div>
-            
-            {/* Voice description */}
-            {currentVoice.description && (
-              <div className="mb-6">
-                <h4 className="text-sm font-medium text-gray-700 mb-2">Description</h4>
-                <p className="text-gray-600">{currentVoice.description}</p>
+            ) : (
+              <div className="p-6 text-center text-gray-500">
+                <PiSpeakerHighBold className="w-12 h-12 mx-auto mb-2 text-gray-400" />
+                <p>Select a voice to see its details</p>
               </div>
             )}
-            
-            {/* Play sample button */}
-            <button className="bg-blue-600 text-white flex items-center justify-center gap-2 rounded-lg py-2 px-4 w-full hover:bg-blue-700 transition">
-              <BsPlayFill className="text-xl" /> Play Sample
-            </button>
           </div>
-        ) : (
-          <div className="p-6 text-center text-gray-500">
-            <PiSpeakerHighBold className="w-12 h-12 mx-auto mb-2 text-gray-400" />
-            <p>Select a voice to see its details</p>
-          </div>
-        )}
-      </div>
-          </div>)
+        </div>
+       )
       }
-      
+
     </div>
   );
 };
