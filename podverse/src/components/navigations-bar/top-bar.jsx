@@ -11,6 +11,7 @@ import { FiLogOut } from "react-icons/fi"
 export default function TopBar({ open }) {
   const navigate = useNavigate();
   const { logout } = useAuth();
+  const { userData } = useAuth();
   const handleLogout = async () => {
     try {
       await logoutAPI();
@@ -62,9 +63,10 @@ export default function TopBar({ open }) {
           {/* Profile Section */}
           <div className="flex items-center gap-2 cursor-pointer">
             
-            <img src = {ProfileMarry} className="w-8 h-8 text-light-charcoal flex-shrink-0" />
+          <img src={userData?.profileUrl || ProfileMarry} className="w-8 h-8 rounded-full" />
             <span className="text-sm text-gray-800 font-medium hidden sm:block">
-              Amanda Smith
+      
+              {userData?.fullName || "User"}
             </span>
             <FaChevronDown className="text-xs text-light-charcoal hidden sm:block" />
           </div>

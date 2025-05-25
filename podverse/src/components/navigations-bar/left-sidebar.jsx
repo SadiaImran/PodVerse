@@ -1,6 +1,7 @@
 import Logo from "../../assets/images/logo.png";
 import { useNavigate } from "react-router-dom";
 import ProfileMarry from "../../assets/images/icon-profile-marry.png"
+import { useAuth } from '../../context/AuthContext';
 
 import {
   HiOutlineHome,
@@ -22,6 +23,7 @@ const navItems = [
 
 const NavItem = ({ navItem, open }) => {
   const navigate = useNavigate(); // Ensure useNavigate is inside the Router context
+  
 
   return (
     <li
@@ -42,6 +44,9 @@ const NavItem = ({ navItem, open }) => {
 };
 
 export default function LeftSideBar({ open, setOpen }) {
+
+  const { userData } = useAuth();
+
   return (
     <>
       {/* Mobile Top Menu */}
@@ -111,12 +116,12 @@ export default function LeftSideBar({ open, setOpen }) {
 
         {/* Footer */}
         <div className="p-4 flex items-center gap-2 cursor-pointer">
-          <img src = {ProfileMarry} className={`max-w-12 max-h-12 text-light-charcoal flex-shrink-0 pr-2`} />
+        <img src={userData?.profileUrl || ProfileMarry} className="max-w-12 max-h-12 rounded-full" />
           {open && (
             <div className="flex items-center justify-between w-full">
               <div>
-                <p className="text-md text-light-charcoal font-medium font-subheadingDMSans">User</p>
-                <p className="text-sm text-light-grey font-medium font-subheadingDMSans">View Profile</p>
+                <p className="text-md text-light-charcoal font-medium">{userData?.fullName || "User"}</p>
+                <p className="text-sm text-light-grey font-medium">{userData?.email || "View Profile"}</p>
               </div>
               <IoSettingsOutline className="w-8 h-8 text-light-charcoal" />
             </div>
