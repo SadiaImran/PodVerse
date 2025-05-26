@@ -254,7 +254,7 @@ exports.updateProfile = async (req, res) => {
 
     // Update user with new name and profile URL
     const updatedUser = await User.findByIdAndUpdate(
-      userId,
+      req.userId,
       {
         fullName,
         profileUrl,
