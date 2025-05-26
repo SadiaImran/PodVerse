@@ -5,9 +5,12 @@ import { RiRobot3Fill , RiUserLine } from "react-icons/ri";
 import avatar1 from "../../assets/avatars/avatar1.jpg";
 import avatar2 from "../../assets/avatars/avatar2.jpg";
 import avatar3 from "../../assets/avatars/avatar3.jpg";
-import Photo from "../../assets/avatars/avatar1.jpg"; //
+import Photo from "../../assets/avatars/avatar1.jpg"; 
+import ProfileJeena from '../../assets/images/icon-profile-jeena.png';
+import ProfileOlive from '../../assets/images/icon-profile-olive.png';
+import ProfileSally from '../../assets/images/icon-profile-sally.png';
 
-const avatarOptions = [avatar1, avatar2, avatar3];
+const avatarOptions = [ProfileJeena, ProfileOlive, ProfileSally];
 
 const AgentCustomization = ({ formData, setFormData, goNext }) => {
   const [selectedAvatar, setSelectedAvatar] = useState(formData.avatar || "");
@@ -37,14 +40,14 @@ const AgentCustomization = ({ formData, setFormData, goNext }) => {
   
     // Get avatar placeholder based on selection or default
     const getAvatarSrc = () => {
-      if (!formData.avatar) return Photo;
+      if (!formData.avatar) return ProfileSally;
       return "/api/placeholder/48/48"; // In a real app, this would be the selected avatar
     };
 
   return (
     <div className="flex flex-col md:flex-row gap-8">
       <div className="space-y-8 font-headingPoppins  flex flex-col justify-between flex-[2] bg-white p-6 rounded-xl shadow-md border border-gray-100 ">
-        <h2 className="text-2xl font-semibold text-gray-800 ">Customize Your Companion</h2>
+        <h2 className="text-2xl font-semibold text-light-charcoal ">Customize Your Speaker</h2>
         {/* Agent Name Field */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1 ml-1 font-subheadingDMSans">Name</label>
@@ -57,7 +60,7 @@ const AgentCustomization = ({ formData, setFormData, goNext }) => {
           />
         </div>
         {/* Avatar Selection */}
-        <div className="inline-flex  border-2 rounded-full px-6 py-4 bg-gray-50 gap-6">
+        <div className="inline-flex max-w-md border-2 rounded-full px-6 py-4 bg-purple-100 gap-6">
           {/* Add Avatar Button */}
           <div className="cursor-pointer w-16 h-16 sm:w-20 sm:h-20 overflow-hidden transition border-2 border-dashed border-light-charcoal rounded-full flex items-center justify-center">
             <span className="text-5xl  text-light-purple">+</span>
