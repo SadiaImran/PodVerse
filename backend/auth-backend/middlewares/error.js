@@ -1,4 +1,4 @@
-export const errorHandler = (err ,req , res , next) =>{
+const errorHandler = (err ,req , res , next) =>{
     const statusCode  = res.statusCode === 200 ? 500 : res.statusCode ; 
 
     return res.status(statusCode).json(
@@ -8,3 +8,4 @@ export const errorHandler = (err ,req , res , next) =>{
         }
     );
 };
+module.exports = { errorHandler };

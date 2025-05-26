@@ -1,8 +1,8 @@
 import Logo from "../../assets/images/logo.png";
 import { useNavigate } from "react-router-dom";
 import ProfileMarry from "../../assets/images/icon-profile-marry.png"
+import { useAuth } from '../../context/AuthContext';
 import { Home, Mic, Users, BookOpen, Settings, TrendingUp, Calendar, Bell, Search, Plus ,  } from 'lucide-react';
-
 
 import {
   HiOutlineHome,
@@ -15,6 +15,9 @@ import {
 } from "react-icons/hi";
 import { IoAnalyticsOutline, IoSettingsOutline } from "react-icons/io5";
 
+export default function LeftSideBar({ open, setOpen }) {
+
+  const { userData } = useAuth();
 
 
 const LeftSidebar = () => {
@@ -66,7 +69,7 @@ const LeftSidebar = () => {
           </div>
         ))}
       </nav>
-
+      
       {/* Quick Access */}
       <div className="mb-6">
         <h3 className="text-sm font-semibold text-gray-800 mb-3">Quick Access</h3>

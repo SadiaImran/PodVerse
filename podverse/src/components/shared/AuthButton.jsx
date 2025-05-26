@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { signInWithPopup } from 'firebase/auth';
 import { auth, provider } from "../../firebase";
 import { googleLogin } from "../../api/auth";
+import { useAuth } from "../../context/AuthContext.jsx";
 
 const AuthButton = ({ 
   bgColor, 
@@ -14,6 +15,7 @@ const AuthButton = ({
   isGoogle = false 
 }) => {
   const navigate = useNavigate();
+  const { login } = useAuth(); 
 
   const handleGoogleLogin = async () => {
     try {
@@ -21,6 +23,7 @@ const AuthButton = ({
       const idToken = await result.user.getIdToken();  // Fixed typo: `result ho.user` → `result.user`
       const res = await googleLogin(idToken);
       localStorage.setItem("token", res.data.token);
+      login();
       navigate("/home");
     } catch (err) {
       console.error("Google login failed", err);
