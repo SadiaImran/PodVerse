@@ -32,6 +32,7 @@ const LeftSidebar = () => {
     { name: 'Creative Corner', color: 'bg-purple-500' },
     { name: 'Health & Wellness', color: 'bg-pink-500' },
   ];
+   const { userData } = useAuth();
   const navigate = useNavigate();
   const { userData } = useAuth();
   return (

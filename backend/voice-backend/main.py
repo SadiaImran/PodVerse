@@ -14,7 +14,7 @@ from config import knowledge_base_collection
 # Custom modules
 # from app.coqui_pipeline import clone_voice  
 from router.default_voices_route import router as default_voices_router
-from config import db
+from config import db  
 
 # LangChain + Google Gemini RAG
 from langchain_community.document_loaders import PyPDFLoader
@@ -172,6 +172,7 @@ async def ask_question(question: str = Form(...)):
 # ─────────────── DEFAULT VOICE ROUTE + ERROR ───────────────
 
 app.include_router(default_voices_router, prefix="/api/default-voices")
+app.include_router(update_profile_router, prefix="/api/update-profile")
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):

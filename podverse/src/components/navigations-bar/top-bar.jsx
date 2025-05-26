@@ -177,11 +177,11 @@ export default function TopBar({ open }) {
                 return;
               }
           
-              const formData = new FormData();
-              formData.append('fullName', fullName);
-              formData.append('profileUrl', uploadedUrl[0]);
-          
-              await updateProfile(formData);
+              await updateProfile({
+                fullName: fullName,
+                profileUrl: uploadedUrl[0]
+              });
+
               alert("Profile updated!");
               setShowModal(false);
             } catch (err) {
@@ -189,7 +189,6 @@ export default function TopBar({ open }) {
               alert("Failed to update profile.");
             }
           }}
-          
           
         >
           Save Changes

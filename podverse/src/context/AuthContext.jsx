@@ -17,11 +17,17 @@ export const AuthProvider = ({ children }) => {
       .finally(() => setLoading(false));
   }, []);
 
-  const login = () => setUser(true);
+  const login = async () => {
+    setUser(true);
+    const profile = await getUserProfile();
+    console.log("User profile fetched:", profile);
+    setUserData(profile);
+  }
 
   const logout = async () => {
     await logoutAPI();        // 🔁 call server to clear session/cookie
-    setUser(false);          
+    setUser(false);
+    setUserData(null);          
   };
 
   const fetchUser = async () => {
