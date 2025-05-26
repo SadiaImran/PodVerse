@@ -1,6 +1,6 @@
 import React from 'react';
 import BaseLayout from "../components/layouts/BaseLayout"
-import PanelsRecording from "../components/comp-recording/panel-recording"
+import NewPanelsRecording from "../components/comp-recording/new-panel-recording"
 function ScreenRecording () {
   return (
     <BaseLayout>
@@ -12,7 +12,7 @@ function ScreenRecording () {
         </div>
         
         <div className="border-2 rounded-lg shadow-sm overflow-hidden h-[calc(100vh-180px)]">
-          <PanelsRecording />
+          <NewPanelsRecording />
         </div>
       </div>
     </BaseLayout>
