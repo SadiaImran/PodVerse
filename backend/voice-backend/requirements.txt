@@ -1,4 +1,15 @@
 fastapi
 uvicorn
-TTS
+# TTS
 python-multipart  
+fastapi
+uvicorn
+langchain
+langchain-community
+google-generativeai
+chromadb
+pypdf
+python-multipart
+python-dotenv
+langchain_google_genai
+SpeechRecognition
