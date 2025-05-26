@@ -34,4 +34,10 @@ export const getUserProfile = async () => {
     throw error;
   }
 };
-
+export const updateProfile = (data) => 
+  API.put('/update-profile', data, {
+    withCredentials: true,
+    headers: {
+      'Content-Type': 'application/json'
+    }
+  });
