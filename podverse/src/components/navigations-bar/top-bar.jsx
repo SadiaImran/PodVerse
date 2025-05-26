@@ -7,8 +7,9 @@ import { logout as logoutAPI } from "../../api/auth";
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from "react-router-dom";
 import { FiLogOut } from "react-icons/fi"
+import { Home, Mic, Users, BookOpen, Settings, TrendingUp, Calendar, Bell, Search, Plus } from 'lucide-react';
 
-export default function TopBar({ open }) {
+export default function TopBar({ homeScreen }) {
   const navigate = useNavigate();
   const { logout } = useAuth();
   const { userData } = useAuth();
@@ -22,45 +23,35 @@ export default function TopBar({ open }) {
     }
   }
   return (
-    <nav className="bg-white containerr flex items-center justify-between px-4 py-4 shadow-md font-subheadingDMSans w-full ">
+    <header className="bg-white border-b border-gray-100 px-6 py-4 sticky top-0 z-10">
       
-      {/* Left Section */}
-      <div className="flex items-center gap-4 flex-shrink-0">
-        {/* Logo only visible when sidebar is closed */}
-        {!open && (
-          <div className="hidden md:flex items-center gap-2 mr-6">
+      <div className="flex items-center justify-between max-w-7xl mx-auto">
+        {/* Left Section */}
+        
+        {!homeScreen ? null : <div className="flex items-center gap-4">
             <img src={Logo} alt="Logo" className="w-10 md:w-12" />
             <span className="text-lg font-bold text-light-charcoal font-headingPoppins tracking-wider">
               POD<span className="text-light-purple">VERSE</span>
             </span>
-          </div>
-        )}
-      </div>
+        </div>}
 
-      {/* Middle and Right Section combined for small screens */}
-      <div className="flex items-center justify-between gap-4 flex-1 max-w-full">
-        
-        {/* Search Input */}
-        <div className="relative w-full max-w-[600px] md:mx-auto flex-1">
-          <input
-            type="text"
-            placeholder="Search..."
-            className="pl-8 pr-4 py-2 bg-light-background rounded-lg outline-none w-full text-base text-light-black"
-          />
-          <FiSearch className="absolute left-2 top-2.5 mt-0.5 text-light-grey" />
+        {/*Middle section*/}
+        <div className="flex-1 max-w-xl mx-8">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+            <input
+              type="text"
+              placeholder="Search..."
+              className="w-full pl-10 pr-4 py-2 bg-gray-100 rounded-lg border-0 focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all"
+            />
+          </div>
         </div>
 
-        {/* Right Icons */}
-        <div className="flex items-center gap-4 flex-shrink-0 ml-2">
-          {/* Notification Icon */}
-          <div className="relative">
-            <HiOutlineBell className="text-light-charcoal w-8 h-8 cursor-pointer" />
-            <span className="absolute top-0 right-0 text-xs text-white bg-red-500 rounded-full px-1">
-              3
-            </span>
-          </div>
-
-          {/* Profile Section */}
+         <div className="flex items-center gap-4">
+        <button className="p-2 text-gray-600 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-all">
+          <HiOutlineBell className="text-light-charcoal w-8 h-8 cursor-pointer" />
+        </button>
+         {/* Profile Section */}
           <div className="flex items-center gap-2 cursor-pointer">
             
           <img src={userData?.profileUrl || ProfileMarry} className="w-8 h-8 rounded-full" />
@@ -77,8 +68,10 @@ export default function TopBar({ open }) {
             <FiLogOut className="text-lg" />
             Logout
           </button>
-        </div>
+         </div>
       </div>
-    </nav>
+
+    </header>
   );
 }
+

@@ -18,45 +18,27 @@ function PodcastPostBox () {
  
  const navigate = useNavigate();  
   return (
-    <div className="bg-white p-4 rounded-xl shadow-sm border-[2.5px] border-gray-300 w-full mb-6">
-      {/* Top section with improved mobile layout */}
-      <div className="flex items-center gap-3 mb-4">
-        {/* Avatar - fixed size, no mx-auto to align properly */}
-        <HiOutlineUserCircle className="text-5xl text-light-charcoal shrink-0" />
-
-        {/* Input field - better truncation */}
-        <div className="flex-1 relative">
-          <input
-            type="text"
-            placeholder="🎙️ What's brewing in your mind?"
-            className="w-full bg-light-background border p-3 sm:p-4 rounded-full text-gray-600 outline-none hover:bg-gray-200 transition"
-          />
+    <div className="bg-white p-6 rounded-2xl shadow-md border border-gray-300 mb-6">
+      <div className="flex items-center gap-4 mb-4">
+      <div className="w-12 h-9 bg-gradient-to-br from-purple-400 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold">
+          A
         </div>
-
-        {/* Post Button - hidden on very small screens, shown as icon */}
-        <button
-          type="button"
-          className="hidden sm:block bg-light-purple text-white px-4 py-2 rounded-full hover:bg-light-background hover:border-light-purple hover:border-2 hover:text-light-charcoal transition whitespace-nowrap"
-        >
-          Post
-        </button>
-      </div>
-
-      {/* Mobile post button (shown only on smallest screens) */}
-      <div className="sm:hidden mb-4">
-        <button
-          type="button"
-          className="w-full bg-light-purple text-white py-2 rounded-full hover:bg-purple-700 transition"
-        >
-          Post
-        </button>
-      </div>
-
+          <input
+             type="text"
+             placeholder="What's brewing in your mind?"
+             className="w-full p-3 bg-gray-50 rounded-lg border-0 focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all text-gray-700"
+           />
+           <button className="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition-all font-medium">
+               Post
+           </button>
+          </div>
       {/* Action Buttons - better responsive layout */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 text-sm text-gray-700 border-t border-gray-300">
         <PostBoxButton Icon = {MdLibraryMusic} label = {"Choose Library"} library={true}/>
         <PostBoxButton Icon = {MdCreateNewFolder} label = {"Create Podcast"} library={false}/>
+        
       </div>
+      
     </div>
   );
 };
