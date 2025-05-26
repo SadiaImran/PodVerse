@@ -29,5 +29,5 @@ const upload = require("../middlewares/multer");
 
 
 router.get("/profile", authMiddleware, getUserProfile);
-router.put("/update-profile", upload.single("profilePic"), updateProfile); 
+router.put("/update-profile", authMiddleware, updateProfile); 
 module.exports = router;
