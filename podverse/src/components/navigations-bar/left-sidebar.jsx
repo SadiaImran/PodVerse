@@ -15,10 +15,6 @@ import {
 } from "react-icons/hi";
 import { IoAnalyticsOutline, IoSettingsOutline } from "react-icons/io5";
 
-export default function LeftSideBar({ open, setOpen }) {
-
-  const { userData } = useAuth();
-
 
 const LeftSidebar = () => {
   const menuItems = [
@@ -37,6 +33,7 @@ const LeftSidebar = () => {
     { name: 'Health & Wellness', color: 'bg-pink-500' },
   ];
   const navigate = useNavigate();
+    const { userData } = useAuth();
   return (
     <div className="pt-12 w-72 bg-white h-full border-r border-gray-200 p-6 sticky top-0 flex flex-col gap-10">
        <div className="flex items-center gap-4">
