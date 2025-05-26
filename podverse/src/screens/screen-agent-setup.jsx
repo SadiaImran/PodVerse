@@ -29,13 +29,11 @@ const AgentSetupFlow = () => {
   const goNext = () => setCurrentStep((prev) => Math.min(prev + 1, steps.length - 1));
   const goBack = () => setCurrentStep((prev) => Math.max(prev - 1, 0));
 
-  
-
   return (
     <BaseLayout>
       <main className="p-6 bg-gray-50 min-h-screen flex flex-col">
         {/* Header */}
-        <div className="text-2xl font-bold text-gray-800 mb-6">Personalize your AI Host or Guest</div>
+        <div className="text-3xl font-headingPoppins font-bold text-light-purple mb-6">Personalize your AI Host or Guest</div>
 
         {/* Timeline Stepper */}
         <TimelineStepper steps={steps} currentStep={currentStep} />
