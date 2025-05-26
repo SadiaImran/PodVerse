@@ -4,7 +4,7 @@ const stepIcons = [User, Mic, BookOpen, Play];
 
 const TimelineStepper = ({ steps, currentStep }) => {
   return (
-    <div className="w-full max-w-4xl ">
+    <div className="w-full max-w-4xl mx-auto ">
       <ul className="flex justify-between items-start">
         {steps.map((step, index) => {
           const Icon = stepIcons[index];
