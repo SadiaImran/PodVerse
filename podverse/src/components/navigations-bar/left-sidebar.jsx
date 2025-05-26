@@ -2,6 +2,7 @@ import Logo from "../../assets/images/logo.png";
 import { useNavigate } from "react-router-dom";
 import ProfileMarry from "../../assets/images/icon-profile-marry.png"
 import { useAuth } from '../../context/AuthContext';
+import { Home, Mic, Users, BookOpen, Settings, TrendingUp, Calendar, Bell, Search, Plus ,  } from 'lucide-react';
 
 import {
   HiOutlineHome,
@@ -14,120 +15,82 @@ import {
 } from "react-icons/hi";
 import { IoAnalyticsOutline, IoSettingsOutline } from "react-icons/io5";
 
-const navItems = [
-  { Icon: HiOutlineHome, label: "Home" , navigateTo: "/home"},
-  { Icon: HiOutlineMicrophone, label: "Create Podcasts" , navigateTo: "/create-podcast" },
-  { Icon: HiOutlineFolderOpen, label: "My Library" , navigateTo: "/library" },
-  { Icon: IoAnalyticsOutline, label: "Analytics" , navigateTo:"/analytics"},
-];
-
-const NavItem = ({ navItem, open }) => {
-  const navigate = useNavigate(); // Ensure useNavigate is inside the Router context
-  
-
-  return (
-    <li
-      className={`flex items-center ${open ? "gap-4" : "justify-center"} cursor-pointer group relative py-2 
-      hover:bg-indigo-50 rounded-lg duration-200`}
-      onClick={() => navigate(navItem.navigateTo)} // Navigate to the specified route
-    >
-      <navItem.Icon className="w-7 h-7 text-light-charcoal flex-shrink-0" />
-      {open ? (
-        <span className="text-lg text-light-charcoal font-medium font-subheadingDMSans">{navItem.label}</span>
-      ) : (
-        <span className="absolute left-16 bg-white text-black px-2 py-1 text-xs rounded shadow-md hidden group-hover:block z-50">
-          {navItem.label}
-        </span>
-      )}
-    </li>
-  );
-};
-
 export default function LeftSideBar({ open, setOpen }) {
 
   const { userData } = useAuth();
 
-  return (
-    <>
-      {/* Mobile Top Menu */}
-      <div className="md:hidden flex items-center justify-between gap-10 p-3">
-        <div className="flex items-center gap-4">
-          {/* Show logo and PODVERSE title only when sidebar is closed */}
-          {!open && (
-            <>
-              <img src={Logo} alt="Logo" className="transition-all duration-300 w-14" />
-              <span className="text-2xl font-bold text-light-charcoal font-headingPoppins tracking-wider">
-                POD<span className="text-light-purple">VERSE</span>
-              </span>
-            </>
-          )}
-        </div>
-        <button onClick={() => setOpen(!open)}>
-          {open ? (
-            <HiMenuAlt3 className="w-8 h-8 text-light-charcoal" />
-          ) : (
-            <HiMenuAlt2 className="w-8 h-8 text-light-charcoal" />
-          )}
-        </button>
-      </div>
 
-      {/* Sidebar */}
-      <aside
-        className={`fixed md:static top-0 left-0 h-screen z-40
-          ${open ? "w-full md:w-72 " : "w-full md:w-16 rounded-r-xl"}
-          ${open ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
-          transition-all duration-500 py-3
-          bg-light-background shadow-md
-          flex flex-col gap-4 md:gap-10 lg:gap-12 
-        `}
-      >
-        {/* Logo Section */}
-        <div className="px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {/* Show logo and title only when sidebar is open */}
-            {open && (
-              <>
-                <img
-                  src={Logo}
-                  alt="Logo"
-                  className="transition-all duration-300 w-12 md:w-8"
-                />
-                <span className="text-lg font-bold text-light-purple font-headingPoppins tracking-wider">
-                  POD<span className="text-light-purple">VERSE</span>
-                </span>
-              </>
+const LeftSidebar = () => {
+  const menuItems = [
+  { icon: Home, label: "Home" , navigateTo: "/home"},
+  { icon: Mic, label: "My Podcasts" , count: 12 , navigateTo: "/create-podcast" },
+  { icon: BookOpen, label: "My Library" , navigateTo: "/library" },
+  { icon: Users, label: 'Following', count: 28 , navigateTo: "/following"},
+  { icon: IoAnalyticsOutline, label: "Analytics" , navigateTo:"/analytics"},
+  { icon: TrendingUp, label: 'Trending' , navigateTo: "/trending"},
+  { icon: Settings, label: 'Settings', navigateTo: "/settings" },
+];
+  const quickAccess = [
+    { name: 'Tech Talks', color: 'bg-blue-500' },
+    { name: 'Business Daily', color: 'bg-green-500' },
+    { name: 'Creative Corner', color: 'bg-purple-500' },
+    { name: 'Health & Wellness', color: 'bg-pink-500' },
+  ];
+  const navigate = useNavigate();
+  return (
+    <div className="pt-12 w-72 bg-white h-full border-r border-gray-200 p-6 sticky top-0 flex flex-col gap-10">
+       <div className="flex items-center gap-4">
+                  <img src={Logo} alt="Logo" className="w-10 md:w-12" />
+                  <span className="text-lg font-bold text-light-charcoal font-headingPoppins tracking-wider">
+                    POD<span className="text-light-purple">VERSE</span>
+                  </span>
+        </div>
+      <div>
+ {/* Navigation Menu */}
+      <nav className="space-y-2 mb-8">
+        {menuItems.map((item, idx) => (
+          <div
+            key={idx}
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-all ${
+              item.active 
+                ? 'bg-purple-50 text-purple-600 border border-purple-200' 
+                : 'hover:bg-gray-50 text-gray-700'
+            }`}
+
+            onClick={() => navigate(item.navigateTo)}
+          >
+            <item.icon size={20} />
+            <span className="font-medium text-sm flex-1">{item.label}</span>
+            {item.count && (
+              <span className="bg-purple-100 text-purple-600 text-xs px-2 py-1 rounded-full font-medium">
+                {item.count}
+              </span>
             )}
           </div>
-          <button onClick={() => setOpen(!open)}>
-            {open ? (
-              <HiX className="w-6 h-6 text-light-charcoal" />
-            ) : (
-              <HiMenuAlt3 className="w-6 h-6 text-light-charcoal" />
-            )}
-          </button>
-        </div>
-
-        {/* Navigation Items */}
-        <ul className="flex-1 space-y-3 px-6">
-          {navItems.map((item, index) => (
-            <NavItem key={index} navItem = {item} open={open} />
-          ))}
-        </ul>
-
-        {/* Footer */}
-        <div className="p-4 flex items-center gap-2 cursor-pointer">
-        <img src={userData?.profileUrl || ProfileMarry} className="max-w-12 max-h-12 rounded-full" />
-          {open && (
-            <div className="flex items-center justify-between w-full">
-              <div>
-                <p className="text-md text-light-charcoal font-medium">{userData?.fullName || "User"}</p>
-                <p className="text-sm text-light-grey font-medium">{userData?.email || "View Profile"}</p>
-              </div>
-              <IoSettingsOutline className="w-8 h-8 text-light-charcoal" />
+        ))}
+      </nav>
+      
+      {/* Quick Access */}
+      <div className="mb-6">
+        <h3 className="text-sm font-semibold text-gray-800 mb-3">Quick Access</h3>
+        <div className="space-y-2">
+          {quickAccess.map((item, idx) => (
+            <div key={idx} className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 rounded-lg cursor-pointer">
+              <div className={`w-3 h-3 rounded-full ${item.color}`}></div>
+              <span className="text-sm text-gray-700">{item.name}</span>
             </div>
-          )}
+          ))}
         </div>
-      </aside>
-    </>
+      </div>
+
+      {/* Create Button */}
+      <button className="w-full bg-light-purple text-white py-3 px-4 rounded-lg hover:bg-white hover:text-light-purple hover:border hover:border-light-purple transition-all shadow-sm flex items-center justify-center gap-2 font-medium">
+        <Plus size={18} />
+        Create Podcast
+      </button>
+      </div>
+     
+    </div>
   );
-}
+};
+export default LeftSidebar;
