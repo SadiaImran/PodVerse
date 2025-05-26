@@ -245,4 +245,30 @@ exports.verifyOTP = async (req, res) => {
     }
 };
 
+exports.updateProfile = async (req, res) => {
+  try {
+    // assuming you have authentication middleware
+    console.log("Updating profile for userId:", req.userId);
 
+    const { fullName, profileUrl } = req.body;
+
+    // Update user with new name and profile URL
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      {
+        fullName,
+        profileUrl,
+      },
+      { new: true }
+    );
+
+    res.status(200).json({
+      message: "Profile updated successfully",
+      user: updatedUser,
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
