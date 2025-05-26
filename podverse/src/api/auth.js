@@ -34,4 +34,9 @@ export const getUserProfile = async () => {
     throw error;
   }
 };
-
+export const updateProfile = (formData) => 
+  API.post('/update-profile', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  });
