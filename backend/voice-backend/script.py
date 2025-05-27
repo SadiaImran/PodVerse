@@ -66,7 +66,7 @@ def convert_to_wav(input_path, output_path):
 # Initialize LLM
 llm = ChatOpenAI(
     openai_api_base="https://api.together.xyz/v1",
-    openai_api_key=os.environ["TOGETHER_API_KEY"],
+    openai_api_key="f98103d1acc08e8528e75028deee01807c69312f742eaddbd877d1b87123dffb",
     model_name="mistralai/Mistral-7B-Instruct-v0.1"
 )
 
@@ -158,9 +158,14 @@ async def query_audio(user_id: str = Form(...), audio: UploadFile = File(...)):
     if os.path.getsize(audio_path) == 0:
         return JSONResponse(content={"error": "Uploaded audio file is empty"}, status_code=400)
 
-    # Now convert it to WAV
     converted_path = "converted.wav"
-    convert_to_wav(audio_path, converted_path)
+
+    if not audio.content_type.endswith("wav"):
+        convert_to_wav(audio_path, converted_path)
+    else:
+        shutil.copyfile(audio_path, converted_path)
+
+
 
     print("Saved audio path:", audio_path)
     print("Converted path:", converted_path)
@@ -178,7 +183,10 @@ async def query_audio(user_id: str = Form(...), audio: UploadFile = File(...)):
     os.remove(audio_path)
     os.remove(converted_path)
 
-    return {"query": query_text}
+    response = await generate_response(user_id=user_id, query=query_text)
+    response["query"] = query_text
+    return response
+
 
 
 @app.post("/respond/")
@@ -207,9 +215,27 @@ async def generate_response(user_id: str = Form(...), query: str = Form(...)):
         return_source_documents=True
     )
 
+    def contains_query_keywords(documents: list[Document], query: str, min_hits: int = 1) -> bool:
+        query_words = set(re.findall(r'\b\w{4,}\b', query.lower()))
+        match_count = 0
+        for doc in documents:
+            doc_words = set(re.findall(r'\b\w{4,}\b', doc.page_content.lower()))
+            matches = query_words & doc_words
+            if len(matches) >= min_hits:
+                match_count += 1
+        return match_count > 0
+
     result = retrieval_qa.invoke({"query": query})
     answer = result["result"]
     sources = result["source_documents"]
+
+    if not sources or not contains_query_keywords(sources, query):
+        # Return a polite message if no relevant information found
+        return {
+            "answer_text": "I'm sorry, I couldn't find information related to your question in the provided document.",
+            "sources": [],
+            "audio_file_url": None
+        }
 
     # Extract source metadata (title, file ID, etc.)
     source_info = [
@@ -224,7 +250,7 @@ async def generate_response(user_id: str = Form(...), query: str = Form(...)):
     # Convert answer to audio
     tts = gTTS(answer)
     audio_filename = f"response_{user_id}.mp3"
-    tts.save(audio_filename )
+    tts.save(audio_filename)
 
     # Send both answer and audio file path
     return {
@@ -232,6 +258,7 @@ async def generate_response(user_id: str = Form(...), query: str = Form(...)):
         "sources": source_info,
         "audio_file_url": f"/audio/{audio_filename}"
     }
+
 
 
 @app.get("/audio/{filename}")
