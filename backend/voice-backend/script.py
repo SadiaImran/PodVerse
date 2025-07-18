@@ -1,6 +1,6 @@
 from fastapi import FastAPI, File, UploadFile, Form
 from fastapi.responses import JSONResponse
-from langchain_openai import ChatOpenAI
+from langchain_ollama import ChatOllama  # <-- Updated import for Ollama
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain.chains import RetrievalQA
@@ -18,8 +18,6 @@ from fastapi.responses import FileResponse
 import whisper
 import pyttsx3
 from fastapi.middleware.cors import CORSMiddleware
-
-
 
 # Load environment variables
 load_dotenv()
@@ -53,7 +51,6 @@ from langchain_core.documents import Document
 import re
 import subprocess
 
-
 def convert_to_wav(input_path, output_path):
     command = ["ffmpeg", "-y", "-i", input_path, "-ar", "16000", "-ac", "1", output_path]
     try:
@@ -62,12 +59,11 @@ def convert_to_wav(input_path, output_path):
         print("FFmpeg error:", e.stderr.decode())
         raise
 
-
-# Initialize LLM
-llm = ChatOpenAI(
-    openai_api_base="https://api.together.xyz/v1",
-    openai_api_key="f98103d1acc08e8528e75028deee01807c69312f742eaddbd877d1b87123dffb",
-    model_name="mistralai/Mistral-7B-Instruct-v0.1"
+# Initialize Ollama LLM (replacing Together API)
+llm = ChatOllama(
+    model="mistral",        # You can use "llama2", "codellama", etc.
+    temperature=0.7,
+    num_predict=512
 )
 
 # Define custom prompt
@@ -88,32 +84,26 @@ Answer:
 """
 )
 
-
 @app.post("/upload_pdf/")
 async def upload_pdf(user_id: str = Form(...), file: UploadFile = File(...)):
     try:
-        # Save uploaded file to temp
         temp_file_path = f"temp_{file.filename}"
         with open(temp_file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        # Load and split documents
         loader = PyPDFLoader(temp_file_path)
         documents = loader.load()
 
         splitter = CharacterTextSplitter(chunk_size=500, chunk_overlap=100)
         docs = splitter.split_documents(documents)
 
-        # Create FAISS vector store
         embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
         vector_store = FAISS.from_documents(docs, embeddings)
 
-        # Store the PDF in GridFS with error handling
         try:
             with open(temp_file_path, "rb") as f:
                 pdf_id = await fs.upload_from_stream(file.filename, f)
         except Exception as gridfs_error:
-            # Fallback: store file content directly in collection
             with open(temp_file_path, "rb") as f:
                 import base64
                 pdf_content = base64.b64encode(f.read()).decode('utf-8')
@@ -128,7 +118,6 @@ async def upload_pdf(user_id: str = Form(...), file: UploadFile = File(...)):
             file_result = await db["files"].insert_one(file_doc)
             pdf_id = str(file_result.inserted_id)
 
-        # Store chunks and metadata in MongoDB
         for chunk in docs:
             await knowledge_base_collection.insert_one({
                 "user_id": user_id,
@@ -145,12 +134,10 @@ async def upload_pdf(user_id: str = Form(...), file: UploadFile = File(...)):
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
-
 @app.post("/query_audio/")
 async def query_audio(user_id: str = Form(...), audio: UploadFile = File(...)):
     recognizer = sr.Recognizer()
 
-    # Save the uploaded file first
     audio_path = f"temp_{audio.filename}"
     with open(audio_path, "wb") as f:
         f.write(await audio.read())
@@ -165,11 +152,6 @@ async def query_audio(user_id: str = Form(...), audio: UploadFile = File(...)):
     else:
         shutil.copyfile(audio_path, converted_path)
 
-
-
-    print("Saved audio path:", audio_path)
-    print("Converted path:", converted_path)
-
     try:
         with sr.AudioFile(converted_path) as source:
             audio_data = recognizer.record(source)
@@ -179,7 +161,6 @@ async def query_audio(user_id: str = Form(...), audio: UploadFile = File(...)):
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
-    # Clean up files
     os.remove(audio_path)
     os.remove(converted_path)
 
@@ -187,26 +168,20 @@ async def query_audio(user_id: str = Form(...), audio: UploadFile = File(...)):
     response["query"] = query_text
     return response
 
-
-
 @app.post("/respond/")
 async def generate_response(user_id: str = Form(...), query: str = Form(...)):
-    # Get all docs for the user
     user_docs_cursor = knowledge_base_collection.find({"user_id": user_id})
     user_docs = await user_docs_cursor.to_list(length=None)
 
     if not user_docs:
         return JSONResponse(content={"error": "No knowledge base found for user"}, status_code=404)
 
-    # Convert docs to LangChain Document format
     docs = [Document(page_content=doc["chunk"], metadata=doc) for doc in user_docs]
 
-    # Create vector store and retriever on the fly
     embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
     vector_store = FAISS.from_documents(docs, embeddings)
     retriever = vector_store.as_retriever()
 
-    # Create RetrievalQA chain
     retrieval_qa = RetrievalQA.from_chain_type(
         llm=llm,
         retriever=retriever,
@@ -230,14 +205,12 @@ async def generate_response(user_id: str = Form(...), query: str = Form(...)):
     sources = result["source_documents"]
 
     if not sources or not contains_query_keywords(sources, query):
-        # Return a polite message if no relevant information found
         return {
             "answer_text": "I'm sorry, I couldn't find information related to your question in the provided document.",
             "sources": [],
             "audio_file_url": None
         }
 
-    # Extract source metadata (title, file ID, etc.)
     source_info = [
         {
             "title": doc.metadata.get("title"),
@@ -247,23 +220,19 @@ async def generate_response(user_id: str = Form(...), query: str = Form(...)):
         for doc in sources
     ]
 
-    # Convert answer to audio
     tts = gTTS(answer)
     audio_filename = f"response_{user_id}.mp3"
     tts.save(audio_filename)
 
-    # Send both answer and audio file path
     return {
         "answer_text": answer,
         "sources": source_info,
         "audio_file_url": f"/audio/{audio_filename}"
     }
 
-
-
 @app.get("/audio/{filename}")
 async def get_audio(filename: str):
-    file_path = filename  # path is stored as filename in previous API
+    file_path = filename
     if not os.path.exists(file_path):
         return JSONResponse(content={"error": "Audio file not found"}, status_code=404)
     return FileResponse(file_path, media_type="audio/mpeg", filename=filename)

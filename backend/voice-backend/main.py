@@ -81,99 +81,99 @@ async def voice_clone_upload(file_upload: List[UploadFile], text: str = Form(...
 
 # ─────────────── PDF RAG: INITIALIZE ONCE ───────────────────
 
-model = ChatGoogleGenerativeAI(
-    model="gemini-1.5-pro-latest",
-    google_api_key=GOOGLE_API_KEY,
-    temperature=0.2,
-    convert_system_message_to_human=False
-)
+# model = ChatGoogleGenerativeAI(
+#     model="gemini-1.5-pro-latest",
+#     google_api_key=GOOGLE_API_KEY,
+#     temperature=0.2,
+#     convert_system_message_to_human=False
+# )
 
-embedding_model = GoogleGenerativeAIEmbeddings(
-    model="models/text-embedding-004",
-    google_api_key=GOOGLE_API_KEY
-)
+# embedding_model = GoogleGenerativeAIEmbeddings(
+#     model="models/text-embedding-004",
+#     google_api_key=GOOGLE_API_KEY
+# )
 
-text_splitter = RecursiveCharacterTextSplitter(chunk_size=10000, chunk_overlap=1000)
-retriever = None
-qa_chain = None
-vector_store = None
+# text_splitter = RecursiveCharacterTextSplitter(chunk_size=10000, chunk_overlap=1000)
+# retriever = None
+# qa_chain = None
+# vector_store = None
 
-# ─────────────── PDF UPLOAD & PROCESS ──────────────────────
+# # ─────────────── PDF UPLOAD & PROCESS ──────────────────────
 
-@app.post("/upload_pdf/")
-async def upload_pdf(file: UploadFile = File(...)):
-    global retriever, qa_chain, vector_store
+# @app.post("/upload_pdf/")
+# async def upload_pdf(file: UploadFile = File(...)):
+#     global retriever, qa_chain, vector_store
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-        tmp_file.write(await file.read())
-        tmp_path = tmp_file.name
+#     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+#         tmp_file.write(await file.read())
+#         tmp_path = tmp_file.name
 
-    loader = PyPDFLoader(tmp_path)
-    pages = loader.load_and_split()
-    context = "\n\n".join(p.page_content for p in pages)
-    texts = text_splitter.split_text(context)
+#     loader = PyPDFLoader(tmp_path)
+#     pages = loader.load_and_split()
+#     context = "\n\n".join(p.page_content for p in pages)
+#     texts = text_splitter.split_text(context)
 
-    # Create vector store for embeddings
-    vector_store = Chroma.from_texts(texts, embedding_model)
-    retriever = vector_store.as_retriever(search_kwargs={"k": 5})
+#     # Create vector store for embeddings
+#     vector_store = Chroma.from_texts(texts, embedding_model)
+#     retriever = vector_store.as_retriever(search_kwargs={"k": 5})
 
-    # Build prompt
-    template = """Use the following pieces of context to answer the question at the end. 
-If you don't know the answer, just say you don't know. Be concise. Say "thanks for asking!" at the end.
-{context}
-Question: {question}
-Helpful Answer:"""
-    prompt = PromptTemplate.from_template(template)
+#     # Build prompt
+#     template = """Use the following pieces of context to answer the question at the end. 
+# If you don't know the answer, just say you don't know. Be concise. Say "thanks for asking!" at the end.
+# {context}
+# Question: {question}
+# Helpful Answer:"""
+#     prompt = PromptTemplate.from_template(template)
 
-    qa_chain = RetrievalQA.from_chain_type(
-        model,
-        retriever=retriever,
-        return_source_documents=True,
-        chain_type_kwargs={"prompt": prompt}
-    )
+#     qa_chain = RetrievalQA.from_chain_type(
+#         model,
+#         retriever=retriever,
+#         return_source_documents=True,
+#         chain_type_kwargs={"prompt": prompt}
+#     )
 
-    # Save knowledge base to MongoDB
-    knowledge_id = str(uuid4())
-    chunks = []
-    for i, chunk in enumerate(texts):
-        chunks.append({
-            "chunkID": f"{knowledge_id}_chunk_{i}",
-            "text": chunk,
-            "metadata": {
-                "page": pages[i].metadata.get("page", None) if i < len(pages) else None
-            }
-        })
+#     # Save knowledge base to MongoDB
+#     knowledge_id = str(uuid4())
+#     chunks = []
+#     for i, chunk in enumerate(texts):
+#         chunks.append({
+#             "chunkID": f"{knowledge_id}_chunk_{i}",
+#             "text": chunk,
+#             "metadata": {
+#                 "page": pages[i].metadata.get("page", None) if i < len(pages) else None
+#             }
+#         })
 
-    knowledge_doc = {
-        "knowledgeID": knowledge_id,
-        "uploadedBy": "anonymous",  # Replace with actual user ID if you have one
-        "fileName": file.filename,
-        "title": file.filename.replace(".pdf", "").title(),
-        "sourceType": "pdf",
-        "cleanedContent": context,
-        "chunks": chunks,
-        "uploadedAt": datetime.utcnow()
-    }
+#     knowledge_doc = {
+#         "knowledgeID": knowledge_id,
+#         "uploadedBy": "anonymous",  # Replace with actual user ID if you have one
+#         "fileName": file.filename,
+#         "title": file.filename.replace(".pdf", "").title(),
+#         "sourceType": "pdf",
+#         "cleanedContent": context,
+#         "chunks": chunks,
+#         "uploadedAt": datetime.utcnow()
+#     }
 
-    await knowledge_base_collection.insert_one(knowledge_doc)
+#     await knowledge_base_collection.insert_one(knowledge_doc)
 
-    return {"message": "PDF uploaded, processed, and saved to MongoDB."}
-# ─────────────── ASK QUESTION ──────────────────────────────
+#     return {"message": "PDF uploaded, processed, and saved to MongoDB."}
+# # ─────────────── ASK QUESTION ──────────────────────────────
 
-@app.post("/ask/")
-async def ask_question(question: str = Form(...)):
-    global qa_chain
-    if not qa_chain:
-        return {"error": "No knowledge base found. Upload a PDF first."}
+# @app.post("/ask/")
+# async def ask_question(question: str = Form(...)):
+#     global qa_chain
+#     if not qa_chain:
+#         return {"error": "No knowledge base found. Upload a PDF first."}
 
-    result = qa_chain({"query": question})
-    return {"answer": result["result"]}
+#     result = qa_chain({"query": question})
+#     return {"answer": result["result"]}
 
-# ─────────────── DEFAULT VOICE ROUTE + ERROR ───────────────
+# # ─────────────── DEFAULT VOICE ROUTE + ERROR ───────────────
 
-app.include_router(default_voices_router, prefix="/api/default-voices")
-app.include_router(update_profile_router, prefix="/api/update-profile")
+# app.include_router(default_voices_router, prefix="/api/default-voices")
+# app.include_router(update_profile_router, prefix="/api/update-profile")
 
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    return JSONResponse(status_code=500, content={"detail": str(exc)})
+# @app.exception_handler(Exception)
+# async def global_exception_handler(request: Request, exc: Exception):
+#     return JSONResponse(status_code=500, content={"detail": str(exc)})
