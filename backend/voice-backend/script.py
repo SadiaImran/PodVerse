@@ -1,6 +1,6 @@
 from fastapi import FastAPI, File, UploadFile, Form
 from fastapi.responses import JSONResponse
-from langchain_ollama import ChatOllama  # <-- Updated import for Ollama
+from langchain_ollama import ChatOllama 
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain.chains import RetrievalQA
