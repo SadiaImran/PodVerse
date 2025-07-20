@@ -150,13 +150,16 @@ exports.resetPassword = async (req, res) => {
     const { idToken } = req.body;
   
     try {
+      // Verify the ID token from Google
       const decoded = await admin.auth().verifyIdToken(idToken);
       const email = decoded.email;
       const fullName = decoded.name || "Google User";
   
+      // Check if user exists
       let user = await User.findOne({ email });
   
       if (!user) {
+        // Create a new user if not found
         user = new User({
           email,
           fullName,
@@ -165,19 +168,18 @@ exports.resetPassword = async (req, res) => {
         });
         await user.save();
       } else {
-        // Update missing fields
-        let updated = false;
-        if (!user.fullName) {
-          user.fullName = fullName;
-          updated = true;
-        }
-        if (updated) await user.save();
+        // Always update name and mark verified if using Google login
+        user.fullName = fullName;
+        user.isVerified = true;
+        await user.save();
       }
   
+      // Generate JWT token
       const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
         expiresIn: "7d",
       });
   
+      // Send token in cookie + user info in response body
       res
         .cookie("token", token, {
           httpOnly: true,
@@ -185,12 +187,22 @@ exports.resetPassword = async (req, res) => {
           sameSite: "Lax",
           maxAge: 7 * 24 * 60 * 60 * 1000,
         })
-        .json({ msg: "Login successful", token }); // Optional: still return token in body
+        .status(200)
+        .json({
+          msg: "Login successful",
+          token,
+          user: {
+            email: user.email,
+            fullName: user.fullName,
+          },
+        });
+  
     } catch (err) {
       console.error("Google Login Error:", err);
       res.status(500).json({ msg: "Google authentication failed", error: err.message });
     }
   };
+  
 
 // POST /send-otp
 exports.sendOtpToEmail = async (req, res) => {
