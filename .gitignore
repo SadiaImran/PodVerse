@@ -1,1 +1,12 @@
-node_modules
+# Node + Vite
+node_modules/
+dist/
+.vite/
+*.log
+*.pyc
+# Python cache files
+__pycache__/
+*.py[cod]
+# Env files
+.env
+.env.*
