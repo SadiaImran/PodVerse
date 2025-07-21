@@ -1,12 +1,26 @@
-# Node + Vite
+# Node
 node_modules/
 dist/
-.vite/
-*.log
-*.pyc
-# Python cache files
+
+# Python
 __pycache__/
-*.py[cod]
-# Env files
+**/__pycache__/
+*.pyc
+*.pkl
+*.sqlite3
+
+# Environment files
 .env
-.env.*
+.env.local
+.env.development
+.env.production
+
+# Logs
+*.log
+
+# System files
+.DS_Store
+
+# Editor/IDE configs
+.vscode/
+.idea/
