@@ -150,13 +150,25 @@ exports.resetPassword = async (req, res) => {
     const { idToken } = req.body;
   
     try {
+<<<<<<< HEAD
+=======
+      // Verify the ID token from Google
+>>>>>>> reconfigure-1-SI
       const decoded = await admin.auth().verifyIdToken(idToken);
       const email = decoded.email;
       const fullName = decoded.name || "Google User";
   
+<<<<<<< HEAD
       let user = await User.findOne({ email });
   
       if (!user) {
+=======
+      // Check if user exists
+      let user = await User.findOne({ email });
+  
+      if (!user) {
+        // Create a new user if not found
+>>>>>>> reconfigure-1-SI
         user = new User({
           email,
           fullName,
@@ -165,6 +177,7 @@ exports.resetPassword = async (req, res) => {
         });
         await user.save();
       } else {
+<<<<<<< HEAD
         // Update missing fields
         let updated = false;
         if (!user.fullName) {
@@ -174,10 +187,23 @@ exports.resetPassword = async (req, res) => {
         if (updated) await user.save();
       }
   
+=======
+        // Always update name and mark verified if using Google login
+        user.fullName = fullName;
+        user.isVerified = true;
+        await user.save();
+      }
+  
+      // Generate JWT token
+>>>>>>> reconfigure-1-SI
       const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
         expiresIn: "7d",
       });
   
+<<<<<<< HEAD
+=======
+      // Send token in cookie + user info in response body
+>>>>>>> reconfigure-1-SI
       res
         .cookie("token", token, {
           httpOnly: true,
@@ -185,12 +211,29 @@ exports.resetPassword = async (req, res) => {
           sameSite: "Lax",
           maxAge: 7 * 24 * 60 * 60 * 1000,
         })
+<<<<<<< HEAD
         .json({ msg: "Login successful", token }); // Optional: still return token in body
+=======
+        .status(200)
+        .json({
+          msg: "Login successful",
+          token,
+          user: {
+            email: user.email,
+            fullName: user.fullName,
+          },
+        });
+  
+>>>>>>> reconfigure-1-SI
     } catch (err) {
       console.error("Google Login Error:", err);
       res.status(500).json({ msg: "Google authentication failed", error: err.message });
     }
   };
+<<<<<<< HEAD
+=======
+  
+>>>>>>> reconfigure-1-SI
 
 // POST /send-otp
 exports.sendOtpToEmail = async (req, res) => {
@@ -271,4 +314,8 @@ exports.updateProfile = async (req, res) => {
     console.error(err);
     res.status(500).json({ message: "Server error" });
   }
+<<<<<<< HEAD
 };
+=======
+};
+>>>>>>> reconfigure-1-SI

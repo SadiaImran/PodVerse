@@ -9,7 +9,7 @@ import ScreenRecording from './screens/screen-recording';
 import ForgotPassword from './components/comp-signin/ForgotPassword';
 import ResetPassword from './components/comp-signin/ResetPassword';
 import { AuthProvider } from './context/AuthContext';
-import PrivateRoute from './components/PrivateRoute'; // Adjust path as needed
+import PrivateRoute from './components/PrivateRoute'; 
 
 function App() {
   return (
