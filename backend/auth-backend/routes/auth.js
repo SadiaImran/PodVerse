@@ -27,12 +27,6 @@ router.post("/logout", logout); // ✅ Add this route
 const authMiddleware = require("../middlewares/authMiddleware");
 const upload = require("../middlewares/multer");
 
-<<<<<<< HEAD
-const authMiddleware = require("../middlewares/authMiddleware");
-const upload = require("../middlewares/multer");
-
-=======
->>>>>>> reconfigure-1-SI
 
 router.get("/profile", authMiddleware, getUserProfile);
 router.put("/update-profile", authMiddleware, updateProfile); 

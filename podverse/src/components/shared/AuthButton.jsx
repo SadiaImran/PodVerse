@@ -23,11 +23,7 @@ const AuthButton = ({
       const idToken = await result.user.getIdToken(); 
       const res = await googleLogin(idToken);
       localStorage.setItem("token", res.data.token);
-<<<<<<< HEAD
-      login();
-=======
       login(res.data.user); // pass the returned user object
->>>>>>> reconfigure-1-SI
       navigate("/home");
 
     } catch (err) {

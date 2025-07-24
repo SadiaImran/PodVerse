@@ -200,8 +200,4 @@ export default function TopBar({ open }) {
 
     </nav>
   );
-<<<<<<< HEAD
 } 
-=======
-} 
->>>>>>> reconfigure-1-SI

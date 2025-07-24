@@ -99,8 +99,4 @@ const SuggestionsSidebar = () => {
     </div>
   );
 };
-<<<<<<< HEAD
 export default SuggestionsSidebar;
-=======
-export default SuggestionsSidebar;
->>>>>>> reconfigure-1-SI
