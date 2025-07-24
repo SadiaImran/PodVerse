@@ -99,6 +99,29 @@ exports.resetPassword = async (req, res) => {
   };
   
 
+  exports.getUserProfile = async (req, res) => {
+    try {
+      console.log("Fetching profile for userId:", req.userId);
+  
+      if (!req.userId) {
+        return res.status(401).json({ msg: "Unauthorized: No user ID found" });
+      }
+  
+      const user = await User.findById(req.userId).select("email fullName profileUrl");
+  
+      if (!user) {
+        console.log("User not found");
+        return res.status(404).json({ msg: "User not found" });
+      }
+  
+      console.log("User profile fetched:", user);
+      res.json(user);
+    } catch (err) {
+      console.error("Error fetching profile:", err);
+      res.status(500).json({ msg: "Error fetching user", error: err.message });
+    }
+  };
+  
   exports.authenticate = (req, res) => {
     const token = req.cookies.token;
     console.log("Cookies:", req.cookies);
@@ -109,12 +132,11 @@ exports.resetPassword = async (req, res) => {
   
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      res.status(200).json({ msg: "Authenticated", userId: decoded.userId });
+      res.status(200).json({ msg: "Authenticated", userId: decoded.userId }); // ✅ Correct
     } catch (err) {
       return res.status(401).json({ msg: "Invalid token" });
     }
   };
-  
 
   
   exports.logout = (req, res) => {
@@ -124,62 +146,86 @@ exports.resetPassword = async (req, res) => {
   
   
 
-exports.googleLogin = async (req, res) => {
+  exports.googleLogin = async (req, res) => {
     const { idToken } = req.body;
+  
     try {
-        const decoded = await admin.auth().verifyIdToken(idToken);
-        const email = decoded.email;
-
-        let user = await User.findOne({ email });
-        if (!user) {
-            user = new User({ email, isVerified: true, provider: "google" });
-            await user.save();
+      const decoded = await admin.auth().verifyIdToken(idToken);
+      const email = decoded.email;
+      const fullName = decoded.name || "Google User";
+  
+      let user = await User.findOne({ email });
+  
+      if (!user) {
+        user = new User({
+          email,
+          fullName,
+          isVerified: true,
+          provider: "google",
+        });
+        await user.save();
+      } else {
+        // Update missing fields
+        let updated = false;
+        if (!user.fullName) {
+          user.fullName = fullName;
+          updated = true;
         }
-
-        const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET);
-        res.json({ token });
+        if (updated) await user.save();
+      }
+  
+      const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
+        expiresIn: "7d",
+      });
+  
+      res
+        .cookie("token", token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "Lax",
+          maxAge: 7 * 24 * 60 * 60 * 1000,
+        })
+        .json({ msg: "Login successful", token }); // Optional: still return token in body
     } catch (err) {
-        res.status(500).json({ msg: "Google authentication failed", error: err.message });
+      console.error("Google Login Error:", err);
+      res.status(500).json({ msg: "Google authentication failed", error: err.message });
     }
-};
+  };
 
 // POST /send-otp
 exports.sendOtpToEmail = async (req, res) => {
-    const { email, password } = req.body; // get password here too
+  const { email, password, fullName } = req.body; // added fullName
 
-    try {
-        // Check if email already exists verified
-        const existing = await User.findOne({ email });
-        if (existing && existing.isVerified) {
-            return res.status(400).json({ msg: "Email already registered" });
-        }
-
-        // Generate OTP
-        const otp = Math.floor(100000 + Math.random() * 900000).toString();
-
-        // Send OTP email
-        await sendOTP(email, otp);
-
-        // Save or update temp user with OTP and password hash
-        let user = await User.findOne({ email });
-        const hashedPassword = await bcrypt.hash(password, 10);
-
-        if (user) {
-            // Update existing temp user
-            user.otp = otp;
-            user.password = hashedPassword;
-            user.isVerified = false;
-            await user.save();
-        } else {
-            // Create new temp user
-            user = new User({ email, otp, password: hashedPassword, isVerified: false });
-            await user.save();
-        }
-
-        res.json({ msg: "OTP sent successfully" });
-    } catch (err) {
-        res.status(500).json({ msg: "Failed to send OTP", error: err.message });
+  try {
+    const existing = await User.findOne({ email });
+    if (existing && existing.isVerified) {
+      return res.status(400).json({ msg: "Email already registered" });
     }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    await sendOTP(email, otp);
+
+    let user = await User.findOne({ email });
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    if (user) {
+      // Update existing temp user
+      user.otp = otp;
+      user.password = hashedPassword;
+      user.isVerified = false;
+      user.fullName = fullName || user.fullName; // update fullName if provided
+      await user.save();
+    } else {
+      // Create new temp user with fullName
+      user = new User({ email, otp, password: hashedPassword, isVerified: false, fullName });
+      await user.save();
+    }
+
+    res.json({ msg: "OTP sent successfully" });
+  } catch (err) {
+    res.status(500).json({ msg: "Failed to send OTP", error: err.message });
+  }
 };
 
 // POST /verify-otp
@@ -199,4 +245,30 @@ exports.verifyOTP = async (req, res) => {
     }
 };
 
+exports.updateProfile = async (req, res) => {
+  try {
+    // assuming you have authentication middleware
+    console.log("Updating profile for userId:", req.userId);
 
+    const { fullName, profileUrl } = req.body;
+
+    // Update user with new name and profile URL
+    const updatedUser = await User.findByIdAndUpdate(
+      req.userId,
+      {
+        fullName,
+        profileUrl,
+      },
+      { new: true }
+    );
+
+    res.status(200).json({
+      message: "Profile updated successfully",
+      user: updatedUser,
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
