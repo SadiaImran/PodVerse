@@ -1,19 +1,26 @@
-node_modules
-# dependencies
+# Node
 node_modules/
 dist/
-.env
-.env.*.local
 
-# optional but recommended
-.vite/
-.cache/
+# Python
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pkl
+*.sqlite3
+
+# Environment files
+.env
+.env.local
+.env.development
+.env.production
+
+# Logs
 *.log
+
+# System files
 .DS_Store
 
-# system files
-Thumbs.db
-
-# IDE-specific
+# Editor/IDE configs
 .vscode/
 .idea/

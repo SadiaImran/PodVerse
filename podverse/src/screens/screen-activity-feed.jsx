@@ -72,6 +72,45 @@ const LeftSidebar = () => {
         Create Podcast
       </button>
     </div>
+<<<<<<< HEAD
+  );
+};
+
+// Main Layout Component
+const ActivityFeedPage = () => {
+  const posts = [
+    {
+      id: 1,
+      creator: "Tech Talks with Sara",
+      title: "The Future of AI in 2025",
+      description: "A comprehensive visual exploration of how artificial intelligence is revolutionizing industries across the globe. From healthcare to finance, discover the transformative power of AI technology.",
+      time: "2h ago"
+    }
+  ];
+
+  return (
+    <BaseLayout homeScreen={true}>
+    <div className="min-h-screen bg-gray-50">
+      <div className="flex max-w-7xl mx-auto justify-between ">
+        {/* Left Sidebar */}
+        <LeftSidebar />
+    
+        {/* Main Content */}
+        <div className="flex-1 p-6">
+          <div className="max-w-2xl mx-auto">
+            <PodcastPostBox />
+            <ActivityFeed/>
+          </div>
+        </div>
+
+        {/* Right Sidebar */}
+        <SuggestionsSidebar />
+      </div>
+    </div>
+    </BaseLayout>
+    
+=======
+>>>>>>> reconfigure-1-SI
   );
 };
 

@@ -1,16 +1,3 @@
-import dotenv from "dotenv";
-dotenv.config();
-
-import express from "express";
-import bodyParser from "body-parser";
-import cors from "cors";
-import cookieParser from "cookie-parser";
-
-import { connectDB } from "../auth-backend/config/db.js";
-
-import authRoutes from "./routes/auth.js";
-
-import { errorHandler } from "./middlewares/error.js";
 const dotenv = require("dotenv");
 dotenv.config();
 
