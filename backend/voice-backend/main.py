@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 # from app.coqui_pipeline import clone_voice  
 from router.default_voices_route import router as default_voices_router
 
+from router.user_profile_route import router as update_profile_router
 from config import db  
 
 load_dotenv()
@@ -62,6 +63,7 @@ async def voice_clone_upload(file_upload: List[UploadFile], text: str = Form(...
 
 # Routers
 app.include_router(default_voices_router, prefix="/api/default-voices")
+app.include_router(update_profile_router, prefix="/api/update-profile")
 
 # Global error handler
 @app.exception_handler(Exception)

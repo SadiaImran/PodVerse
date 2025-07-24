@@ -1,1 +1,19 @@
 node_modules
+# dependencies
+node_modules/
+dist/
+.env
+.env.*.local
+
+# optional but recommended
+.vite/
+.cache/
+*.log
+.DS_Store
+
+# system files
+Thumbs.db
+
+# IDE-specific
+.vscode/
+.idea/

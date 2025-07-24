@@ -11,6 +11,17 @@ import { connectDB } from "../auth-backend/config/db.js";
 import authRoutes from "./routes/auth.js";
 
 import { errorHandler } from "./middlewares/error.js";
+const dotenv = require("dotenv");
+dotenv.config();
+
+const express = require("express");
+const bodyParser = require("body-parser");
+const cors = require("cors");
+const cookieParser = require("cookie-parser");
+
+const connectDB = require("./config/db");
+const authRoutes = require("./routes/auth"); // fixed: CommonJS syntax
+const { errorHandler } = require("./middlewares/error"); // fixed: CommonJS syntax
 
 const app = express();
 

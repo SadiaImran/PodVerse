@@ -13,6 +13,9 @@ import { FaRegEnvelope, FaGoogle, FaFacebookF, FaApple } from 'react-icons/fa';
 import { MdOutlineLock } from 'react-icons/md';
 import { sendOtpToEmail } from '../api/auth';
 import ImageCarousel from '../components/comp-signin/ImageCarousel.jsx';
+import { FaRegUser } from 'react-icons/fa';
+
+
 
 function SignUpScreenEmail() {
   const [email, setEmail] = useState('');
@@ -21,6 +24,9 @@ function SignUpScreenEmail() {
   const [isLoading, setIsLoading] = useState(false);
   const [otpVerified, setOtpVerified] = useState(false);
   const [signupComplete, setSignupComplete] = useState(false);
+
+  const [fullName, setFullName] = useState("");
+  const handleFullNameChange = (e) => setFullName(e.target.value);
 
   const navigate = useNavigate();
 
@@ -33,10 +39,10 @@ function SignUpScreenEmail() {
   };
 
   const handleContinue = async () => {
-    if (!email || !password) return alert('Email and password required');
+    if (!email || !password || !fullName) return alert('Full name, email and password required');
 
     try {
-      await sendOtpToEmail(email, password);
+      await sendOtpToEmail(email, password, fullName);
       setShowVerification(true);
     } catch (err) {
       alert(err.response?.data?.msg || 'Failed to send OTP');
@@ -80,6 +86,14 @@ function SignUpScreenEmail() {
             <>
               <AuthWelcome title="Let's Get Started" subtitle="Sign up your account" />
               <div className="space-y-6 pt-4">
+              <AuthFields
+                type="text"
+                purpose="signin"
+                placeholder="What is your full name?"
+                IconComponent={FaRegUser}
+                onChange={handleFullNameChange}
+                value={fullName}
+              />
                 <AuthFields
                   type="email"
                   purpose="signin"
@@ -125,7 +139,7 @@ function SignUpScreenEmail() {
                     )}
                   </div>
                 )}
-                <div className= "pt-6">
+                <div className= "pt-4">
                 <AuthButton
                   bgColor="bg-light-deepPurple"
                   textColor="text-white"
@@ -138,7 +152,7 @@ function SignUpScreenEmail() {
                 <TermsCondition />
               </div>
 
-              <div className="pt-10">
+              <div className="pt-8">
                 <AccountPrompt quesText="Already Have an Account ?" buttonText="Log in" />
               </div>
             </>
