@@ -33,12 +33,6 @@ const LeftSidebar = () => {
     { name: 'Health & Wellness', color: 'bg-pink-500' },
   ];
    const { userData } = useAuth();
-<<<<<<< HEAD
-  const navigate = useNavigate();
-    const { userData } = useAuth();
-=======
-
->>>>>>> reconfigure-1-SI
   return (
     <div className="pt-12 w-72 bg-white h-full border-r border-gray-200 p-6 sticky top-0 flex flex-col gap-10">
        <div className="flex items-center gap-4">
@@ -95,8 +89,4 @@ const LeftSidebar = () => {
     </div>
   );
 };
-<<<<<<< HEAD
 export default LeftSidebar;
-=======
-export default LeftSidebar;
->>>>>>> reconfigure-1-SI

@@ -14,11 +14,6 @@ import { MdOutlineLock, MdWaves, MdCheckCircle } from 'react-icons/md';
 import { sendOtpToEmail } from '../api/auth';
 import ImageCarousel from '../components/comp-signin/ImageCarousel.jsx';
 import { FaRegUser } from 'react-icons/fa';
-<<<<<<< HEAD
-
-
-=======
->>>>>>> reconfigure-1-SI
 
 function SignUpScreenEmail() {
   const [email, setEmail] = useState('');
@@ -263,86 +258,7 @@ function SignUpScreenEmail() {
                 )}
               </div>
             </div>
-<<<<<<< HEAD
-          ) : (
-            <>
-              <AuthWelcome title="Let's Get Started" subtitle="Sign up your account" />
-              <div className="space-y-6 pt-4">
-              <AuthFields
-                type="text"
-                purpose="signin"
-                placeholder="What is your full name?"
-                IconComponent={FaRegUser}
-                onChange={handleFullNameChange}
-                value={fullName}
-              />
-                <AuthFields
-                  type="email"
-                  purpose="signin"
-                  placeholder="What is your email?"
-                  IconComponent={FaRegEnvelope}
-                  onChange={handleEmailChange}
-                  value={email}
-                />
-
-                <AuthFields
-                  type="password"
-                  purpose="signin"
-                  placeholder="Enter your password"
-                  IconComponent={MdOutlineLock}
-                  onChange={handlePasswordChange}
-                  value={password}
-                />
-
-                {password.length > 0 && (
-                  <div className="text-sm mt-[-20px]">
-                    <div
-                      className={`h-2 rounded-full mt-2 ${
-                        isStrongPassword(password) ? 'bg-green-500 w-full' : 'bg-red-500 w-1/3'
-                      }`}
-                    ></div>
-                    {isStrongPassword(password) ? (
-                      <p className="text-green-600 font-semibold mt-2">
-                        Great job! Your password is strong.
-                      </p>
-                    ) : (
-                      <div className="mt-2 space-y-1">
-                        <p>
-                          <span className="text-red-500 font-medium">Your password is weak. </span>
-                          <span className="text-gray-500">
-                            Please choose a password that is at least{' '}
-                          </span>
-                          <span className="text-black font-medium">
-                            8 characters long (letters, numbers, and symbols)
-                          </span>{' '}
-                          <span className="text-gray-500">to make it more secure.</span>
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                )}
-                <div className= "pt-4">
-                <AuthButton
-                  bgColor="bg-light-deepPurple"
-                  textColor="text-white"
-                  borderColor="border-light-deepPurple"
-                  text="Continue"
-                  onClick={handleContinue}
-                />
-                </div>
-
-                <TermsCondition />
-              </div>
-
-              <div className="pt-8">
-                <AccountPrompt quesText="Already Have an Account ?" buttonText="Log in" />
-              </div>
-            </>
-          )}
-        </div>
-=======
           </div>
->>>>>>> reconfigure-1-SI
         </div>
       </div>
 
