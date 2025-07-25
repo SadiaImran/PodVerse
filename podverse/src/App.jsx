@@ -1,15 +1,14 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import SignUpScreen from './screens/screen-signup';
-import SignUpScreenEmail from './screens/screen-signup-email';
-import SignInScreenEmail from './screens/screen-signin-email';
-import CreatePodcastPage from './screens/screen-create-podcast';
-import ActivityFeedPage from './screens/screen-activity-feed';
-import AgentSetupFlow from './screens/screen-agent-setup';
-import ScreenRecording from './screens/screen-recording';
-import ForgotPassword from './components/comp-signin/ForgotPassword';
-import ResetPassword from './components/comp-signin/ResetPassword';
-import { AuthProvider } from './context/AuthContext';
-import PrivateRoute from './components/PrivateRoute'; 
+import SignUpScreenEmail from './assets/screens/screen-signup-email';
+import SignInScreenEmail from './assets/screens/screen-signin-email';
+import CreatePodcastPage from './assets/screens/screen-create-podcast';
+import ActivityFeedPage from './assets/screens/screen-activity-feed';
+import AgentSetupFlow from './assets/screens/screen-agent-setup';
+import ScreenRecording from './assets/screens/screen-recording';
+import ForgotPassword from './assets/components/comp-signin/ForgotPassword';
+import ResetPassword from './assets/components/comp-signin/ResetPassword';
+import { AuthProvider } from './assets/context/AuthContext';
+import PrivateRoute from './assets/components/PrivateRoute'; 
 
 function App() {
   return (
@@ -20,7 +19,6 @@ function App() {
           <Route path="/signin-email" element={<SignInScreenEmail />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password/:token" element={<ResetPassword />} />
-          <Route path="/signup" element={<SignUpScreen />} />
           <Route path="/signup-email" element={<SignUpScreenEmail />} />
 
           {/* Protected Routes */}
