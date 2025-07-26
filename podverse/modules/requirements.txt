@@ -1,0 +1,7 @@
+supabase 
+requests 
+python-dotenv
+fastapi 
+uvicorn 
+psycopg2-binary 
+sqlalchemy
