@@ -41,7 +41,7 @@ const ReviewAndStart = ({ formData, goBack }) => {
           <div className="flex items-center gap-3">
             <FileText className="w-6 h-6 text-light-purple" />
             <p className="text-gray-700">
-              <span className="font-semibold">Documents:</span> {formData.documents?.length || 0} uploaded
+              <span className="font-semibold">Documents:</span> 1 uploaded
             </p>
           </div>
 

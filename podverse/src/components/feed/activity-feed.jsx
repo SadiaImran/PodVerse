@@ -1,4 +1,5 @@
-import React, { useState, useEffect , useRef } from 'react';
+import React, { useState, useEffect , useRef  } from 'react';
+import axios from 'axios';
 import { Heart, MessageCircle, FileText, Share, Bookmark, MoreHorizontal, Play, Pause, Volume2, VolumeX } from 'lucide-react';
 import { FiSend } from "react-icons/fi";
 // Post Card Component
@@ -287,14 +288,9 @@ const ActivityFeed = () => {
     const fetchPosts = async () => {
       try {
         setLoading(true);
-        // Replace this with actual API call
-        // const response = await fetch('/api/posts');
-        // const data = await response.json();
-        
-        // Simulate network delay
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        setPosts(mockPosts);
+        // axios.get("http://localhost:8000/posts")
+        // .then(res => setPosts(res.data))
+        // .catch(err => console.error("API Error:", err));
       } catch (err) {
         setError('Failed to load posts');
         console.error('Error fetching posts:', err);

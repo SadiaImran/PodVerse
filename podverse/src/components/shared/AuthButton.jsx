@@ -20,11 +20,12 @@ const AuthButton = ({
   const handleGoogleLogin = async () => {
     try {
       const result = await signInWithPopup(auth, provider);
-      const idToken = await result.user.getIdToken();  // Fixed typo: `result ho.user` → `result.user`
+      const idToken = await result.user.getIdToken(); 
       const res = await googleLogin(idToken);
       localStorage.setItem("token", res.data.token);
-      login();
+      login(res.data.user); // pass the returned user object
       navigate("/home");
+
     } catch (err) {
       console.error("Google login failed", err);
     }
