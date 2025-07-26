@@ -14,6 +14,7 @@ from config import knowledge_base_collection
 # Custom modules
 # from app.coqui_pipeline import clone_voice  
 from router.default_voices_route import router as default_voices_router
+from router.user_profile_route import router as update_profile_router
 from config import db  
 
 # LangChain + Google Gemini RAG
