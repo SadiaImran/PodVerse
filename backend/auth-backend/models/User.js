@@ -3,6 +3,7 @@ const bcrypt = require("bcryptjs");
 
 const userSchema = new mongoose.Schema({
   fullName: { type: String }, 
+
   email: { type: String, unique: true },
   password: String,
   isVerified: { type: Boolean, default: false },
@@ -10,10 +11,12 @@ const userSchema = new mongoose.Schema({
   provider: { type: String, enum: ["email", "google"], default: "email" },
   resetPasswordToken: String,
   resetPasswordExpires: Date,
+
   profileUrl: {
     type: String,
     default: "https://example.com/default-profile.png" 
   },
+
 });
 
 userSchema.methods.comparePassword = async function (enteredPassword) {

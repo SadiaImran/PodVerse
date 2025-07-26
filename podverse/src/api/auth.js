@@ -1,5 +1,7 @@
 import axios from 'axios';
 
+axios.defaults.withCredentials = true;
+
 const API = axios.create({
   baseURL: 'http://localhost:5000/api/auth', // Update this if deployed
 });
@@ -16,7 +18,7 @@ export const login = (email, password, rememberMe) =>
   API.post('/login', {email, password, rememberMe}, { withCredentials: true });
 
 // Google Login
-export const googleLogin = (idToken) => API.post('/google-login', { idToken });
+export const googleLogin = (idToken) => API.post('/google-login', { idToken }, { withCredentials: true });
 
 export const sendForgotPasswordLink = (email, clientUrl) => API.post('/forgot-password', { email, clientUrl });
 

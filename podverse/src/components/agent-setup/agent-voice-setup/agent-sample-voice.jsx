@@ -3,7 +3,7 @@ import { FaPlay, FaPause, FaCheckCircle } from "react-icons/fa";
 import { RiLoopLeftLine } from "react-icons/ri";
 import { CgDetailsMore, CgSoftwareDownload } from "react-icons/cg";
 import { TbRewindBackward5, TbRewindForward5 } from "react-icons/tb";
-
+import { supabase } from "../../../connection_supabase_client.js"; // Adjust the import based on your project structure
 // SampleVoices component
 const SampleVoices = ({onVoiceSelect}) => {
   const [selectedVoice, setSelectedVoice] = useState(null);
@@ -26,23 +26,13 @@ const SampleVoices = ({onVoiceSelect}) => {
     const fetchVoices = async () => {
       try {
         setLoading(true);
-        const response = await fetch('http://localhost:8000/api/default-voices', {
-          method: 'GET',
-          credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
+        const { data, error } = await supabase
+        .from('sample_voices')
+        .select('*');
         
-        if (data.success) {
+        if (!error) {
           // Transform database data to match UI requirements
-          const transformedVoices = data.data.map((voice, index) => ({
+          const transformedVoices = data.map((voice, index) => ({
             id: voice.id,
             name: voice.name,
             category: voice.category,
@@ -59,6 +49,11 @@ const SampleVoices = ({onVoiceSelect}) => {
           // Set first voice as selected if none selected
           if (transformedVoices.length > 0 && !selectedVoice) {
             setSelectedVoice(transformedVoices[0].id);
+            onVoiceSelect({
+              ...transformedVoices[0],
+              color: getVoiceColor(voices.indexOf(transformedVoices[0])), // Get background color
+              textColor: getVoiceTextColor(voices.indexOf(transformedVoices[0])) // Get text color
+            });
           }
         } else {
           throw new Error(data.message || 'Failed to fetch voices');
@@ -163,26 +158,6 @@ const SampleVoices = ({onVoiceSelect}) => {
     }
   };
 
-  // Forward 10 seconds
-  const forward10 = () => {
-    if (audioRef.current) {
-      const newTime = Math.min(audioRef.current.duration, audioRef.current.currentTime + 10);
-      audioRef.current.currentTime = newTime;
-      setCurrentTime(newTime);
-      setProgress((newTime / audioRef.current.duration) * 100);
-    }
-  };
-
-  // Rewind 10 seconds
-  const rewind10 = () => {
-    if (audioRef.current) {
-      const newTime = Math.max(0, audioRef.current.currentTime - 10);
-      audioRef.current.currentTime = newTime;
-      setCurrentTime(newTime);
-      setProgress((newTime / audioRef.current.duration) * 100);
-    }
-  };
-
   // Format time in MM:SS
   const formatTime = (timeInSeconds) => {
     const minutes = Math.floor(timeInSeconds / 60);
@@ -197,7 +172,6 @@ const SampleVoices = ({onVoiceSelect}) => {
 
   //handle view voice details
   const handleViewVoice = (voiceId) => {
-  setSelectedVoice(voiceId);
   const voice = voices.find(v => v.id === voiceId);
   if (onVoiceSelect && voice) {
     onVoiceSelect({
@@ -219,12 +193,14 @@ const SampleVoices = ({onVoiceSelect}) => {
   return (
     <div className="w-full">
       {/* Hidden audio element for playback */}
-      <audio 
+      <audio
         ref={audioRef}
+        src={voices.find(v => v.id === selectedVoice)?.audioSrc || ""}
         onEnded={handleAudioEnded}
         onLoadedMetadata={(e) => {
           setDuration(e.target.duration);
         }}
+        style={{ display: "none" }}
       />
       
       <div className="space-y-2">
@@ -329,71 +305,6 @@ const SampleVoices = ({onVoiceSelect}) => {
           </div>
         ))}
       </div>
-      
-      {/* Audio player */}
-      {selectedVoice && (
-        <div className="mt-4 p-3 bg-white border border-gray-200 rounded-lg">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <button 
-                onClick={() => setIsPlaying(!isPlaying)}
-                className="w-12 h-12 bg-black rounded-full flex items-center justify-center hover:bg-gray-800 transition-colors text-white"
-              >
-                {isPlaying ? (
-                  <FaPause />
-                ) : (
-                  <FaPlay className="ml-1" />
-                )}
-              </button>
-              
-              <div className="text-sm">
-                {voices.find(v => v.id === selectedVoice)?.name || "Voice"}
-                <div className="text-xs text-gray-500">Default voice preview</div>
-              </div>
-            </div>
-            
-            <div className="flex items-center space-x-3">
-              <div className="flex items-center space-x-2">
-                <button 
-                  onClick={rewind10}
-                  className="text-gray-600 hover:text-gray-700"
-                >
-                  <span className="sr-only">Rewind</span>
-                  <TbRewindBackward5/>
-                </button>
-                
-                <div 
-                  className="w-64 h-1 bg-gray-200 rounded-full relative cursor-pointer"
-                  onClick={handleSeek}
-                >
-                  <div 
-                    className="absolute left-0 top-0 bottom-0 bg-gray-500 rounded-full"
-                    style={{ width: `${progress}%` }}
-                  ></div>
-                </div>
-                
-                <button 
-                  onClick={forward10}
-                  className="text-gray-600 hover:text-gray-700"
-                >
-                  <span className="sr-only">Forward</span>
-                  <TbRewindForward5 />
-                </button>
-                
-                <span className="text-xs text-gray-500">
-                  {formatTime(currentTime)} / {formatTime(duration)}
-                </span>
-              </div>
-              
-              <div className="flex space-x-2">
-                <button className="text-gray-600 hover:text-gray-700 text-2xl">
-                  <CgSoftwareDownload />
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
