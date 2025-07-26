@@ -28,12 +28,13 @@ export const AuthProvider = ({ children }) => {
   }, []);
   
 
+
   const login = (profile) => {
     setUser(true);
     setUserData(profile);
     localStorage.setItem("user", JSON.stringify(profile)); // optional for persistence
   };
-  
+
 
   const logout = async () => {
     await logoutAPI();        // 🔁 call server to clear session/cookie
