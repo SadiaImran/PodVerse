@@ -3,8 +3,7 @@ import { FaPlay, FaPause, FaCheckCircle } from "react-icons/fa";
 import { RiLoopLeftLine } from "react-icons/ri";
 import { CgDetailsMore, CgSoftwareDownload } from "react-icons/cg";
 import { TbRewindBackward5, TbRewindForward5 } from "react-icons/tb";
-import { supabase } from "../../../connection_supabase_client.js"; // Adjust the import based on your project structure
-// SampleVoices component
+import { supabase } from "../../../../connection_supabase_client";
 const SampleVoices = ({onVoiceSelect}) => {
   const [selectedVoice, setSelectedVoice] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -45,6 +44,7 @@ const SampleVoices = ({onVoiceSelect}) => {
           }));
           
           setVoices(transformedVoices);
+          console.log("Fetched voices:", transformedVoices);
           
           // Set first voice as selected if none selected
           if (transformedVoices.length > 0 && !selectedVoice) {
