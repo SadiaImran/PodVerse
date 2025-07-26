@@ -24,3 +24,11 @@ __pycache__/
 # Editor/IDE configs
 .vscode/
 .idea/
+.venv/
+node_modules/
+*.pyc
+__pycache__/
+.env
+dist/
+build/
+# Add other folders/files you want to ignore
