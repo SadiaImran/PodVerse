@@ -4,7 +4,7 @@ import { FiSearch, FiLogOut } from "react-icons/fi";
 import { HiOutlineBell } from "react-icons/hi2";
 import ProfileMarry from "../../images/icon-profile-marry.png";
 import Logo from "../../images/logo.png";
-import { supabase } from "../../supabaseClient";
+import { supabase } from "../../../connection_supabase_client";
 import { useNavigate } from "react-router-dom";
 
 export default function TopBar({ open }) {
