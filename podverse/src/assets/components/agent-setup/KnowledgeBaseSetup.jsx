@@ -1,18 +1,18 @@
 import { useState, useRef } from "react";
 import { FaUpload, FaTimes } from "react-icons/fa";
 import { IoMdArrowRoundBack } from "react-icons/io";
-// import { supabase } from "../../supabaseClient"; // Will integrate later
+import { useAuth } from "../../context/AuthContext"; // For current user
+import { supabase } from "../../../connection_supabase_client"; // Import supabase client
 
 const KnowledgeBaseSetup = ({ formData, setFormData, goNext, goBack }) => {
+  const { user } = useAuth(); // Get user from context
   const fileInputRef = useRef(null);
   const [uploadedFile, setUploadedFile] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
-  // const { userData } = useAuth(); // commented out for now
+  const [isUploading, setIsUploading] = useState(false);
 
   const handleClick = () => {
-    if (!uploadedFile) {
-      fileInputRef.current.click();
-    }
+    if (!uploadedFile) fileInputRef.current.click();
   };
 
   const handleDragOver = (e) => {
@@ -20,9 +20,7 @@ const KnowledgeBaseSetup = ({ formData, setFormData, goNext, goBack }) => {
     setIsDragging(true);
   };
 
-  const handleDragLeave = () => {
-    setIsDragging(false);
-  };
+  const handleDragLeave = () => setIsDragging(false);
 
   const handleDrop = (e) => {
     e.preventDefault();
@@ -75,21 +73,44 @@ const KnowledgeBaseSetup = ({ formData, setFormData, goNext, goBack }) => {
       return;
     }
 
-    // Placeholder for future Supabase upload logic
-    // try {
-    //   const { data, error } = await supabase.storage
-    //     .from("knowledge-base")
-    //     .upload(`pdfs/${Date.now()}_${uploadedFile.file.name}`, uploadedFile.file);
-    //
-    //   if (error) throw error;
-    //   console.log("Uploaded file path:", data.path);
-    //   goNext();
-    // } catch (error) {
-    //   console.error("Upload error:", error.message);
-    //   alert("Upload failed. Please try again.");
-    // }
+    setIsUploading(true);
+    alert("Uploading document... This may take a few minutes depending on the file size.");
 
-    goNext(); // temporary bypass
+    try {
+      const { data: { session }, error } = await supabase.auth.getSession();
+
+      if (error || !session?.user) {
+        alert("You must be signed in to upload documents.");
+        setIsUploading(false);
+        return;
+      }
+
+      const token = session.access_token; // JWT for RLS
+      const form = new FormData();
+      form.append("file", uploadedFile.file);
+      form.append("user_id", session.user.id);
+
+      const response = await fetch("http://localhost:8000/upload_pdf/", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`, // send JWT in headers
+        },
+        body: form,
+      });
+
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Upload failed");
+      }
+
+      console.log("Uploaded:", result);
+      goNext();
+    } catch (err) {
+      console.error("Upload error:", err.message);
+      alert("Upload failed. Please try again.");
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   return (
@@ -156,9 +177,12 @@ const KnowledgeBaseSetup = ({ formData, setFormData, goNext, goBack }) => {
         </button>
         <button
           onClick={handleUploadAndNext}
-          className="bg-light-purple text-white px-8 py-2 rounded-xl transition hover:text-gray-800 hover:border-2 hover:border-light-purple hover:bg-white font-semibold"
+          disabled={isUploading}
+          className={`bg-light-purple text-white px-8 py-2 rounded-xl transition font-semibold ${
+            isUploading ? "opacity-50 cursor-not-allowed" : "hover:text-gray-800 hover:border-2 hover:border-light-purple hover:bg-white"
+          }`}
         >
-          Next
+          {isUploading ? "Uploading..." : "Next"}
         </button>
       </div>
     </div>
