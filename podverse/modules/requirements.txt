@@ -5,3 +5,13 @@ fastapi
 uvicorn 
 psycopg2-binary 
 sqlalchemy
+langchain_ollama
+langchain_huggingface
+langchain_community
+gTTS
+sentence-transformers
+SpeechRecognition
+pyttsx3
+whisper
+faiss-cpu
+python-multipart

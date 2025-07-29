@@ -9,7 +9,11 @@ import AuthFields from '../components/shared/AuthFields.jsx';
 import { FaRegEnvelope, FaPodcast, FaHeadphones, FaRegUser } from 'react-icons/fa';
 import { MdOutlineLock, MdWaves, MdCheckCircle } from 'react-icons/md';
 import ImageCarousel from '../components/comp-signin/ImageCarousel.jsx';
+<<<<<<< HEAD
 import { supabase } from '../supabaseClient';
+=======
+import { supabase } from '../../connection_supabase_client.js';
+>>>>>>> 0b713f444b116cd4d55e20dfb96d7956c5cef15d
 
 function SignUpScreenEmail() {
   const [email, setEmail] = useState('');

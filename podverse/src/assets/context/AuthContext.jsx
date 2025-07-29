@@ -1,6 +1,10 @@
 // src/context/AuthContext.jsx
 import { createContext, useContext, useEffect, useState } from "react";
+<<<<<<< HEAD
 import { supabase } from "../supabaseClient";
+=======
+import { supabase } from "../../connection_supabase_client";
+>>>>>>> 0b713f444b116cd4d55e20dfb96d7956c5cef15d
 
 const AuthContext = createContext();
 
@@ -53,9 +57,19 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = async () => {
+<<<<<<< HEAD
     await supabase.auth.signOut();
     setUser(null);
   };
+=======
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.error("Logout failed:", error.message);
+    }
+    setUser(null);
+  };
+  
+>>>>>>> 0b713f444b116cd4d55e20dfb96d7956c5cef15d
 
   return (
     <AuthContext.Provider value={{ user, loading, setUser, logout }}>
