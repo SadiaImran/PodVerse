@@ -1,23 +1,16 @@
 import { useState, useRef } from "react";
 import { FaUpload, FaTimes } from "react-icons/fa";
 import { IoMdArrowRoundBack } from "react-icons/io";
-<<<<<<< HEAD
-// import { supabase } from "../../supabaseClient"; // Will integrate later
-=======
 import { useAuth } from "../../context/AuthContext"; // For current user
 import { supabase } from "../../../connection_supabase_client"; // Import supabase client
->>>>>>> 0b713f444b116cd4d55e20dfb96d7956c5cef15d
 
 const KnowledgeBaseSetup = ({ formData, setFormData, goNext, goBack }) => {
   const { user } = useAuth(); // Get user from context
   const fileInputRef = useRef(null);
   const [uploadedFile, setUploadedFile] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
-<<<<<<< HEAD
   // const { userData } = useAuth(); // commented out for now
-=======
   const [isUploading, setIsUploading] = useState(false);
->>>>>>> 0b713f444b116cd4d55e20dfb96d7956c5cef15d
 
   const handleClick = () => {
     if (!uploadedFile) fileInputRef.current.click();
@@ -81,23 +74,6 @@ const KnowledgeBaseSetup = ({ formData, setFormData, goNext, goBack }) => {
       return;
     }
 
-<<<<<<< HEAD
-    // Placeholder for future Supabase upload logic
-    // try {
-    //   const { data, error } = await supabase.storage
-    //     .from("knowledge-base")
-    //     .upload(`pdfs/${Date.now()}_${uploadedFile.file.name}`, uploadedFile.file);
-    //
-    //   if (error) throw error;
-    //   console.log("Uploaded file path:", data.path);
-    //   goNext();
-    // } catch (error) {
-    //   console.error("Upload error:", error.message);
-    //   alert("Upload failed. Please try again.");
-    // }
-
-    goNext(); // temporary bypass
-=======
     setIsUploading(true);
     alert("Uploading document... This may take a few minutes depending on the file size.");
 
@@ -110,34 +86,55 @@ const KnowledgeBaseSetup = ({ formData, setFormData, goNext, goBack }) => {
         return;
       }
 
-      const token = session.access_token; // JWT for RLS
-      const form = new FormData();
-      form.append("file", uploadedFile.file);
-      form.append("user_id", session.user.id);
+      const file = uploadedFile.file;
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${session?.user.id}_${Date.now()}.${fileExt}`;
+      const filePath = `knowledge-base/${fileName}`;
 
-      const response = await fetch("http://localhost:8000/upload_pdf/", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`, // send JWT in headers
-        },
-        body: form,
-      });
+    //   const { data: existingResume, error } = await supabase
+    //   .from('resumes')
+    //   .select('id')
+    //   .eq('user_id', user.id)
+    //   .eq('file_name', file.name);
 
-      const result = await response.json();
-      if (!response.ok) {
-        throw new Error(result.error || "Upload failed");
+    // if (existingResume.length > 0) {
+    //   alert("A file with this name already exists. Please rename it and try again.");
+    //   setIsLoading(false);
+    //   return null;
+    // }
+
+      // Upload to Supabase storage
+      const { error: uploadError } = await supabase.storage
+        .from('knowledge-base')
+        .upload(filePath, file);
+
+      if (uploadError) {
+        console.error("Upload failed:", uploadError.message);
+        return null;
       }
 
-      console.log("Uploaded:", result);
-      goNext();
-    } catch (err) {
-      console.error("Upload error:", err.message);
-      alert("Upload failed. Please try again.");
-    } finally {
-      setIsUploading(false);
-    }
->>>>>>> 0b713f444b116cd4d55e20dfb96d7956c5cef15d
-  };
+      // Get public URL
+      const { data: publicUrlData } = supabase.storage
+        .from('knowledge-base')
+        .getPublicUrl(filePath);
+
+      const publicUrl = publicUrlData.publicUrl;
+      if (!publicUrl) {
+        console.error("Failed to get public URL for uploaded file.");
+        return null;
+      }
+      // Save file metadata to database
+          setIsUploading(false);
+          console.log("Uploaded:", publicUrl);
+          alert("Document uploaded successfully!");
+          goNext();
+        } catch (err) {
+          console.error("Upload error:", err.message);
+          alert("Upload failed. Please try again.");
+        } finally {
+          setIsUploading(false);
+        }
+      };
 
   return (
     <div className="w-full bg-white border border-gray-200 rounded-lg p-6">
@@ -155,7 +152,7 @@ const KnowledgeBaseSetup = ({ formData, setFormData, goNext, goBack }) => {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".pdf"
+          accept=".pdf,.doc,.docx"
           onChange={handleFileChange}
           className="hidden"
         />

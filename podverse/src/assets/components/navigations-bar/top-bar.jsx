@@ -4,15 +4,9 @@ import { FiSearch, FiLogOut } from "react-icons/fi";
 import { HiOutlineBell } from "react-icons/hi2";
 import ProfileMarry from "../../images/icon-profile-marry.png";
 import Logo from "../../images/logo.png";
-<<<<<<< HEAD
-import { supabase } from "../../supabaseClient";
-import { useNavigate } from "react-router-dom";
-=======
 import { supabase } from "../../../connection_supabase_client";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext"; // adjust path if needed
-
->>>>>>> 0b713f444b116cd4d55e20dfb96d7956c5cef15d
 
 export default function TopBar({ open }) {
   const navigate = useNavigate();
@@ -23,11 +17,8 @@ export default function TopBar({ open }) {
   const [previewUrl, setPreviewUrl] = useState(null);
   const dropdownRef = useRef(null);
 
-<<<<<<< HEAD
-=======
   const { logout } = useAuth();
 
->>>>>>> 0b713f444b116cd4d55e20dfb96d7956c5cef15d
   // Load user profile from Supabase
   useEffect(() => {
     const loadProfile = async () => {
@@ -63,18 +54,10 @@ export default function TopBar({ open }) {
   }, []);
 
   const handleLogout = async () => {
-<<<<<<< HEAD
-    await supabase.auth.signOut();
-    navigate("/signin-email");
-  };
-=======
     await logout();
     window.location.href = "/signin-email"; // full redirect clears cached session
   };
   
-  
->>>>>>> 0b713f444b116cd4d55e20dfb96d7956c5cef15d
-
   const handleSaveProfile = async () => {
     const { error } = await supabase
       .from("profiles")

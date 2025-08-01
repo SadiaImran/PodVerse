@@ -1,10 +1,6 @@
 import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
-<<<<<<< HEAD
-import { supabase } from '../../supabaseClient';
-=======
 import { supabase } from '../../../connection_supabase_client';
->>>>>>> 0b713f444b116cd4d55e20dfb96d7956c5cef15d
 
 const AuthButton = ({ 
   bgColor, 
