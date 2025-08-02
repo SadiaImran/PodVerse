@@ -1,5 +1,9 @@
 import React, { useState, useRef } from "react";
+import { supabase } from "../../../connection_supabase_client";
+import { useAuth } from "../../context/AuthContext";
+import axios from "axios";
 
+// Icons
 const Icon = ({ name, className }) => {
   const icons = {
     play: <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3" /></svg>,
@@ -11,6 +15,7 @@ const Icon = ({ name, className }) => {
   return icons[name] || null;
 };
 
+// Transcript bubble
 const TranscriptBubble = ({ speaker, text }) => (
   <div className={`mb-2 max-w-xs p-2 rounded-md flex flex-col ${
     speaker === "You" ? "bg-purple-200 self-end" : "bg-gray-200 self-start"
@@ -20,12 +25,13 @@ const TranscriptBubble = ({ speaker, text }) => (
   </div>
 );
 
+// Waveform animation
 const Waveform = ({ isRecording }) => (
   <div className="flex space-x-1 h-12 items-center justify-center">
     {[...Array(20)].map((_, i) => (
       <div
         key={i}
-        className={`w-1.5 bg-purple-600 rounded-sm origin-bottom animate-wave`}
+        className="w-1.5 bg-purple-600 rounded-sm origin-bottom animate-wave"
         style={{
           animationDelay: `${i * 0.1}s`,
           animationDuration: `${0.6 + (i % 3) * 0.3}s`,
@@ -53,21 +59,69 @@ const NewPanelsRecording = () => {
   const [transcript, setTranscript] = useState([
     { speaker: "AI Guest", text: "Hello! Ready when you are." },
   ]);
-  const [audioUrl, setAudioUrl] = useState(null);
+
   const recorderRef = useRef(null);
   const gumStreamRef = useRef(null);
+  const { user } = useAuth();
 
-  // Placeholder function — backend call commented for now
   const sendChunkToBackend = async (chunkBlob) => {
-    console.log("Audio chunk ready:", chunkBlob);
-    // Future: send to Supabase backend when ready
+    try {
+      const formData = new FormData();
+      formData.append("user_id", user?.id || "unknown");
+      formData.append("audio", chunkBlob, "query.wav");
+
+      const sessionData = await supabase.auth.getSession();
+      const token = sessionData?.data?.session?.access_token;
+
+      const response = await axios.post("http://localhost:8000/query_audio/", formData, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }  
+      });
+
+      const result = response.data;
+      console.log("✅ Response from backend:", result);
+
+      if (result.answer_text) {
+        setTranscript((prev) => [
+          ...prev,
+          { speaker: "You", text: result.query || "[No speech detected]" },
+          { speaker: "AI Guest", text: result.answer_text },
+        ]);
+      } else {
+        setTranscript((prev) => [
+          ...prev,
+          { speaker: "You", text: result.query || "[No speech detected]" },
+          { speaker: "AI Guest", text: result.error || "[No response generated]" },
+        ]);
+      }
+      
+    } catch (error) {
+      console.error("❌ Audio send error:", error.response?.data || error.message);
+      setTranscript((prev) => [
+        ...prev,
+        { speaker: "You", text: "[Recording Sent]" },
+        { speaker: "AI Guest", text: "[Failed to fetch answer]" },
+      ]);
+    }
+  };
+
+  const resetRecorder = () => {
+    if (recorderRef.current) {
+      recorderRef.current.stop();
+      recorderRef.current = null;
+    }
+    if (gumStreamRef.current) {
+      gumStreamRef.current.getTracks().forEach((t) => t.stop());
+      gumStreamRef.current = null;
+    }
   };
 
   const startRecording = async () => {
     try {
+      resetRecorder(); // 🔄 clean state before new start
       const AudioContext = window.AudioContext || window.webkitAudioContext;
       const audioContext = new AudioContext();
-
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       gumStreamRef.current = stream;
 
@@ -78,8 +132,9 @@ const NewPanelsRecording = () => {
       recorderRef.current = recorder;
       setIsRecording(true);
       setIsPaused(false);
+      console.log("🎤 Recorder created", recorder);
     } catch (err) {
-      console.error("Recording failed to start:", err);
+      console.error("🎤 Start failed:", err);
     }
   };
 
@@ -87,29 +142,25 @@ const NewPanelsRecording = () => {
     const recorder = recorderRef.current;
     const gumStream = gumStreamRef.current;
 
-    if (!recorder) {
-      console.warn("Recorder is not initialized");
-      return;
-    }
-
+    if (!recorder) return;
     recorder.stop();
-    if (gumStream) gumStream.getTracks().forEach((track) => track.stop());
+    gumStream?.getTracks().forEach((track) => track.stop());
 
-    recorder.exportWAV(async (blob) => {
-      await sendChunkToBackend(blob);
+    recorder.exportWAV((blob) => {
+      console.log("🧾 Exported audio blob:", blob);
+      sendChunkToBackend(blob);
     });
 
+    recorderRef.current = null;
+    gumStreamRef.current = null;
     setIsRecording(false);
     setIsPaused(false);
   };
 
   const pauseRecording = () => {
-    const recorder = recorderRef.current;
-    const gumStream = gumStreamRef.current;
-
-    if (recorder && isRecording) {
-      recorder.stop();
-      if (gumStream) gumStream.getTracks().forEach((track) => track.stop());
+    if (isRecording && recorderRef.current) {
+      recorderRef.current.stop();
+      gumStreamRef.current?.getTracks().forEach((track) => track.stop());
       setIsPaused(true);
     }
   };
@@ -117,121 +168,71 @@ const NewPanelsRecording = () => {
   const resumeRecording = () => startRecording();
 
   const restartRecording = () => {
-    const recorder = recorderRef.current;
-    const gumStream = gumStreamRef.current;
-
-    if (recorder && isRecording) {
-      recorder.stop();
-      if (gumStream) gumStream.getTracks().forEach((track) => track.stop());
-      recorderRef.current = null;
-      gumStreamRef.current = null;
-    }
-
+    resetRecorder();
     setTranscript([{ speaker: "AI Guest", text: "Hello! Ready when you are." }]);
-    setAudioUrl(null);
     setIsRecording(false);
     setIsPaused(false);
   };
+
   return (
     <div className="flex h-full divide-x divide-gray-300">
       {/* Transcript Section */}
       <div className="w-1/3 p-4 flex flex-col overflow-y-auto bg-gray-50 rounded-l-lg">
         <h2 className="font-semibold mb-4 text-lg">Transcript</h2>
         <div className="flex flex-col">
-          {transcript.length === 0 && (
-            <p className="text-gray-500 italic">Transcript will appear here...</p>
-          )}
           {transcript.map((entry, idx) => (
             <TranscriptBubble key={idx} speaker={entry.speaker} text={entry.text} />
           ))}
         </div>
       </div>
 
-      {/* Recording Controls Section */}
+      {/* Controls */}
       <div className="w-2/3 p-8 flex flex-col justify-between bg-white rounded-r-lg">
         <div>
           <h2 className="font-semibold mb-6 text-lg text-center">Recording Studio</h2>
-
           <Waveform isRecording={isRecording && !isPaused} />
 
           <div className="flex justify-center space-x-4 mt-8">
             {!isRecording && (
-              <button
-                onClick={startRecording}
-                className="flex items-center space-x-2 bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition"
-              >
-                <Icon name="play" className="w-5 h-5" />
-                <span>Start</span>
+              <button onClick={startRecording} className="flex items-center space-x-2 bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition">
+                <Icon name="play" className="w-5 h-5" /> <span>Start</span>
               </button>
             )}
 
             {isRecording && !isPaused && (
               <>
-                <button
-                  onClick={pauseRecording}
-                  className="flex items-center space-x-2 bg-yellow-500 text-white px-6 py-3 rounded-lg hover:bg-yellow-600 transition"
-                >
-                  <Icon name="pause" className="w-5 h-5" />
-                  <span>Pause</span>
+                <button onClick={pauseRecording} className="flex items-center space-x-2 bg-yellow-500 text-white px-6 py-3 rounded-lg hover:bg-yellow-600 transition">
+                  <Icon name="pause" className="w-5 h-5" /> <span>Pause</span>
                 </button>
-                <button
-                  onClick={stopRecording}
-                  className="flex items-center space-x-2 bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 transition"
-                >
-                  <Icon name="stop" className="w-5 h-5" />
-                  <span>Stop</span>
+                <button onClick={stopRecording} className="flex items-center space-x-2 bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 transition">
+                  <Icon name="stop" className="w-5 h-5" /> <span>Stop</span>
                 </button>
               </>
             )}
 
             {isRecording && isPaused && (
               <>
-                <button
-                  onClick={resumeRecording}
-                  className="flex items-center space-x-2 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition"
-                >
-                  <Icon name="play" className="w-5 h-5" />
-                  <span>Resume</span>
+                <button onClick={resumeRecording} className="flex items-center space-x-2 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition">
+                  <Icon name="play" className="w-5 h-5" /> <span>Resume</span>
                 </button>
-                <button
-                  onClick={stopRecording}
-                  className="flex items-center space-x-2 bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 transition"
-                >
-                  <Icon name="stop" className="w-5 h-5" />
-                  <span>Stop</span>
+                <button onClick={stopRecording} className="flex items-center space-x-2 bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 transition">
+                  <Icon name="stop" className="w-5 h-5" /> <span>Stop</span>
                 </button>
               </>
             )}
 
-            <button
-              onClick={restartRecording}
-              className="flex items-center space-x-2 bg-gray-400 text-white px-6 py-3 rounded-lg hover:bg-gray-500 transition"
-            >
-              <Icon name="restart" className="w-5 h-5" />
-              <span>Restart</span>
+            <button onClick={restartRecording} className="flex items-center space-x-2 bg-gray-400 text-white px-6 py-3 rounded-lg hover:bg-gray-500 transition">
+              <Icon name="restart" className="w-5 h-5" /> <span>Restart</span>
             </button>
           </div>
-
-          {audioUrl && (
-            <div className="mt-8 rounded border border-gray-300 p-3 bg-gray-50">
-              <audio controls src={audioUrl} className="w-full rounded" />
-            </div>
-          )}
         </div>
 
-        {/* Preview/Edit Button */}
         <div className="mt-8">
           <button
-            disabled={!audioUrl}
-            className={`w-full py-3 rounded font-semibold flex justify-center items-center space-x-2 transition ${
-              audioUrl
-                ? "bg-purple-600 text-white hover:bg-purple-700"
-                : "bg-gray-300 text-gray-600 cursor-not-allowed"
-            }`}
-            onClick={() => alert("Preview/Edit feature coming soon!")}
+            disabled
+            className="w-full py-3 rounded font-semibold flex justify-center items-center space-x-2 bg-gray-300 text-gray-600 cursor-not-allowed"
           >
-            <Icon name="edit" className="w-5 h-5" />
-            <span>Preview & Edit</span>
+            <Icon name="edit" className="w-5 h-5" /> <span>Preview & Edit (Coming Soon)</span>
           </button>
         </div>
       </div>

@@ -88,8 +88,13 @@ const KnowledgeBaseSetup = ({ formData, setFormData, goNext, goBack }) => {
 
       const file = uploadedFile.file;
       const fileExt = file.name.split('.').pop();
-      const fileName = `${session?.user.id}_${Date.now()}.${fileExt}`;
-      const filePath = `knowledge-base/${fileName}`;
+      const fileName = `${Date.now()}_${file.name}`;
+      const filePath = `${session?.user.id}/${fileName}`;
+
+
+
+
+
 
     //   const { data: existingResume, error } = await supabase
     //   .from('resumes')
