@@ -6,5 +6,4 @@ router = APIRouter()
 @router.get("/posts")
 def get_all_posts():
     response = supabase.table("posts").select("*, profiles(full_name), comments(*, profiles(full_name))").order("created_at", desc=True).execute()
-    # Har post me ab profiles field me user ka naam aa jayega
     return response.data

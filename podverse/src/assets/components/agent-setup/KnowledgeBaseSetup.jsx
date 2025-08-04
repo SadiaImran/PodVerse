@@ -3,6 +3,7 @@ import { FaUpload, FaTimes } from "react-icons/fa";
 import { IoMdArrowRoundBack } from "react-icons/io";
 import { useAuth } from "../../context/AuthContext"; // For current user
 import { supabase } from "../../../connection_supabase_client"; // Import supabase client
+import axios from 'axios' ; 
 
 const KnowledgeBaseSetup = ({ formData, setFormData, goNext, goBack }) => {
   const { user } = useAuth(); // Get user from context
@@ -79,67 +80,47 @@ const KnowledgeBaseSetup = ({ formData, setFormData, goNext, goBack }) => {
 
     try {
       const { data: { session }, error } = await supabase.auth.getSession();
+      const token =  session?.access_token;
 
-      if (error || !session?.user) {
+      if(!token) {
         alert("You must be signed in to upload documents.");
         setIsUploading(false);
         return;
       }
+      console.log("Printing session object: ", session , " & token , " , token) ;
+      const formData = new FormData() ; 
+      formData.append("file" , uploadedFile.file);
 
-      const file = uploadedFile.file;
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Date.now()}_${file.name}`;
-      const filePath = `${session?.user.id}/${fileName}`;
+      try {
+        const res = await axios.post(
+          "http://localhost:8000/upload-knowledge-base/", formData , {
+            headers : {
+              Authorization: `Bearer ${session.access_token}` , 
+               "Content-Type": "multipart/form-data"
+            }
+          })
 
-
-
-
-
-
-    //   const { data: existingResume, error } = await supabase
-    //   .from('resumes')
-    //   .select('id')
-    //   .eq('user_id', user.id)
-    //   .eq('file_name', file.name);
-
-    // if (existingResume.length > 0) {
-    //   alert("A file with this name already exists. Please rename it and try again.");
-    //   setIsLoading(false);
-    //   return null;
-    // }
-
-      // Upload to Supabase storage
-      const { error: uploadError } = await supabase.storage
-        .from('knowledge-base')
-        .upload(filePath, file);
-
-      if (uploadError) {
-        console.error("Upload failed:", uploadError.message);
-        return null;
+          alert("Docuemnt uploaded succesffuly ! ")
+          setIsUploading(false);
+          console.log("Response from server : " , res.data) ; 
+          if(goNext) goNext() ; 
+      }
+      catch(error) {
+        const serverMessage = error.response?.data?.message || error.message;
+        console.error("Upload failed:", serverMessage);
+        alert(`Upload failed: ${serverMessage}`);
       }
 
-      // Get public URL
-      const { data: publicUrlData } = supabase.storage
-        .from('knowledge-base')
-        .getPublicUrl(filePath);
-
-      const publicUrl = publicUrlData.publicUrl;
-      if (!publicUrl) {
-        console.error("Failed to get public URL for uploaded file.");
-        return null;
+      finally {
+          setIsUploading(false);
       }
-      // Save file metadata to database
-          setIsUploading(false);
-          console.log("Uploaded:", publicUrl);
-          alert("Document uploaded successfully!");
-          goNext();
-        } catch (err) {
-          console.error("Upload error:", err.message);
-          alert("Upload failed. Please try again.");
-        } finally {
-          setIsUploading(false);
-        }
-      };
+    }
+    catch (error) {
+      console.error("Error uploading file:", error);
+      alert("An error occurred while uploading the file. Please try again.");
+      setIsUploading(false);
+  }
+}
 
   return (
     <div className="w-full bg-white border border-gray-200 rounded-lg p-6">

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, File, UploadFile, Form, Header, HTTPException
+from fastapi.params import Depends
 from fastapi.responses import JSONResponse, FileResponse
 from langchain_ollama import ChatOllama
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -10,16 +11,12 @@ from langchain.prompts import PromptTemplate
 from langchain_core.documents import Document
 from gtts import gTTS
 import speech_recognition as sr
-import shutil
-import tempfile
 import os
-import re
+import time
 from datetime import datetime
 from connection_supabase_client import supabase
-from supabase import create_client
-
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
+from connection_supabase_client import get_authenticated_supabase_client
+from supabase import Client
 
 router = APIRouter()
 
@@ -42,109 +39,67 @@ Answer:
 """
 )
 
-# @router.post("/upload_pdf/")
-# async def upload_pdf(
-#     user_id: str = Form(...),
-#     file: UploadFile = File(...),
-#     authorization: str = Header(None)
-# ):
-#     try:
-#         # 1. Validate JWT
-#         if not authorization or not authorization.startswith("Bearer "):
-#             raise HTTPException(status_code=401, detail="Authorization token missing or invalid")
-#         user_token = authorization.split(" ")[1]
-
-#         # 2. Initialize Supabase client with user's JWT
-#         supabase = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
-#         supabase.postgrest.auth(user_token)  # sets RLS context
-
-#         # 3. Save file temporarily
-#         temp_path = f"temp_{file.filename}"
-#         with open(temp_path, "wb") as buffer:
-#             shutil.copyfileobj(file.file, buffer)
-
-#         # 4. Upload PDF to Supabase Storage (private bucket)
-#         storage_path = f"{user_id}/{datetime.utcnow().timestamp()}_{file.filename}"
-#         with open(temp_path, "rb") as f:
-#             storage_res = supabase.storage.from_("knowledge-base").upload(storage_path, f)
-
-#         if storage_res.status_code != 200:
-#             os.remove(temp_path)
-#             raise HTTPException(status_code=400, detail=f"Storage upload failed: {storage_res.json()}")
-
-#         # 5. Extract text from PDF
-#         loader = PyPDFLoader(temp_path)
-#         documents = loader.load()
-#         splitter = CharacterTextSplitter(chunk_size=500, chunk_overlap=100)
-#         chunks = splitter.split_documents(documents)
-
-#         # 6. Insert chunks into knowledge_base table
-#         for chunk in chunks:
-#             insert_res = supabase.table("knowledge_base").insert({
-#                 "user_id": user_id,
-#                 "title": file.filename,
-#                 "source_type": "pdf",
-#                 "chunk": chunk.page_content,
-#                 "file_path": storage_path
-#             }).execute()
-
-#             if insert_res.status_code >= 400:
-#                 os.remove(temp_path)
-#                 raise HTTPException(status_code=400, detail=f"DB insert failed: {insert_res.json()}")
-
-#         # 7. Cleanup
-#         os.remove(temp_path)
-#         return JSONResponse(content={"message": "PDF processed and stored successfully"}, status_code=200)
-
-#     except Exception as e:
-#         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
-@router.post("/query_audio/")
-async def query_audio(user_id: str = Form(...), audio: UploadFile = File(...)):
-    recognizer = sr.Recognizer()
-    audio_path = f"temp_{audio.filename}"
-    with open(audio_path, "wb") as f:
-        f.write(await audio.read())
 
-    if os.path.getsize(audio_path) == 0:
-        return JSONResponse(content={"error": "Uploaded audio file is empty"}, status_code=400)
+
+
+
+@router.post("/upload-knowledge-base/")
+async def upload_knowledge_base(
+    file: UploadFile = File(...),
+    auth_data: Client = Depends(get_authenticated_supabase_client)
+):
+    supabase_authenticated = auth_data["client"]
+    user_id = auth_data["user_id"]
+
+    if file.content_type != "application/pdf":
+        raise HTTPException(status_code=400, detail="Only PDF files are allowed.")
+
+  
+    file_data = await file.read()
+    timestamp = int(time.time())
+    file_name = f"{timestamp}_{file.filename}"
+    file_path = file_name
 
     try:
-        with sr.AudioFile(audio_path) as source:
-            audio_data = recognizer.record(source)
-            query_text = recognizer.recognize_google(audio_data)
-    except sr.UnknownValueError:
-        return JSONResponse(content={"error": "Could not understand audio"}, status_code=400)
+        upload_result = supabase_authenticated.storage.from_("knowledge-base").upload(
+            file_path,
+            file_data,
+            {
+                "content-type": "application/pdf",
+                "x-upsert": "false"
+            }
+        )
     except Exception as e:
-        return JSONResponse(content={"error": str(e)}, status_code=500)
-    finally:
-        os.remove(audio_path)
+        print(f"Supabase upload failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+
+    public_url = supabase_authenticated.storage.from_("knowledge-base").get_public_url(file_path)
+    if not public_url:
+        raise HTTPException(status_code=500, detail="Could not get public URL.")
 
     try:
-        response_data = await generate_response(user_id=user_id, query=query_text)
-        if isinstance(response_data, JSONResponse):
-            content = response_data.body.decode("utf-8")
-            import json
-            content_json = json.loads(content)
-            content_json["query"] = query_text
-            return JSONResponse(content=content_json)
-        else:
-            response_data["query"] = query_text
-            print("🎤 Audio query received")
-            print("Query text:", query_text)
-            print("Response data:", response_data)
-            return JSONResponse(content=response_data)
+        supabase_authenticated.table("knowledge_base").insert({
+            "user_id": user_id,
+            "file_name": file.filename,
+            "public_url": public_url,
+            "storage_path": file_path,
+        }).execute()
     except Exception as e:
-        return JSONResponse(content={"error": f"Failed to generate response: {str(e)}"}, status_code=500)
+        print(f"Metadata save failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Metadata save failed: {str(e)}")
 
-
-
+    return {
+        "message": "Document uploaded successfully.",
+        "public_url": public_url
+    }
 
 @router.post("/respond/")
 async def generate_response(user_id: str = Form(...), query: str = Form(...)):
     try:
-        # ✅ FIXED: List files properly from Supabase
+        
         res = supabase.storage.from_("knowledge-base").list(path=f"{user_id}/")
         files_res = res.get("data", []) if res else []
 
