@@ -65,8 +65,16 @@ async def upload_knowledge_base(
     supabase_authenticated = auth_data["client"]
     user_id = auth_data["user_id"]
 
-    if file.content_type != "application/pdf":
-        raise HTTPException(status_code=400, detail="Only PDF files are allowed.")
+    # Define allowed content types
+    allowed_content_types = {
+    "application/pdf": ".pdf",
+    "application/msword": ".doc",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+    "text/plain": ".txt"
+    }
+
+    if file.content_type not in allowed_content_types:
+        raise HTTPException(status_code=400, detail="Only PDF TXT DOC files are allowed.")
 
   
     file_data = await file.read()
@@ -79,7 +87,7 @@ async def upload_knowledge_base(
             file_path,
             file_data,
             {
-                "content-type": "application/pdf",
+                "content-type": file.content_type,
                 "x-upsert": "false"
             }
         )

@@ -97,7 +97,6 @@ const ExistingFilesSelector = ({ files, selectedFile, onFileSelect, disabled, on
   );
 };
 
-
 const KnowledgeBaseSetup = ({ goNext }) => {
   const [uploadedFile, setUploadedFile] = useState(null);
   const [selectedExistingFile, setSelectedExistingFile] = useState(null);
@@ -222,7 +221,7 @@ const KnowledgeBaseSetup = ({ goNext }) => {
         {/* New File Upload Section */}
         <FileUpload
           title="Upload a New PDF"
-          accept=".pdf"
+          accept=".pdf, .doc, .docx, .txt"
           onFileSelect={handleNewFileSelect}
           selectedFile={uploadedFile}
           icon={Upload}
