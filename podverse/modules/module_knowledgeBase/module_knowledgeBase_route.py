@@ -39,11 +39,23 @@ Answer:
 """
 )
 
+router = APIRouter()
 
+@router.get("/knowledge-base/")
+async def get_knowledge_base_files(auth_data: dict = Depends(get_authenticated_supabase_client)):
+    supabase_authenticated = auth_data["client"]
+    user_id = auth_data["user_id"]
 
+    try:
+        response = supabase_authenticated.table("knowledge_base").select("*").eq("user_id", user_id).execute()
+        knowledge_base = response.data
+        return JSONResponse(content=knowledge_base)
 
-
-
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        print(f"An unexpected error occurred in the knowledge-base endpoint: {e}")
+        raise HTTPException(status_code=500, detail="An internal server error occurred.")
 
 @router.post("/upload-knowledge-base/")
 async def upload_knowledge_base(

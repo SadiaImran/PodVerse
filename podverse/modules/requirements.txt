@@ -15,3 +15,9 @@ pyttsx3
 whisper
 faiss-cpu
 python-multipart
+google-ai-generativelanguage
+langchain
+langchain-core
+langchain-openai
+langchain-text-splitters
+langchain-

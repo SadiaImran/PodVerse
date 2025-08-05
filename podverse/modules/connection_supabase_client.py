@@ -13,7 +13,6 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-
 async def get_authenticated_supabase_client(authorization: str = Header(...)):
     """
     Dependency that returns a Supabase client authenticated with the user's JWT.
