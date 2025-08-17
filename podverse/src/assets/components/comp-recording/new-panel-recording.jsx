@@ -16,12 +16,21 @@ const Icon = ({ name, className }) => {
 };
 
 // Transcript bubble
-const TranscriptBubble = ({ speaker, text }) => (
+const TranscriptBubble = ({ speaker, text, isTyping = false }) => (
   <div className={`mb-2 max-w-xs p-2 rounded-md flex flex-col ${
     speaker === "You" ? "bg-purple-200 self-end" : "bg-gray-200 self-start"
   }`}>
     <p className="text-xs font-semibold text-gray-700 mb-1">{speaker}</p>
-    <p className="text-sm text-gray-900">{text}</p>
+    <p className="text-sm text-gray-900">
+      {isTyping ? (
+        <span>
+          {text}
+          <span className="animate-pulse">●</span>
+        </span>
+      ) : (
+        text
+      )}
+    </p>
   </div>
 );
 
@@ -56,6 +65,7 @@ const Waveform = ({ isRecording }) => (
 const NewPanelsRecording = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [transcript, setTranscript] = useState([
     { speaker: "AI Guest", text: "Hello! Ready when you are." },
   ]);
@@ -66,6 +76,9 @@ const NewPanelsRecording = () => {
 
   const sendChunkToBackend = async (chunkBlob) => {
     try {
+      setIsProcessing(true);
+      
+      // Step 1: Send audio and get transcribed text immediately
       const formData = new FormData();
       formData.append("user_id", user?.id || "unknown");
       formData.append("audio", chunkBlob, "query.wav");
@@ -73,36 +86,87 @@ const NewPanelsRecording = () => {
       const sessionData = await supabase.auth.getSession();
       const token = sessionData?.data?.session?.access_token;
 
-      const response = await axios.post("http://localhost:8000/query_audio/", formData, {
+      console.log("🎤 Sending audio for transcription...");
+      const transcriptionResponse = await axios.post("http://localhost:8000/query_audio/", formData, {
         headers: {
           Authorization: `Bearer ${token}`
         }  
       });
 
-      const result = response.data;
-      console.log("✅ Response from backend:", result);
+      const transcriptionResult = transcriptionResponse.data;
+      console.log("✅ Transcription response:", transcriptionResult);
 
-      if (result.answer_text) {
+      // Immediately show the user's query
+      if (transcriptionResult.query) {
         setTranscript((prev) => [
           ...prev,
-          { speaker: "You", text: result.query || "[No speech detected]" },
-          { speaker: "AI Guest", text: result.answer_text },
+          { speaker: "You", text: transcriptionResult.query },
         ]);
-      } else {
+
+        // Step 2: Send the transcribed text to get AI response
+        console.log("🤖 Getting AI response for:", transcriptionResult.query);
+        
+        // Add a "thinking" message
         setTranscript((prev) => [
           ...prev,
-          { speaker: "You", text: result.query || "[No speech detected]" },
-          { speaker: "AI Guest", text: result.error || "[No response generated]" },
+          { speaker: "AI Guest", text: "Thinking...", isTyping: true },
+        ]);
+
+        const responseFormData = new FormData();
+        responseFormData.append("query", transcriptionResult.query);
+
+        const aiResponse = await axios.post("http://localhost:8000/respond/", responseFormData, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }  
+        });
+
+        const aiResult = aiResponse.data;
+        console.log("✅ AI response:", aiResult);
+
+        // Replace the "thinking" message with the actual response
+        setTranscript((prev) => {
+          const newTranscript = [...prev];
+          // Remove the last "thinking" message
+          if (newTranscript[newTranscript.length - 1].isTyping) {
+            newTranscript.pop();
+          }
+          // Add the actual AI response
+          newTranscript.push({
+            speaker: "AI Guest",
+            text: aiResult.answer_text || aiResult.error || "[No response generated]"
+          });
+          return newTranscript;
+        });
+
+      } else {
+        // If no transcription, show error
+        setTranscript((prev) => [
+          ...prev,
+          { speaker: "You", text: transcriptionResult.error || "[No speech detected]" },
+          { speaker: "AI Guest", text: "I couldn't understand the audio. Please try again." },
         ]);
       }
       
     } catch (error) {
-      console.error("❌ Audio send error:", error.response?.data || error.message);
+      console.error("❌ Error:", error.response?.data || error.message);
+      
+      // Remove any "thinking" message
+      setTranscript((prev) => {
+        const newTranscript = [...prev];
+        if (newTranscript[newTranscript.length - 1]?.isTyping) {
+          newTranscript.pop();
+        }
+        return newTranscript;
+      });
+
       setTranscript((prev) => [
         ...prev,
         { speaker: "You", text: "[Recording Sent]" },
-        { speaker: "AI Guest", text: "[Failed to fetch answer]" },
+        { speaker: "AI Guest", text: "[Failed to process request]" },
       ]);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -172,6 +236,7 @@ const NewPanelsRecording = () => {
     setTranscript([{ speaker: "AI Guest", text: "Hello! Ready when you are." }]);
     setIsRecording(false);
     setIsPaused(false);
+    setIsProcessing(false);
   };
 
   return (
@@ -181,7 +246,12 @@ const NewPanelsRecording = () => {
         <h2 className="font-semibold mb-4 text-lg">Transcript</h2>
         <div className="flex flex-col">
           {transcript.map((entry, idx) => (
-            <TranscriptBubble key={idx} speaker={entry.speaker} text={entry.text} />
+            <TranscriptBubble 
+              key={idx} 
+              speaker={entry.speaker} 
+              text={entry.text}
+              isTyping={entry.isTyping || false}
+            />
           ))}
         </div>
       </div>
@@ -192,14 +262,21 @@ const NewPanelsRecording = () => {
           <h2 className="font-semibold mb-6 text-lg text-center">Recording Studio</h2>
           <Waveform isRecording={isRecording && !isPaused} />
 
+          {/* Processing indicator */}
+          {isProcessing && (
+            <div className="text-center mt-4">
+              <p className="text-sm text-gray-600 animate-pulse">Processing your request...</p>
+            </div>
+          )}
+
           <div className="flex justify-center space-x-4 mt-8">
-            {!isRecording && (
+            {!isRecording && !isProcessing && (
               <button onClick={startRecording} className="flex items-center space-x-2 bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition">
                 <Icon name="play" className="w-5 h-5" /> <span>Start</span>
               </button>
             )}
 
-            {isRecording && !isPaused && (
+            {isRecording && !isPaused && !isProcessing && (
               <>
                 <button onClick={pauseRecording} className="flex items-center space-x-2 bg-yellow-500 text-white px-6 py-3 rounded-lg hover:bg-yellow-600 transition">
                   <Icon name="pause" className="w-5 h-5" /> <span>Pause</span>
@@ -210,7 +287,7 @@ const NewPanelsRecording = () => {
               </>
             )}
 
-            {isRecording && isPaused && (
+            {isRecording && isPaused && !isProcessing && (
               <>
                 <button onClick={resumeRecording} className="flex items-center space-x-2 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition">
                   <Icon name="play" className="w-5 h-5" /> <span>Resume</span>
@@ -221,7 +298,15 @@ const NewPanelsRecording = () => {
               </>
             )}
 
-            <button onClick={restartRecording} className="flex items-center space-x-2 bg-gray-400 text-white px-6 py-3 rounded-lg hover:bg-gray-500 transition">
+            <button 
+              onClick={restartRecording} 
+              disabled={isProcessing}
+              className={`flex items-center space-x-2 px-6 py-3 rounded-lg transition ${
+                isProcessing 
+                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                  : 'bg-gray-400 text-white hover:bg-gray-500'
+              }`}
+            >
               <Icon name="restart" className="w-5 h-5" /> <span>Restart</span>
             </button>
           </div>

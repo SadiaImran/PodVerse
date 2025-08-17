@@ -7,9 +7,14 @@ load_dotenv()
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_ANON_KEY")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
     raise ValueError("Missing SUPABASE_URL or SUPABASE_KEY in .env")
+
+if not SUPABASE_SERVICE_ROLE_KEY:
+    raise ValueError("Missing SUPABASE_SERVICE_ROLE_KEY in .env")
+
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -36,3 +41,10 @@ async def get_authenticated_supabase_client(authorization: str = Header(...)):
     except Exception as e:
         print(f"Failed to create authenticated client: {e}")
         raise HTTPException(status_code=500, detail="Internal server error.")
+
+
+def get_service_role_client() -> Client:
+    """Return a Supabase client created with the service role key (server-only)."""
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set in env for server inserts.")
+    return create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)

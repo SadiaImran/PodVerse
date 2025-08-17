@@ -1,9 +1,9 @@
-supabase 
-requests 
+supabase
+requests
 python-dotenv
-fastapi 
-uvicorn 
-psycopg2-binary 
+fastapi
+uvicorn
+psycopg2-binary
 sqlalchemy
 langchain_ollama
 langchain_huggingface
@@ -20,4 +20,5 @@ langchain
 langchain-core
 langchain-openai
 langchain-text-splitters
-langchain-
+PyPDF2
+numpy
