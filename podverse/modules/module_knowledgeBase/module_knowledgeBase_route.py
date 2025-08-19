@@ -426,9 +426,49 @@ async def query_audio(audio: UploadFile = File(...), auth_data: dict = Depends(g
         except:
             pass
 
+
+# Add these imports at the top of your file
+import os
+import base64
+import tempfile
+from fastapi.responses import JSONResponse
+from gradio_client import Client
+
+_tts_client = None
+
+def get_tts_client():
+    global _tts_client
+    if _tts_client is None:
+        _tts_client = Client(
+            "https://sadiaimran-styletts2-f1.hf.space/",
+            hf_token="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",
+        )
+    return _tts_client
+
+def generate_tts_audio(text: str, voice: str = "f-us-1", steps: int = 3):
+    """Generate TTS audio using HuggingFace and return base64"""
+    try:
+        tts_client = get_tts_client()
+        result = tts_client.predict(text, voice, steps, api_name="/synthesize")
+        # Read the audio file and convert to base64
+        with open(result, 'rb') as audio_file:
+            audio_bytes = audio_file.read()
+        
+        # Clean up temp file
+        if os.path.exists(result):
+            os.remove(result)
+            
+        # Convert to base64
+        audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
+        return audio_base64
+        
+    except Exception as e:
+        print(f"TTS generation failed: {e}")
+        return None
+
 @router.post("/respond/")
 async def generate_response(query: str = Form(...), auth_data: dict = Depends(get_authenticated_supabase_client)):
-    """Generate AI response for the given query"""
+    """Generate AI response for the given query - returns both text and audio"""
     try:
         supabase_authenticated = auth_data["client"]
         user_id = auth_data["user_id"]
@@ -437,20 +477,26 @@ async def generate_response(query: str = Form(...), auth_data: dict = Depends(ge
         # Handle small talk
         smalltalk = detect_small_talk(q)
         if smalltalk:
-            tts = gTTS(smalltalk)
-            audio_filename = f"response_{user_id}.mp3"
-            tts.save(audio_filename)
-            return {"answer_text": smalltalk, "sources": [], "audio_file_url": f"/audio/{audio_filename}"}
+            audio_data = generate_tts_audio(smalltalk)
+            return {
+                "answer_text": smalltalk, 
+                "sources": [], 
+                "audio_data": audio_data,
+                "audio_type": "audio/wav"
+            }
 
         # Check if user has documents
         try:
             docs_resp = supabase_authenticated.table("documents").select("id, content").eq("user_id", user_id).limit(3).execute()
             if not docs_resp.data:
                 msg = "I don't have any documents for you yet. Please upload a file first."
-                tts = gTTS(msg)
-                audio_filename = f"response_{user_id}.mp3"
-                tts.save(audio_filename)
-                return {"answer_text": msg, "sources": [], "audio_file_url": f"/audio/{audio_filename}"}
+                audio_data = generate_tts_audio(msg)
+                return {
+                    "answer_text": msg, 
+                    "sources": [], 
+                    "audio_data": audio_data,
+                    "audio_type": "audio/wav"
+                }
         except Exception as e:
             print(f"[respond] Error checking documents: {e}")
 
@@ -512,10 +558,13 @@ async def generate_response(query: str = Form(...), auth_data: dict = Depends(ge
 
         if not candidate_rows:
             answer = "I don't know based on the provided documents."
-            tts = gTTS(answer)
-            audio_filename = f"response_{user_id}.mp3"
-            tts.save(audio_filename)
-            return {"answer_text": answer, "sources": [], "audio_file_url": f"/audio/{audio_filename}"}
+            audio_data = generate_tts_audio(answer)
+            return {
+                "answer_text": answer, 
+                "sources": [], 
+                "audio_data": audio_data,
+                "audio_type": "audio/wav"
+            }
 
         # Convert to documents
         retrieved_documents = []
@@ -547,12 +596,15 @@ async def generate_response(query: str = Form(...), auth_data: dict = Depends(ge
                 "snippet": doc.page_content[:300]
             })
 
-        # Generate audio
-        audio_filename = f"response_{user_id}.mp3"
-        tts = gTTS(answer)
-        tts.save(audio_filename)
-
-        return {"answer_text": answer, "sources": sources, "audio_file_url": f"/audio/{audio_filename}"}
+        # Generate audio for the final answer
+        audio_data = generate_tts_audio(answer)
+        
+        return {
+            "answer_text": answer,
+            "sources": sources,
+            "audio_data": audio_data,
+            "audio_type": "audio/wav"
+        }
 
     except Exception as e:
         print(f"[respond] Error: {e}")

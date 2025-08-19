@@ -25,7 +25,10 @@ async def get_authenticated_supabase_client(authorization: str = Header(...)):
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Authorization token missing.")
     
+    print("AUTH HEADER:", authorization)
     jwt_token = authorization.split(" ")[1]
+    print("JWT TOKEN:", jwt_token)
+
 
     # Validate the JWT token using the global anonymous client
     user_response = supabase.auth.get_user(jwt_token)

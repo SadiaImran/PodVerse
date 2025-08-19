@@ -22,3 +22,4 @@ langchain-openai
 langchain-text-splitters
 PyPDF2
 numpy
+gradio_client
