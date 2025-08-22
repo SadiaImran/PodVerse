@@ -1,0 +1,342 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { 
+  Scissors, Upload, Volume2, Settings ,
+  ZoomIn, ZoomOut 
+} from 'lucide-react';
+
+import { LuRefreshCcw , LuRedo , LuUndo } from "react-icons/lu";
+import BaseLayout from '../components/layouts/BaseLayout';
+import AudioHeader from '../components/comp-audio-editing/comp-audio-header';
+
+
+// Sidebar Icon Component
+const SidebarIcon = ({ icon: Icon }) => (
+  <div className="mb-6">
+    <Icon size={24} className="text-gray-400" />
+  </div>
+);
+
+// Timeline Component
+const Timeline = ({ currentTime, totalTime, onTimeChange }) => {
+  const timeMarkers = ['00:00', '00:05', '00:10', '00:15'];
+  
+  return (
+    <div className="mb-4">
+      <TimeMarkers markers={timeMarkers} />
+      <TimeRuler 
+        currentTime={currentTime} 
+        totalTime={totalTime} 
+        onTimeChange={onTimeChange} 
+      />
+    </div>
+  );
+};
+
+// Time Markers Component
+const TimeMarkers = ({ markers }) => (
+  <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
+    {markers.map((marker, index) => (
+      <span key={index}>{marker}</span>
+    ))}
+  </div>
+);
+
+// Time Ruler Component
+const TimeRuler = ({ currentTime, totalTime, onTimeChange }) => (
+  <div className="relative h-8 bg-gray-50 border rounded cursor-pointer" onClick={onTimeChange}>
+    {/* Time markers */}
+    {[0, 25, 50, 75, 100].map(pos => (
+      <div 
+        key={pos}
+        className="absolute top-0 h-full w-px bg-gray-300"
+        style={{ left: `${pos}%` }}
+      />
+    ))}
+    
+    <PlayheadIndicator currentTime={currentTime} totalTime={totalTime} />
+  </div>
+);
+
+// Playhead Indicator Component
+const PlayheadIndicator = ({ currentTime, totalTime }) => (
+  <div 
+    className="absolute top-0 w-px h-full bg-black z-10"
+    style={{ left: `${(currentTime / totalTime) * 100}%` }}
+  >
+    <div className="w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-black -translate-x-1/2"></div>
+  </div>
+);
+
+// Drop Zone Component
+const DropZone = ({ onFileDrop }) => (
+  <div className="mb-6 p-4">
+    <div 
+      className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center text-gray-500 hover:border-gray-400 transition-colors cursor-pointer"
+      onDrop={onFileDrop}
+      onDragOver={(e) => e.preventDefault()}
+    >
+      <Upload size={32} className="mx-auto mb-3 text-gray-400" />
+      <p>Drag and drop media here</p>
+    </div>
+  </div>
+);
+
+// Audio Track Component
+const AudioTrack = ({ trackData }) => (
+  <div className=" px-4">
+    <div className="flex items-center mb-2">
+    <Volume2 size={16} className="text-gray-600 mr-2" />
+    <span className="text-sm text-gray-700">Audio Track</span>
+  </div>
+  <div className="bg-gray-50 border rounded-lg p-4 flex gap-4  items-center">
+      <AudioClip clipData={trackData} />
+      <AudioClip clipData={trackData} />
+  </div>
+  </div>
+);
+
+// Audio Clip Component
+const AudioClip = ({ clipData }) => (
+  <div 
+    className="bg-light-lavender rounded px-3 py-2 text-white text-sm font-medium inline-block"
+    style={{ width: '200px' }}
+  >
+    <ClipInfo name="mic_test.wav" duration="00:05:00" />
+    <div className="flex items-center h-4 mt-1 gap-px">
+    {Array.from({ length: 40 }, (_, i) => (
+      <div
+        key={i}
+        className="w-1 bg-white rounded"
+        style={{ height: `${Math.random() * 16 + 4}px` }}
+      />
+    ))}
+  </div>
+  </div>
+);
+
+// Clip Info Component
+const ClipInfo = ({ name, duration }) => (
+  <div className="flex items-center gap-2">
+    <span>{name}</span>
+    <span className="text-xs opacity-75">{duration}</span>
+  </div>
+);
+
+
+// Waveform Editor Component
+const WaveformEditor = ({ zoom, setZoom, waveformData, currentTime, totalTime }) => (
+  <div className="mb-6">
+    <WaveformHeader zoom={zoom} setZoom={setZoom} />
+    <WaveformDisplay 
+      waveformData={waveformData} 
+      currentTime={currentTime} 
+      totalTime={totalTime}
+      zoom={zoom}
+    />
+  </div>
+);
+
+// Waveform Header Component
+const WaveformHeader = ({ zoom, setZoom }) => (
+  <div className="flex items-center justify-between mb-4">
+    <h3 className="text-lg font-semibold text-gray-800">Waveform</h3>
+    <ZoomControls zoom={zoom} setZoom={setZoom} />
+  </div>
+);
+
+// Zoom Controls Component
+const ZoomControls = ({ zoom, setZoom }) => (
+  <div className="flex items-center gap-2">
+    <button 
+      onClick={() => setZoom(Math.max(0.5, zoom - 0.25))}
+      className="p-2 rounded hover:bg-gray-100"
+    >
+      <ZoomOut size={16} className="text-gray-600" />
+    </button>
+    
+    <span className="text-sm text-gray-600 min-w-[50px] text-center">
+      {Math.round(zoom * 100)}%
+    </span>
+    
+    <button 
+      onClick={() => setZoom(Math.min(3, zoom + 0.25))}
+      className="p-2 rounded hover:bg-gray-100"
+    >
+      <ZoomIn size={16} className="text-gray-600" />
+    </button>
+  </div>
+);
+
+// Waveform Display Component
+const WaveformDisplay = ({ waveformData, currentTime, totalTime, zoom }) => (
+  <div className="relative flex-1 h-32 bg-gray-100 rounded-lg overflow-hidden border">
+    <WaveformBars 
+      waveformData={waveformData} 
+      currentTime={currentTime} 
+      totalTime={totalTime}
+      zoom={zoom}
+    />
+    <PlayheadIndicator currentTime={currentTime} totalTime={totalTime} />
+    <SelectionArea />
+  </div>
+);
+
+// Waveform Bars Component
+const WaveformBars = ({ waveformData, currentTime, totalTime, zoom }) => (
+  <div className="flex items-center h-full px-2">
+    {waveformData.slice(0, Math.floor(800 * zoom)).map((bar, index) => (
+      <div
+        key={index}
+        className="w-px mx-px"
+        style={{
+          height: `${bar.amplitude * 100}%`,
+          backgroundColor: index < (currentTime / totalTime) * waveformData.length 
+            ? '#22d3ee' 
+            : '#94a3b8'
+        }}
+      />
+    ))}
+  </div>
+);
+
+// Selection Area Component
+const SelectionArea = () => (
+  <div 
+    className="absolute top-0 h-full bg-blue-200 opacity-30 border border-blue-400"
+    style={{ left: '30%', width: '25%' }}
+  >
+    <div className="absolute left-0 top-0 w-2 h-full bg-blue-500 cursor-w-resize"></div>
+    <div className="absolute right-0 top-0 w-2 h-full bg-blue-500 cursor-e-resize"></div>
+  </div>
+);
+
+// Bottom Controls Component
+const BottomControls = ({ onSave, onCancel }) => (
+  <div className="flex items-center justify-between">
+    <ActionButtons />
+    <SaveButtons onSave={onSave} onCancel={onCancel} />
+  </div>
+);
+
+// Action Buttons Component
+const ActionButtons = () => {
+  const actions = [
+    { icon : Scissors, label: 'Slip at 00:20:20', style: 'text-blue-600 hover:text-blue-700' },
+    { icon : Scissors, label: 'Trim clip', style: 'text-blue-600 hover:text-blue-700' },
+    { icon : LuRefreshCcw, label: 'Revert to original', style: 'text-gray-600 hover:text-gray-700' },
+    { icon : LuUndo  ,label: 'Undo', style: 'text-gray-600 hover:text-gray-700' },
+    { icon : LuRedo,label: 'Redo', style: 'text-gray-600 hover:text-gray-700' }
+  ];
+
+  return (
+    <div className="flex items-center gap-4">
+      {actions.map((action, index) => (
+        <button key={index} className={`text-sm ${action.style} flex items-center gap-3`}>
+         <action.icon size={20} className="text-gray-700" />
+          {action.label}
+          
+        </button>
+      ))}
+    </div>
+  );
+};
+
+// Save Buttons Component
+const SaveButtons = ({ onSave, onCancel }) => (
+  <div className="flex items-center gap-3">
+    <button 
+      onClick={onCancel}
+      className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+    >
+      Cancel
+    </button>
+    
+    <button 
+      onClick={onSave}
+      className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+    >
+      Save changes
+    </button>
+  </div>
+);
+
+// ============= MAIN COMPONENT =============
+
+const AudioEditor = () => {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(125); // 00:02:05
+  const [totalTime, setTotalTime] = useState(305); // 00:05:05
+  const [zoom, setZoom] = useState(1);
+  const [selectedTool, setSelectedTool] = useState('cursor');
+  const [waveformData, setWaveformData] = useState([]);
+
+  // Generate sample waveform data
+  useEffect(() => {
+    const data = Array.from({ length: 1000 }, (_, i) => ({
+      amplitude: Math.random() * 0.8 + 0.1,
+      frequency: Math.sin(i * 0.1) * 0.3 + 0.5
+    }));
+    setWaveformData(data);
+  }, []);
+
+  // Event handlers
+  const handleFileDrop = (e) => {
+    e.preventDefault();
+    console.log('File dropped');
+  };
+
+  const handleTimeChange = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const percentage = x / rect.width;
+    setCurrentTime(percentage * totalTime);
+  };
+
+  const handleSave = () => {
+    console.log('Saving changes...');
+  };
+
+  const handleCancel = () => {
+    console.log('Cancelling changes...');
+  };
+
+  return (
+    <BaseLayout >
+        <main className="p-6 bg-gray-50 flex flex-col">
+            {/* Heading Line */}
+            <div className="text-3xl font-headingPoppins font-bold text-light-purple mb-6">🎶 Shape Your Sound, Your Way</div>
+            
+            {/* Main Content Editing */}
+            <div className="border-2 mt-6 mb-6 rounded-2xl shadow-md overflow-hidden">
+                <AudioHeader 
+                />
+                 <DropZone onFileDrop={handleFileDrop} />
+                 <AudioTrack trackData={{ name: 'mic_test.wav', duration: '00:05:00' }} />
+          
+                <div className="flex-1 p-6">
+                <Timeline 
+                    currentTime={currentTime}
+                    totalTime={totalTime}
+                    onTimeChange={handleTimeChange}
+                />
+                <WaveformEditor 
+                    zoom={zoom}
+                    setZoom={setZoom}
+                    waveformData={waveformData}
+                    currentTime={currentTime}
+                    totalTime={totalTime}
+                />
+          
+          <BottomControls 
+            onSave={handleSave}
+            onCancel={handleCancel}
+          />
+        </div>
+            </div>
+            
+        </main>  
+    </BaseLayout>
+  );
+};
+
+export default AudioEditor;

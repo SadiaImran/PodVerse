@@ -9,6 +9,7 @@ import ForgotPassword from './assets/components/comp-signin/ForgotPassword';
 import ResetPassword from './assets/components/comp-signin/ResetPassword';
 import { AuthProvider } from './assets/context/AuthContext';
 import PrivateRoute from './assets/components/PrivateRoute'; 
+import AudioEditor from './assets/screens/screen-audio-edit';
 
 function App() {
   return (
@@ -51,6 +52,14 @@ function App() {
             element={
               <PrivateRoute>
                 <ScreenRecording />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/audio-edit"
+            element={
+              <PrivateRoute>
+                <AudioEditor />
               </PrivateRoute>
             }
           />
