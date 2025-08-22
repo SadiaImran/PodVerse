@@ -5,61 +5,74 @@ import { supabase } from "../../connection_supabase_client";
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null); // holds user + profile info
+  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Load current session and profile on mount
   useEffect(() => {
     const getInitialSession = async () => {
-      setLoading(true);
-      const { data: { session } } = await supabase.auth.getSession();
-
-      if (session?.user) {
-        await loadProfile(session.user);
-      }
-      setLoading(false);
-    };
-
-    getInitialSession();
-
-    // Listen for auth state changes
-    const { data: subscription } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      try {
+        setLoading(true);
+        const { data: { session }, error } = await supabase.auth.getSession();
+  
         if (session?.user) {
           await loadProfile(session.user);
         } else {
           setUser(null);
         }
+      } catch (err) {
+        console.error("❗ Unexpected error fetching session:", err);
+      } finally {
+        setLoading(false);
       }
-    );
-
-    return () => subscription.subscription.unsubscribe();
+    };
+  
+    getInitialSession();
   }, []);
+  
 
-  // Fetch user profile from "profiles" table
+  // ✅ Fetch user profile safely
   const loadProfile = async (authUser) => {
-    const { data: profile, error } = await supabase
-      .from("profiles")
-      .select("full_name, profile_url")
-      .eq("id", authUser.id)
-      .single();
+    try {
+      const { data: profile, error } = await supabase
+        .from("profiles")
+        .select("full_name, profile_url")
+        .eq("id", authUser.id)
+        .single();
 
-    setUser({
-      id: authUser.id,
-      email: authUser.email,
-      full_name: profile?.full_name || "",
-      profile_url: profile?.profile_url || null,
-    });
+      if (error && error.code !== "PGRST116") {
+        // Ignore "No rows found" error
+        console.error("Error fetching profile:", error.message);
+      }
+
+      setUser({
+        id: authUser.id,
+        email: authUser.email,
+        full_name: profile?.full_name || "",
+        profile_url: profile?.profile_url || null,
+      });
+    } catch (err) {
+      console.error("Unexpected error loading profile:", err);
+      setUser({
+        id: authUser.id,
+        email: authUser.email,
+        full_name: "",
+        profile_url: null,
+      });
+    }
   };
 
+  // ✅ Logout function
   const logout = async () => {
-    await supabase.auth.signOut();
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.error("Logout failed:", error.message);
+    }
     setUser(null);
   };
 
   return (
     <AuthContext.Provider value={{ user, loading, setUser, logout }}>
-      {children}
+      {!loading ? children : <div>Loading...</div>}
     </AuthContext.Provider>
   );
 };

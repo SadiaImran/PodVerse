@@ -6,6 +6,7 @@ import ProfileMarry from "../../images/icon-profile-marry.png";
 import Logo from "../../images/logo.png";
 import { supabase } from "../../../connection_supabase_client";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext"; // adjust path if needed
 
 export default function TopBar({ open }) {
   const navigate = useNavigate();
@@ -15,6 +16,8 @@ export default function TopBar({ open }) {
   const [fullName, setFullName] = useState("");
   const [previewUrl, setPreviewUrl] = useState(null);
   const dropdownRef = useRef(null);
+
+  const { logout } = useAuth();
 
   // Load user profile from Supabase
   useEffect(() => {
@@ -51,10 +54,10 @@ export default function TopBar({ open }) {
   }, []);
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    navigate("/signin-email");
+    await logout();
+    window.location.href = "/signin-email"; // full redirect clears cached session
   };
-
+  
   const handleSaveProfile = async () => {
     const { error } = await supabase
       .from("profiles")

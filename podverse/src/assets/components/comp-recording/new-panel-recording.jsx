@@ -1,5 +1,10 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
+import { supabase } from "../../../connection_supabase_client";
+import { useAuth } from "../../context/AuthContext";
+import axios from "axios";
 
+
+// Icons
 const Icon = ({ name, className }) => {
   const icons = {
     play: <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3" /></svg>,
@@ -7,36 +12,72 @@ const Icon = ({ name, className }) => {
     stop: <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" /></svg>,
     restart: <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M1 4v6h6" /><path d="M3.51 15a7 7 0 0 0 13.58-2h4" /></svg>,
     edit: <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z" /></svg>,
+    mic: <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" x2="12" y1="19" y2="23" /><line x1="8" x2="16" y1="23" y2="23" /></svg>,
+    volume: <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><path d="M15.54 8.46a5 5 0 0 1 0 7.07" /><path d="M19.07 4.93a10 10 0 0 1 0 14.14" /></svg>,
   };
   return icons[name] || null;
 };
 
-const TranscriptBubble = ({ speaker, text }) => (
-  <div className={`mb-2 max-w-xs p-2 rounded-md flex flex-col ${
-    speaker === "You" ? "bg-purple-200 self-end" : "bg-gray-200 self-start"
+// Transcript bubble with speaking animation
+const TranscriptBubble = ({ speaker, text, isTyping = false, isSpeaking = false }) => (
+  <div className={`mb-3 max-w-xs p-3 rounded-lg flex flex-col transition-all duration-300 ${
+    speaker === "You" 
+      ? "bg-blue-500 text-white self-end ml-8 rounded-br-none" 
+      : `bg-white border-2 self-start mr-8 rounded-bl-none ${
+          isSpeaking ? 'border-green-400 shadow-lg' : 'border-gray-200'
+        }`
   }`}>
-    <p className="text-xs font-semibold text-gray-700 mb-1">{speaker}</p>
-    <p className="text-sm text-gray-900">{text}</p>
+    <div className="flex items-center justify-between mb-1">
+      <p className={`text-xs font-semibold ${
+        speaker === "You" ? "text-blue-100" : "text-gray-600"
+      }`}>
+        {speaker}
+      </p>
+      {isSpeaking && (
+        <div className="flex space-x-1">
+          <div className="w-1 h-1 bg-green-500 rounded-full animate-pulse"></div>
+          <div className="w-1 h-1 bg-green-500 rounded-full animate-pulse" style={{animationDelay: '0.2s'}}></div>
+          <div className="w-1 h-1 bg-green-500 rounded-full animate-pulse" style={{animationDelay: '0.4s'}}></div>
+        </div>
+      )}
+    </div>
+    <p className={`text-sm ${
+      speaker === "You" ? "text-white" : "text-gray-800"
+    }`}>
+      {isTyping ? (
+        <span>
+          {text}
+          <span className="animate-pulse ml-1">●</span>
+        </span>
+      ) : (
+        text
+      )}
+    </p>
   </div>
 );
 
-const Waveform = ({ isRecording }) => (
-  <div className="flex space-x-1 h-12 items-center justify-center">
-    {[...Array(20)].map((_, i) => (
+// Enhanced waveform with podcast-style visualization
+const Waveform = ({ isRecording, isSpeaking }) => (
+  <div className="flex space-x-1 h-16 items-center justify-center p-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl">
+    {[...Array(25)].map((_, i) => (
       <div
         key={i}
-        className={`w-1.5 bg-purple-600 rounded-sm origin-bottom animate-wave`}
+        className={`w-1.5 rounded-full origin-bottom transition-all duration-300 ${
+          isRecording ? 'bg-red-500 animate-wave' : 
+          isSpeaking ? 'bg-green-500 animate-wave' : 
+          'bg-gray-300'
+        }`}
         style={{
-          animationDelay: `${i * 0.1}s`,
-          animationDuration: `${0.6 + (i % 3) * 0.3}s`,
-          height: isRecording ? `${5 + (i % 7) * 5}px` : "2px",
+          animationDelay: `${i * 0.08}s`,
+          animationDuration: `${0.5 + (i % 4) * 0.2}s`,
+          height: (isRecording || isSpeaking) ? `${8 + (i % 8) * 6}px` : "4px",
         }}
       />
     ))}
     <style>{`
       @keyframes wave {
-        0%, 100% { transform: scaleY(0.4); }
-        50% { transform: scaleY(1); }
+        0%, 100% { transform: scaleY(0.3); opacity: 0.7; }
+        50% { transform: scaleY(1.2); opacity: 1; }
       }
       .animate-wave {
         animation-name: wave;
@@ -47,27 +88,370 @@ const Waveform = ({ isRecording }) => (
   </div>
 );
 
+// Status indicator component
+const StatusIndicator = ({ isRecording, isProcessing, isSpeaking }) => {
+  if (isRecording) {
+    return (
+      <div className="flex items-center space-x-2 text-red-600">
+        <div className="w-3 h-3 bg-red-600 rounded-full animate-pulse"></div>
+        <span className="font-medium">Recording...</span>
+      </div>
+    );
+  }
+  if (isProcessing) {
+    return (
+      <div className="flex items-center space-x-2 text-blue-600">
+        <div className="w-3 h-3 bg-blue-600 rounded-full animate-pulse"></div>
+        <span className="font-medium">Processing...</span>
+      </div>
+    );
+  }
+  if (isSpeaking) {
+    return (
+      <div className="flex items-center space-x-2 text-green-600">
+        <div className="w-3 h-3 bg-green-600 rounded-full animate-pulse"></div>
+        <span className="font-medium">AI Speaking...</span>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center space-x-2 text-gray-500">
+      <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
+      <span className="font-medium">Ready to record</span>
+    </div>
+  );
+};
+
 const NewPanelsRecording = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [currentSpeakingIndex, setCurrentSpeakingIndex] = useState(-1);
   const [transcript, setTranscript] = useState([
-    { speaker: "AI Guest", text: "Hello! Ready when you are." },
+    { speaker: "AI Host", text: "Hello! Welcome to our podcast. I'm ready when you are. Let's have a great conversation!" },
   ]);
-  const [audioUrl, setAudioUrl] = useState(null);
+
   const recorderRef = useRef(null);
   const gumStreamRef = useRef(null);
+  const currentAudioRef = useRef(null);
+  const transcriptEndRef = useRef(null);
 
-  // Placeholder function — backend call commented for now
+
+  // Auto-scroll to bottom of transcript
+  useEffect(() => {
+    transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [transcript]);
+
+  // Play base64 audio data from backend
+  const playBase64Audio = async (base64Audio, messageIndex) => {
+    try {
+      // Stop any currently playing audio
+      if (currentAudioRef.current) {
+        currentAudioRef.current.pause();
+        currentAudioRef.current = null;
+      }
+
+      setIsSpeaking(true);
+      setCurrentSpeakingIndex(messageIndex);
+
+      // Convert base64 to blob
+      const audioBytes = atob(base64Audio);
+      const audioArray = new Uint8Array(audioBytes.length);
+      for (let i = 0; i < audioBytes.length; i++) {
+        audioArray[i] = audioBytes.charCodeAt(i);
+      }
+      const audioBlob = new Blob([audioArray], { type: 'audio/wav' });
+
+      // Create audio URL and play it
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+      currentAudioRef.current = audio;
+
+      // Set up audio event listeners
+      audio.onplay = () => {
+        console.log("🔊 HuggingFace audio started playing");
+      };
+
+      audio.onended = () => {
+        console.log("🔊 HuggingFace audio finished playing");
+        setIsSpeaking(false);
+        setCurrentSpeakingIndex(-1);
+        URL.revokeObjectURL(audioUrl);
+        currentAudioRef.current = null;
+      };
+
+      audio.onerror = (error) => {
+        console.error("🔊 HuggingFace audio playback error:", error);
+        setIsSpeaking(false);
+        setCurrentSpeakingIndex(-1);
+        URL.revokeObjectURL(audioUrl);
+        currentAudioRef.current = null;
+      };
+
+      audio.onpause = () => {
+        console.log("🔊 HuggingFace audio paused");
+        setIsSpeaking(false);
+        setCurrentSpeakingIndex(-1);
+      };
+
+      // Start playing the audio
+      await audio.play();
+
+    } catch (error) {
+      console.error("❌ Base64 audio playback error:", error.message);
+      setIsSpeaking(false);
+      setCurrentSpeakingIndex(-1);
+    }
+  };
+
+  // Enhanced TTS function using HuggingFace API via backend (kept as backup)
+  const speakText = async (text, messageIndex) => {
+    try {
+      // Stop any currently playing audio
+      if (currentAudioRef.current) {
+        currentAudioRef.current.pause();
+        currentAudioRef.current = null;
+      }
+
+      setIsSpeaking(true);
+      setCurrentSpeakingIndex(messageIndex);
+
+      // Get auth token
+      const sessionData = await supabase.auth.getSession();
+      const token = sessionData?.data?.session?.access_token;
+
+      // Send text to your backend TTS endpoint
+      const formData = new FormData();
+      formData.append("text", text);
+
+      console.log("🔊 Sending text for TTS:", text);
+      
+      const ttsResponse = await fetch("http://localhost:8000/text-to-speech/", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      if (!ttsResponse.ok) {
+        throw new Error(`TTS API failed: ${ttsResponse.status}`);
+      }
+
+      // Get the audio blob from response
+      const audioBlob = await ttsResponse.blob();
+      console.log("✅ Received TTS audio blob:", audioBlob);
+
+      await playAudioBlob(audioBlob, messageIndex);
+
+    } catch (error) {
+      console.error("TTS Error:", error);
+      setIsSpeaking(false);
+      setCurrentSpeakingIndex(-1);
+      
+      // Fallback to browser TTS if backend fails
+      console.log("🔄 Falling back to browser TTS");
+      fallbackToWebSpeech(text, messageIndex);
+    }
+  };
+
+  // Fallback function using browser's speechSynthesis
+  const fallbackToWebSpeech = (text, messageIndex) => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      
+      const utterance = new SpeechSynthesisUtterance(text);
+      
+      const voices = window.speechSynthesis.getVoices();
+      const preferredVoice = voices.find(voice => 
+        voice.name.includes('Google') || 
+        voice.name.includes('Microsoft') ||
+        voice.lang.startsWith('en')
+      );
+      
+      if (preferredVoice) {
+        utterance.voice = preferredVoice;
+      }
+      
+      utterance.rate = 0.9;
+      utterance.pitch = 1.0;
+      utterance.volume = 0.8;
+      
+      utterance.onstart = () => {
+        setIsSpeaking(true);
+        setCurrentSpeakingIndex(messageIndex);
+      };
+      
+      utterance.onend = () => {
+        setIsSpeaking(false);
+        setCurrentSpeakingIndex(-1);
+      };
+      
+      utterance.onerror = () => {
+        setIsSpeaking(false);
+        setCurrentSpeakingIndex(-1);
+      };
+      
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+  const { user } = useAuth();
+
   const sendChunkToBackend = async (chunkBlob) => {
-    console.log("Audio chunk ready:", chunkBlob);
-    // Future: send to Supabase backend when ready
+    try {
+      setIsProcessing(true);
+      
+      // Step 1: Send audio and get transcribed text immediately
+      const formData = new FormData();
+      formData.append("user_id", user?.id || "unknown");
+      formData.append("audio", chunkBlob, "query.wav");
+
+      const sessionData = await supabase.auth.getSession();
+      const token = sessionData?.data?.session?.access_token;
+
+      console.log("🎤 Sending audio for transcription...");
+      const transcriptionResponse = await axios.post("http://localhost:8000/query_audio/", formData, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }  
+      });
+
+      const transcriptionResult = await transcriptionResponse.data;
+      console.log("✅ Transcription response:", transcriptionResult);
+
+      // Immediately show the user's query
+      if (transcriptionResult.query) {
+        const userMessageIndex = transcript.length;
+        setTranscript((prev) => [
+          ...prev,
+          { speaker: "You", text: transcriptionResult.query },
+        ]);
+
+        // Step 2: Send the transcribed text to get AI response (text + audio)
+        console.log("🤖 Getting AI response for:", transcriptionResult.query);
+        
+        // Add a "thinking" message
+        const thinkingIndex = transcript.length + 1;
+        setTranscript((prev) => [
+          ...prev,
+          { speaker: "AI Host", text: "Let me think about that...", isTyping: true },
+        ]);
+
+        const responseFormData = new FormData();
+        responseFormData.append("query", transcriptionResult.query);
+
+        console.log("🔊 Getting AI response (text + audio)...");
+        const aiResponse = await fetch("http://localhost:8000/respond/", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`
+          },
+          body: responseFormData
+        });
+
+        if (aiResponse.ok) {
+          const aiResult = await aiResponse.json();
+          console.log("✅ AI response received:", aiResult);
+
+          const responseText = aiResult.answer_text || "[No response generated]";
+          
+          // Replace the "thinking" message with the actual response text
+          setTranscript((prev) => {
+            const newTranscript = [...prev];
+            if (newTranscript[newTranscript.length - 1].isTyping) {
+              newTranscript.pop();
+            }
+            newTranscript.push({
+              speaker: "AI Host",
+              text: responseText
+            });
+            return newTranscript;
+          });
+
+          // Play the audio if available
+          if (aiResult.audio_data) {
+            console.log("🔊 Playing HuggingFace TTS audio...");
+            await playBase64Audio(aiResult.audio_data, thinkingIndex);
+          } else {
+            // Fallback to browser TTS if no audio data
+            console.log("🔄 No audio data, using fallback TTS");
+            setTimeout(() => {
+              fallbackToWebSpeech(responseText, thinkingIndex);
+            }, 500);
+          }
+
+        } else {
+          throw new Error(`AI response failed: ${aiResponse.status}`);
+        }
+
+      } else {
+        // If no transcription, show error
+        setTranscript((prev) => [
+          ...prev,
+          { speaker: "You", text: transcriptionResult.error || "[No speech detected]" },
+          { speaker: "AI Host", text: "I couldn't understand the audio. Could you please try again?" },
+        ]);
+        
+        // Speak the error message using fallback
+        setTimeout(() => {
+          fallbackToWebSpeech("I couldn't understand the audio. Could you please try again?", transcript.length + 1);
+        }, 500);
+      }
+      
+    } catch (error) {
+      console.error("❌ Error:", error.message);
+      
+      // Remove any "thinking" message
+      setTranscript((prev) => {
+        const newTranscript = [...prev];
+        if (newTranscript[newTranscript.length - 1]?.isTyping) {
+          newTranscript.pop();
+        }
+        return newTranscript;
+      });
+
+      const errorMessage = "Sorry, I encountered an error processing your request. Let's try again.";
+      setTranscript((prev) => [
+        ...prev,
+        { speaker: "You", text: "[Recording Sent]" },
+        { speaker: "AI Host", text: errorMessage },
+      ]);
+
+      // Speak the error message using fallback
+      setTimeout(() => {
+        fallbackToWebSpeech(errorMessage, transcript.length + 1);
+      }, 500);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const resetRecorder = () => {
+    if (recorderRef.current) {
+      recorderRef.current.stop();
+      recorderRef.current = null;
+    }
+    if (gumStreamRef.current) {
+      gumStreamRef.current.getTracks().forEach((t) => t.stop());
+      gumStreamRef.current = null;
+    }
   };
 
   const startRecording = async () => {
     try {
+      // Stop any ongoing speech/audio
+      if (currentAudioRef.current) {
+        currentAudioRef.current.pause();
+        currentAudioRef.current = null;
+      }
+      window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+      setCurrentSpeakingIndex(-1);
+      
+      resetRecorder();
       const AudioContext = window.AudioContext || window.webkitAudioContext;
       const audioContext = new AudioContext();
-
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       gumStreamRef.current = stream;
 
@@ -78,8 +462,9 @@ const NewPanelsRecording = () => {
       recorderRef.current = recorder;
       setIsRecording(true);
       setIsPaused(false);
+      console.log("🎤 Recorder created", recorder);
     } catch (err) {
-      console.error("Recording failed to start:", err);
+      console.error("🎤 Start failed:", err);
     }
   };
 
@@ -87,29 +472,25 @@ const NewPanelsRecording = () => {
     const recorder = recorderRef.current;
     const gumStream = gumStreamRef.current;
 
-    if (!recorder) {
-      console.warn("Recorder is not initialized");
-      return;
-    }
-
+    if (!recorder) return;
     recorder.stop();
-    if (gumStream) gumStream.getTracks().forEach((track) => track.stop());
+    gumStream?.getTracks().forEach((track) => track.stop());
 
-    recorder.exportWAV(async (blob) => {
-      await sendChunkToBackend(blob);
+    recorder.exportWAV((blob) => {
+      console.log("🧾 Exported audio blob:", blob);
+      sendChunkToBackend(blob);
     });
 
+    recorderRef.current = null;
+    gumStreamRef.current = null;
     setIsRecording(false);
     setIsPaused(false);
   };
 
   const pauseRecording = () => {
-    const recorder = recorderRef.current;
-    const gumStream = gumStreamRef.current;
-
-    if (recorder && isRecording) {
-      recorder.stop();
-      if (gumStream) gumStream.getTracks().forEach((track) => track.stop());
+    if (isRecording && recorderRef.current) {
+      recorderRef.current.stop();
+      gumStreamRef.current?.getTracks().forEach((track) => track.stop());
       setIsPaused(true);
     }
   };
@@ -117,122 +498,154 @@ const NewPanelsRecording = () => {
   const resumeRecording = () => startRecording();
 
   const restartRecording = () => {
-    const recorder = recorderRef.current;
-    const gumStream = gumStreamRef.current;
-
-    if (recorder && isRecording) {
-      recorder.stop();
-      if (gumStream) gumStream.getTracks().forEach((track) => track.stop());
-      recorderRef.current = null;
-      gumStreamRef.current = null;
+    resetRecorder();
+    
+    // Stop any audio playback
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current = null;
     }
-
-    setTranscript([{ speaker: "AI Guest", text: "Hello! Ready when you are." }]);
-    setAudioUrl(null);
+    window.speechSynthesis.cancel();
+    
+    setTranscript([{ speaker: "AI Host", text: "Hello! Welcome to our podcast. I'm ready when you are. Let's have a great conversation!" }]);
     setIsRecording(false);
     setIsPaused(false);
+    setIsProcessing(false);
+    setIsSpeaking(false);
+    setCurrentSpeakingIndex(-1);
   };
+
+  const stopSpeaking = () => {
+    // Stop HuggingFace TTS audio
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current = null;
+    }
+    // Stop browser TTS as fallback
+    window.speechSynthesis.cancel();
+    setIsSpeaking(false);
+    setCurrentSpeakingIndex(-1);
+  };
+
   return (
-    <div className="flex h-full divide-x divide-gray-300">
-      {/* Transcript Section */}
-      <div className="w-1/3 p-4 flex flex-col overflow-y-auto bg-gray-50 rounded-l-lg">
-        <h2 className="font-semibold mb-4 text-lg">Transcript</h2>
-        <div className="flex flex-col">
-          {transcript.length === 0 && (
-            <p className="text-gray-500 italic">Transcript will appear here...</p>
-          )}
+    <div className="flex h-full divide-x divide-gray-200 bg-gradient-to-br from-purple-50 to-blue-50">
+      {/* Enhanced Transcript Section */}
+      <div className="w-1/3 p-6 flex flex-col overflow-y-auto bg-white/80 backdrop-blur-sm rounded-l-lg shadow-inner">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="font-bold text-xl text-gray-800">Live Transcript</h2>
+          <div className="flex items-center space-x-2 text-sm">
+            <Icon name="volume" className="w-4 h-4 text-gray-500" />
+            <span className="text-gray-500">{transcript.length - 1} exchanges</span>
+          </div>
+        </div>
+        
+        <div className="flex flex-col space-y-2 flex-1">
           {transcript.map((entry, idx) => (
-            <TranscriptBubble key={idx} speaker={entry.speaker} text={entry.text} />
+            <TranscriptBubble 
+              key={idx} 
+              speaker={entry.speaker} 
+              text={entry.text}
+              isTyping={entry.isTyping || false}
+              isSpeaking={currentSpeakingIndex === idx}
+            />
           ))}
+          <div ref={transcriptEndRef} />
         </div>
       </div>
 
-      {/* Recording Controls Section */}
+      {/* Enhanced Controls Section */}
       <div className="w-2/3 p-8 flex flex-col justify-between bg-white rounded-r-lg">
-        <div>
-          <h2 className="font-semibold mb-6 text-lg text-center">Recording Studio</h2>
+        <div className="space-y-6">
+          <div className="text-center">
+            <h2 className="font-bold text-2xl text-gray-800 mb-2">Podcast Studio</h2>
+            <StatusIndicator 
+              isRecording={isRecording && !isPaused} 
+              isProcessing={isProcessing} 
+              isSpeaking={isSpeaking}
+            />
+          </div>
 
-          <Waveform isRecording={isRecording && !isPaused} />
+          <Waveform isRecording={isRecording && !isPaused} isSpeaking={isSpeaking} />
 
-          <div className="flex justify-center space-x-4 mt-8">
-            {!isRecording && (
-              <button
-                onClick={startRecording}
-                className="flex items-center space-x-2 bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition"
+          {/* Main Control Buttons */}
+          <div className="flex justify-center space-x-4">
+            {!isRecording && !isProcessing && !isSpeaking && (
+              <button 
+                onClick={startRecording} 
+                className="flex items-center space-x-3 bg-gradient-to-r from-red-500 to-red-600 text-white px-8 py-4 rounded-full hover:from-red-600 hover:to-red-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105"
               >
-                <Icon name="play" className="w-5 h-5" />
-                <span>Start</span>
+                <Icon name="mic" className="w-6 h-6" /> 
+                <span className="font-medium">Start Recording</span>
               </button>
             )}
 
-            {isRecording && !isPaused && (
+            {isRecording && !isPaused && !isProcessing && (
               <>
-                <button
-                  onClick={pauseRecording}
-                  className="flex items-center space-x-2 bg-yellow-500 text-white px-6 py-3 rounded-lg hover:bg-yellow-600 transition"
+                <button 
+                  onClick={pauseRecording} 
+                  className="flex items-center space-x-2 bg-yellow-500 text-white px-6 py-3 rounded-full hover:bg-yellow-600 transition-all duration-200 shadow-lg"
                 >
-                  <Icon name="pause" className="w-5 h-5" />
-                  <span>Pause</span>
+                  <Icon name="pause" className="w-5 h-5" /> <span>Pause</span>
                 </button>
-                <button
-                  onClick={stopRecording}
-                  className="flex items-center space-x-2 bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 transition"
+                <button 
+                  onClick={stopRecording} 
+                  className="flex items-center space-x-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white px-6 py-3 rounded-full hover:from-blue-600 hover:to-blue-700 transition-all duration-200 shadow-lg"
                 >
-                  <Icon name="stop" className="w-5 h-5" />
-                  <span>Stop</span>
+                  <Icon name="stop" className="w-5 h-5" /> <span>Send</span>
                 </button>
               </>
             )}
 
-            {isRecording && isPaused && (
+            {isRecording && isPaused && !isProcessing && (
               <>
-                <button
-                  onClick={resumeRecording}
-                  className="flex items-center space-x-2 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition"
+                <button 
+                  onClick={resumeRecording} 
+                  className="flex items-center space-x-2 bg-green-600 text-white px-6 py-3 rounded-full hover:bg-green-700 transition-all duration-200 shadow-lg"
                 >
-                  <Icon name="play" className="w-5 h-5" />
-                  <span>Resume</span>
+                  <Icon name="play" className="w-5 h-5" /> <span>Resume</span>
                 </button>
-                <button
-                  onClick={stopRecording}
-                  className="flex items-center space-x-2 bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 transition"
+                <button 
+                  onClick={stopRecording} 
+                  className="flex items-center space-x-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white px-6 py-3 rounded-full hover:from-blue-600 hover:to-blue-700 transition-all duration-200 shadow-lg"
                 >
-                  <Icon name="stop" className="w-5 h-5" />
-                  <span>Stop</span>
+                  <Icon name="stop" className="w-5 h-5" /> <span>Send</span>
                 </button>
               </>
             )}
 
-            <button
-              onClick={restartRecording}
-              className="flex items-center space-x-2 bg-gray-400 text-white px-6 py-3 rounded-lg hover:bg-gray-500 transition"
-            >
-              <Icon name="restart" className="w-5 h-5" />
-              <span>Restart</span>
-            </button>
+            {isSpeaking && (
+              <button 
+                onClick={stopSpeaking} 
+                className="flex items-center space-x-2 bg-red-500 text-white px-6 py-3 rounded-full hover:bg-red-600 transition-all duration-200 shadow-lg"
+              >
+                <Icon name="stop" className="w-5 h-5" /> <span>Stop Speaking</span>
+              </button>
+            )}
           </div>
 
-          {audioUrl && (
-            <div className="mt-8 rounded border border-gray-300 p-3 bg-gray-50">
-              <audio controls src={audioUrl} className="w-full rounded" />
-            </div>
-          )}
+          {/* Secondary Controls */}
+          <div className="flex justify-center">
+            <button 
+              onClick={restartRecording} 
+              disabled={isProcessing}
+              className={`flex items-center space-x-2 px-6 py-2 rounded-full transition-all duration-200 ${
+                isProcessing 
+                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'
+              }`}
+            >
+              <Icon name="restart" className="w-4 h-4" /> <span>New Conversation</span>
+            </button>
+          </div>
         </div>
 
-        {/* Preview/Edit Button */}
-        <div className="mt-8">
-          <button
-            disabled={!audioUrl}
-            className={`w-full py-3 rounded font-semibold flex justify-center items-center space-x-2 transition ${
-              audioUrl
-                ? "bg-purple-600 text-white hover:bg-purple-700"
-                : "bg-gray-300 text-gray-600 cursor-not-allowed"
-            }`}
-            onClick={() => alert("Preview/Edit feature coming soon!")}
-          >
-            <Icon name="edit" className="w-5 h-5" />
-            <span>Preview & Edit</span>
-          </button>
+        <div className="mt-8 text-center">
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+            <p className="text-sm text-blue-700 font-medium mb-2">🎙️ Natural Conversation Mode</p>
+            <p className="text-xs text-blue-600">
+              Speak naturally, and I'll respond with voice just like a real podcast conversation!
+            </p>
+          </div>
         </div>
       </div>
     </div>
