@@ -7,7 +7,7 @@ import {
 import { LuRefreshCcw , LuRedo , LuUndo } from "react-icons/lu";
 import BaseLayout from '../components/layouts/BaseLayout';
 import AudioHeader from '../components/comp-audio-editing/comp-audio-header';
-
+import Waveform from '../components/comp-audio-editing/comp-audio-waveforms';
 
 // Sidebar Icon Component
 const SidebarIcon = ({ icon: Icon }) => (
@@ -68,7 +68,7 @@ const PlayheadIndicator = ({ currentTime, totalTime }) => (
 );
 
 // Drop Zone Component
-const DropZone = ({ onFileDrop }) => (
+const DropZone = ({ onFileDrop, onFileSelect }) => (
   <div className="mb-6 p-4">
     <div 
       className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center text-gray-500 hover:border-gray-400 transition-colors cursor-pointer"
@@ -76,22 +76,32 @@ const DropZone = ({ onFileDrop }) => (
       onDragOver={(e) => e.preventDefault()}
     >
       <Upload size={32} className="mx-auto mb-3 text-gray-400" />
-      <p>Drag and drop media here</p>
+      <p>Drag and drop media here or</p>
+      <input
+        type="file"
+        accept="audio/*"
+        onChange={onFileSelect}
+        className="mt-2"
+      />
     </div>
   </div>
 );
 
 // Audio Track Component
-const AudioTrack = ({ trackData }) => (
-  <div className=" px-4">
+const AudioTrack = ({ clips }) => (
+  <div className="px-4">
     <div className="flex items-center mb-2">
-    <Volume2 size={16} className="text-gray-600 mr-2" />
-    <span className="text-sm text-gray-700">Audio Track</span>
-  </div>
-  <div className="bg-gray-50 border rounded-lg p-4 flex gap-4  items-center">
-      <AudioClip clipData={trackData} />
-      <AudioClip clipData={trackData} />
-  </div>
+      <Volume2 size={16} className="text-gray-600 mr-2" />
+      <span className="text-sm text-gray-700">Audio Track</span>
+    </div>
+    <div
+      className="bg-gray-50 border rounded-lg p-4 flex gap-4 items-center overflow-x-auto flex-nowrap w-full"
+      style={{ minHeight: "70px" }}
+    >
+      {clips.map((clip, idx) => (
+        <AudioClip key={idx} clipData={clip} />
+      ))}
+    </div>
   </div>
 );
 
@@ -101,7 +111,7 @@ const AudioClip = ({ clipData }) => (
     className="bg-light-lavender rounded px-3 py-2 text-white text-sm font-medium inline-block"
     style={{ width: '200px' }}
   >
-    <ClipInfo name="mic_test.wav" duration="00:05:00" />
+    <ClipInfo name={clipData.name} duration={clipData.duration} />
     <div className="flex items-center h-4 mt-1 gap-px">
     {Array.from({ length: 40 }, (_, i) => (
       <div
@@ -263,28 +273,64 @@ const SaveButtons = ({ onSave, onCancel }) => (
 // ============= MAIN COMPONENT =============
 
 const AudioEditor = () => {
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(125); // 00:02:05
-  const [totalTime, setTotalTime] = useState(305); // 00:05:05
-  const [zoom, setZoom] = useState(1);
-  const [selectedTool, setSelectedTool] = useState('cursor');
-  const [waveformData, setWaveformData] = useState([]);
+  const [currentTime, setCurrentTime] = useState(0); // Start at 0
+  const [totalTime, setTotalTime] = useState(305);
+  const [audioUrl, setAudioUrl] = useState("");
+  const [audioClips, setAudioClips] = useState([]);
 
-  // Generate sample waveform data
-  useEffect(() => {
-    const data = Array.from({ length: 1000 }, (_, i) => ({
-      amplitude: Math.random() * 0.8 + 0.1,
-      frequency: Math.sin(i * 0.1) * 0.3 + 0.5
-    }));
-    setWaveformData(data);
-  }, []);
-
-  // Event handlers
+  // Drag & drop handler
   const handleFileDrop = (e) => {
     e.preventDefault();
-    console.log('File dropped');
+    const file = e.dataTransfer.files[0];
+    if (file) {
+      const url = URL.createObjectURL(file);
+      const audio = new Audio(url);
+      audio.onloadedmetadata = () => {
+        if(audioUrl == ""){
+          setAudioUrl(url);
+        }
+        setAudioClips(prev => [
+          ...prev,
+          {
+            name: file.name,
+            url,
+            duration: formatDuration(audio.duration)
+          }
+        ]);
+      };
+    }
   };
 
+  // File select handler
+  const handleFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const url = URL.createObjectURL(file);
+      const audio = new Audio(url);
+      audio.onloadedmetadata = () => {
+         if(audioUrl == ""){
+          setAudioUrl(url);
+        }
+        setAudioClips(prev => [
+          ...prev,
+          {
+            name: file.name,
+            url,
+            duration: formatDuration(audio.duration)
+          }
+        ]);
+      };
+    }
+  };
+
+  // Helper to format duration as mm:ss
+  function formatDuration(seconds) {
+    const min = Math.floor(seconds / 60).toString().padStart(2, "0");
+    const sec = Math.floor(seconds % 60).toString().padStart(2, "0");
+    return `${min}:${sec}`;
+  }
+
+  // Event handlers
   const handleTimeChange = (e) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -301,42 +347,30 @@ const AudioEditor = () => {
   };
 
   return (
-    <BaseLayout >
-        <main className="p-6 bg-gray-50 flex flex-col">
-            {/* Heading Line */}
-            <div className="text-3xl font-headingPoppins font-bold text-light-purple mb-6">🎶 Shape Your Sound, Your Way</div>
-            
-            {/* Main Content Editing */}
-            <div className="border-2 mt-6 mb-6 rounded-2xl shadow-md overflow-hidden">
-                <AudioHeader 
-                />
-                 <DropZone onFileDrop={handleFileDrop} />
-                 <AudioTrack trackData={{ name: 'mic_test.wav', duration: '00:05:00' }} />
-          
-                <div className="flex-1 p-6">
-                <Timeline 
-                    currentTime={currentTime}
-                    totalTime={totalTime}
-                    onTimeChange={handleTimeChange}
-                />
-                <WaveformEditor 
-                    zoom={zoom}
-                    setZoom={setZoom}
-                    waveformData={waveformData}
-                    currentTime={currentTime}
-                    totalTime={totalTime}
-                />
-          
-          <BottomControls 
-            onSave={handleSave}
-            onCancel={handleCancel}
-          />
+    <BaseLayout>
+      <main className="p-6 bg-gray-50 flex flex-col">
+        {/* Heading Line */}
+        <div className="text-3xl font-headingPoppins font-bold text-light-purple mb-6">🎶 Shape Your Sound, Your Way</div>
+        
+        {/* Main Content Editing */}
+        <div className="border-2 mt-6 mb-6 rounded-2xl shadow-md overflow-hidden">
+          <AudioHeader />
+          <DropZone onFileDrop={handleFileDrop} onFileSelect={handleFileSelect} />
+          <AudioTrack clips={audioClips} />
+          <div className="flex-1  p-6">
+            {audioUrl && (
+              <Waveform
+                url={audioUrl}
+                currentTime={currentTime}
+                setCurrentTime={setCurrentTime}
+                setTotalTime={setTotalTime}
+              />
+            )}
+            <BottomControls onSave={handleSave} onCancel={handleCancel} />
+          </div>
         </div>
-            </div>
-            
-        </main>  
+      </main>
     </BaseLayout>
   );
 };
-
 export default AudioEditor;
