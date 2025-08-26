@@ -40,13 +40,12 @@ function TimeMarkers({ duration, zoomLevel, width, interval = 5 }) {
   );
 }
 
-const Waveform = ({ url }) => {
+const Waveform = ({ url, duration, zoomLevel, width }) => {
   const waveformRef = useRef(null);
   const wavesurfer = useRef(null);
   const scrollContainerRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [duration, setDuration] = useState(0);
-  const [zoomLevel, setZoomLevel] = useState(INITIAL_PIXELS_PER_SECOND);
+  const [durationState, setDuration] = useState(0);
   const [isLoaded, setIsLoaded] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
 
@@ -98,7 +97,7 @@ const Waveform = ({ url }) => {
       });
 
       wavesurfer.current.on("seek", (progress) => {
-        setCurrentTime(progress * duration);
+        setCurrentTime(progress * durationState);
       });
 
       wavesurfer.current.on("redraw", () => {
@@ -136,7 +135,7 @@ const Waveform = ({ url }) => {
     setIsPlaying(!isPlaying);
   };
 
-  const waveformWidth = Math.max(window.innerWidth, duration * zoomLevel);
+  const waveformWidth = duration ? duration * zoomLevel : 300; // 30px per second default
 
   // Playhead position
   const playheadLeft = currentTime * zoomLevel;
@@ -171,7 +170,7 @@ const Waveform = ({ url }) => {
   }, []);
 
   return (
-    <div className="mb-6 w-full max-w-screen-2xl bg-light-lightGrey border-2  rounded-lg shadow-md flex flex-col items-center justify-center p-4">
+    <div className="mb-6 w-full bg-light-lightGrey border-2 rounded-lg shadow-md flex flex-col items-center justify-center p-4">
       {/* Zoom Controls */}
       <div className="flex items-center gap-3 mb-4 w-full justify-end">
         <button
@@ -208,7 +207,7 @@ const Waveform = ({ url }) => {
     
       <div
         ref={scrollContainerRef}
-        className="bg-light-lightGrey border-2  w-full overflow-auto cursor-grab relative"
+        className="bg-light-lightGrey border-2 w-full overflow-auto cursor-grab relative"
       >
         <div style={{ position: "relative", width: `${waveformWidth}px` }}>
           {/* Time Markers */}

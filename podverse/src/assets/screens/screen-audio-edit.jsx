@@ -88,7 +88,7 @@ const DropZone = ({ onFileDrop, onFileSelect }) => (
 );
 
 // Audio Track Component
-const AudioTrack = ({ clips }) => (
+const AudioTrack = ({ clips, onRemoveClip }) => (
   <div className="px-4">
     <div className="flex items-center mb-2">
       <Volume2 size={16} className="text-gray-600 mr-2" />
@@ -99,28 +99,37 @@ const AudioTrack = ({ clips }) => (
       style={{ minHeight: "70px" }}
     >
       {clips.map((clip, idx) => (
-        <AudioClip key={idx} clipData={clip} />
+        <AudioClip key={idx} clipData={clip} onRemove={() => onRemoveClip(idx)} />
       ))}
     </div>
   </div>
 );
 
 // Audio Clip Component
-const AudioClip = ({ clipData }) => (
+const AudioClip = ({ clipData, onRemove }) => (
   <div 
-    className="bg-light-lavender rounded px-3 py-2 text-white text-sm font-medium inline-block"
+    className="relative bg-gradient-to-r from-purple-500 to-indigo-600 rounded-lg px-3 py-2 text-white text-sm font-medium inline-block group hover:shadow-lg transition-all duration-200"
     style={{ width: '200px' }}
   >
+    {/* Remove button */}
+    <button
+      onClick={onRemove}
+      className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center opacity-100 transition-opacity duration-200 text-xs font-bold shadow-md"
+      title="Remove clip"
+    >
+      ×
+    </button>
+    
     <ClipInfo name={clipData.name} duration={clipData.duration} />
     <div className="flex items-center h-4 mt-1 gap-px">
-    {Array.from({ length: 40 }, (_, i) => (
-      <div
-        key={i}
-        className="w-1 bg-white rounded"
-        style={{ height: `${Math.random() * 16 + 4}px` }}
-      />
-    ))}
-  </div>
+      {Array.from({ length: 40 }, (_, i) => (
+        <div
+          key={i}
+          className="w-1 bg-white/80 rounded"
+          style={{ height: `${Math.random() * 16 + 4}px` }}
+        />
+      ))}
+    </div>
   </div>
 );
 
@@ -294,7 +303,8 @@ const AudioEditor = () => {
           {
             name: file.name,
             url,
-            duration: formatDuration(audio.duration)
+            duration: formatDuration(audio.duration),
+            durationSeconds: audio.duration // <-- add this
           }
         ]);
       };
@@ -316,11 +326,16 @@ const AudioEditor = () => {
           {
             name: file.name,
             url,
-            duration: formatDuration(audio.duration)
+            duration: formatDuration(audio.duration),
+            durationSeconds: audio.duration // <-- add this
           }
         ]);
       };
     }
+  };
+
+  const handleRemoveClip = (idx) => {
+    setAudioClips(prev => prev.filter((_, i) => i !== idx));
   };
 
   // Helper to format duration as mm:ss
@@ -329,14 +344,6 @@ const AudioEditor = () => {
     const sec = Math.floor(seconds % 60).toString().padStart(2, "0");
     return `${min}:${sec}`;
   }
-
-  // Event handlers
-  const handleTimeChange = (e) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const percentage = x / rect.width;
-    setCurrentTime(percentage * totalTime);
-  };
 
   const handleSave = () => {
     console.log('Saving changes...');
@@ -356,15 +363,26 @@ const AudioEditor = () => {
         <div className="border-2 mt-6 mb-6 rounded-2xl shadow-md overflow-hidden">
           <AudioHeader />
           <DropZone onFileDrop={handleFileDrop} onFileSelect={handleFileSelect} />
-          <AudioTrack clips={audioClips} />
+          <AudioTrack clips={audioClips} onRemoveClip={handleRemoveClip}/>
           <div className="flex-1  p-6">
-            {audioUrl && (
-              <Waveform
-                url={audioUrl}
-                currentTime={currentTime}
-                setCurrentTime={setCurrentTime}
-                setTotalTime={setTotalTime}
-              />
+            {audioClips.length > 0 && (
+              <div className="flex gap-2 overflow-x-auto w-full">
+                {audioClips.map((clip, idx) => {
+                  // Calculate start time for each waveform (for future use)
+                  const startTime = audioClips
+                    .slice(0, idx)
+                    .reduce((sum, c) => sum + (c.durationSeconds || 0), 0);
+
+                  return (
+                    <Waveform
+                      key={clip.url}
+                      url={clip.url}
+                      duration={clip.durationSeconds}
+                      // startTime={startTime} // If you want to use for advanced features
+                    />
+                  );
+                })}
+              </div>
             )}
             <BottomControls onSave={handleSave} onCancel={handleCancel} />
           </div>
