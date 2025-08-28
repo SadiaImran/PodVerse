@@ -8,6 +8,7 @@ import { LuRefreshCcw , LuRedo , LuUndo } from "react-icons/lu";
 import BaseLayout from '../components/layouts/BaseLayout';
 import AudioHeader from '../components/comp-audio-editing/comp-audio-header';
 import Waveform from '../components/comp-audio-editing/comp-audio-waveforms';
+import { Trash2, GripVertical } from 'lucide-react';
 
 // Sidebar Icon Component
 const SidebarIcon = ({ icon: Icon }) => (
@@ -86,61 +87,91 @@ const DropZone = ({ onFileDrop, onFileSelect }) => (
     </div>
   </div>
 );
-
+ // Helper to format duration as mm:ss
+  function formatDuration(seconds) {
+    const min = Math.floor(seconds / 60).toString().padStart(2, "0");
+    const sec = Math.floor(seconds % 60).toString().padStart(2, "0");
+    return `${min}:${sec}`;
+  }
 // Audio Track Component
 const AudioTrack = ({ clips, onRemoveClip }) => (
-  <div className="px-4">
-    <div className="flex items-center mb-2">
-      <Volume2 size={16} className="text-gray-600 mr-2" />
-      <span className="text-sm text-gray-700">Audio Track</span>
+  
+  <div className="px-4 ">
+    <div className="flex items-center gap-2 mb-3">
+      <Volume2 size={18}></Volume2>
+      <span className="text-sm font-medium text-gray-700">Audio Clips ({clips.length})</span>
     </div>
     <div
-      className="bg-gray-50 border rounded-lg p-4 flex gap-4 items-center overflow-x-auto flex-nowrap w-full"
-      style={{ minHeight: "70px" }}
-    >
-      {clips.map((clip, idx) => (
-        <AudioClip key={idx} clipData={clip} onRemove={() => onRemoveClip(idx)} />
-      ))}
+    className='flex gap-3 overflow-x-auto pb-3'>
+ {clips.map((clip, idx) => {
+      const startTime = clips.slice(0, idx).reduce((sum, c) => sum + (c.durationSeconds || 0), 0);
+      return (
+        <AudioClip
+          key={clip.url}
+          clipData={clip}
+          index={idx}
+          startTime={startTime}
+          onRemove={() => onRemoveClip(idx)}
+        />
+      );
+    })}
     </div>
   </div>
 );
 
 // Audio Clip Component
-const AudioClip = ({ clipData, onRemove }) => (
-  <div 
-    className="relative bg-gradient-to-r from-purple-500 to-indigo-600 rounded-lg px-3 py-2 text-white text-sm font-medium inline-block group hover:shadow-lg transition-all duration-200"
-    style={{ width: '200px' }}
-  >
-    {/* Remove button */}
-    <button
-      onClick={onRemove}
-      className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center opacity-100 transition-opacity duration-200 text-xs font-bold shadow-md"
-      title="Remove clip"
+const AudioClip = ({
+  clipData,
+  index,
+  selected,
+  onSelect,
+  onRemove,
+  startTime
+}) => {
+  const endTime = startTime + (clipData.durationSeconds || 0);
+
+  return (
+    <div
+      className={`flex items-start justify-between rounded-lg px-3 py-2 text-sm font-medium cursor-pointer transition-all duration-200
+        ${selected
+          ? 'ring-2 ring-indigo-500 bg-indigo-50 text-gray-900'
+          : 'bg-gradient-to-r from-purple-500 to-indigo-400 text-white'
+        }
+        hover:bg-white hover:text-gray-900 hover:border-2 hover:border-light-lavender hover:shadow-lg hover:from-transparent hover:to-transparent`}
+      onClick={onSelect}
+      style={{ minWidth: 220 }}
     >
-      ×
-    </button>
-    
-    <ClipInfo name={clipData.name} duration={clipData.duration} />
-    <div className="flex items-center h-4 mt-1 gap-px">
-      {Array.from({ length: 40 }, (_, i) => (
-        <div
-          key={i}
-          className="w-1 bg-white/80 rounded"
-          style={{ height: `${Math.random() * 16 + 4}px` }}
-        />
-      ))}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-2">
+          <GripVertical className="w-4 h-4  shrink-0" />
+          <h4 className="text-sm font-medium truncate">
+            Track {index + 1} - {clipData.name.replace(/\.[^/.]+$/, "")}
+          </h4>
+        </div>
+        <div className="flex items-center gap-3 text-xs">
+          <span>Duration</span>
+          <span>•</span>
+          <span>{clipData.duration}</span>
+        </div>
+        <div className="mt-2 text-xs">
+          Start: {formatDuration(startTime)}
+          <span className="mx-1">|</span>
+          End: {formatDuration(endTime)}
+        </div>
+      </div>
+      <button
+        onClick={e => {
+          e.stopPropagation();
+          onRemove();
+        }}
+        className="h-8 w-8 p-0 text-gray-400 hover:text-red-500 flex items-center justify-center"
+        title="Delete"
+      >
+        <Trash2 className="w-4 h-4" />
+      </button>
     </div>
-  </div>
-);
-
-// Clip Info Component
-const ClipInfo = ({ name, duration }) => (
-  <div className="flex items-center gap-2">
-    <span>{name}</span>
-    <span className="text-xs opacity-75">{duration}</span>
-  </div>
-);
-
+  );
+};
 
 // Waveform Editor Component
 const WaveformEditor = ({ zoom, setZoom, waveformData, currentTime, totalTime }) => (
@@ -286,6 +317,7 @@ const AudioEditor = () => {
   const [totalTime, setTotalTime] = useState(305);
   const [audioUrl, setAudioUrl] = useState("");
   const [audioClips, setAudioClips] = useState([]);
+  const [selectedClipIdx, setSelectedClipIdx] = useState(null);
 
   // Drag & drop handler
   const handleFileDrop = (e) => {
