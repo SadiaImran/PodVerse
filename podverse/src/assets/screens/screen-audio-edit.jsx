@@ -1,426 +1,375 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { 
-  Scissors, Upload, Volume2, Settings ,
-  ZoomIn, ZoomOut 
-} from 'lucide-react';
+import React, { useState, useRef, useEffect, useCallback } from "react";
+import WaveSurfer from "wavesurfer.js";
+import RegionsPlugin from "wavesurfer.js/dist/plugin/wavesurfer.regions.min.js";
+import { Play, Pause, Square, Upload, Trash2, ZoomIn, ZoomOut } from 'lucide-react';
+import BaseLayout from "../components/layouts/BaseLayout";
 
-import { LuRefreshCcw , LuRedo , LuUndo } from "react-icons/lu";
-import BaseLayout from '../components/layouts/BaseLayout';
-import AudioHeader from '../components/comp-audio-editing/comp-audio-header';
-import Waveform from '../components/comp-audio-editing/comp-audio-waveforms';
-import { Trash2, GripVertical } from 'lucide-react';
-
-// Sidebar Icon Component
-const SidebarIcon = ({ icon: Icon }) => (
-  <div className="mb-6">
-    <Icon size={24} className="text-gray-400" />
-  </div>
-);
-
-// Timeline Component
-const Timeline = ({ currentTime, totalTime, onTimeChange }) => {
-  const timeMarkers = ['00:00', '00:05', '00:10', '00:15'];
-  
-  return (
-    <div className="mb-4">
-      <TimeMarkers markers={timeMarkers} />
-      <TimeRuler 
-        currentTime={currentTime} 
-        totalTime={totalTime} 
-        onTimeChange={onTimeChange} 
-      />
-    </div>
-  );
-};
-
-// Time Markers Component
-const TimeMarkers = ({ markers }) => (
-  <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
-    {markers.map((marker, index) => (
-      <span key={index}>{marker}</span>
-    ))}
-  </div>
-);
-
-// Time Ruler Component
-const TimeRuler = ({ currentTime, totalTime, onTimeChange }) => (
-  <div className="relative h-8 bg-gray-50 border rounded cursor-pointer" onClick={onTimeChange}>
-    {/* Time markers */}
-    {[0, 25, 50, 75, 100].map(pos => (
-      <div 
-        key={pos}
-        className="absolute top-0 h-full w-px bg-gray-300"
-        style={{ left: `${pos}%` }}
-      />
-    ))}
-    
-    <PlayheadIndicator currentTime={currentTime} totalTime={totalTime} />
-  </div>
-);
-
-// Playhead Indicator Component
-const PlayheadIndicator = ({ currentTime, totalTime }) => (
-  <div 
-    className="absolute top-0 w-px h-full bg-black z-10"
-    style={{ left: `${(currentTime / totalTime) * 100}%` }}
-  >
-    <div className="w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-black -translate-x-1/2"></div>
-  </div>
-);
-
-// Drop Zone Component
-const DropZone = ({ onFileDrop, onFileSelect }) => (
-  <div className="mb-6 p-4">
-    <div 
-      className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center text-gray-500 hover:border-gray-400 transition-colors cursor-pointer"
-      onDrop={onFileDrop}
-      onDragOver={(e) => e.preventDefault()}
-    >
-      <Upload size={32} className="mx-auto mb-3 text-gray-400" />
-      <p>Drag and drop media here or</p>
-      <input
-        type="file"
-        accept="audio/*"
-        onChange={onFileSelect}
-        className="mt-2"
-      />
-    </div>
-  </div>
-);
- // Helper to format duration as mm:ss
-  function formatDuration(seconds) {
-    const min = Math.floor(seconds / 60).toString().padStart(2, "0");
-    const sec = Math.floor(seconds % 60).toString().padStart(2, "0");
-    return `${min}:${sec}`;
-  }
-// Audio Track Component
-const AudioTrack = ({ clips, onRemoveClip }) => (
-  
-  <div className="px-4 ">
-    <div className="flex items-center gap-2 mb-3">
-      <Volume2 size={18}></Volume2>
-      <span className="text-sm font-medium text-gray-700">Audio Clips ({clips.length})</span>
-    </div>
-    <div
-    className='flex gap-3 overflow-x-auto pb-3'>
- {clips.map((clip, idx) => {
-      const startTime = clips.slice(0, idx).reduce((sum, c) => sum + (c.durationSeconds || 0), 0);
-      return (
-        <AudioClip
-          key={clip.url}
-          clipData={clip}
-          index={idx}
-          startTime={startTime}
-          onRemove={() => onRemoveClip(idx)}
-        />
-      );
-    })}
-    </div>
-  </div>
-);
-
-// Audio Clip Component
-const AudioClip = ({
-  clipData,
-  index,
-  selected,
-  onSelect,
-  onRemove,
-  startTime
-}) => {
-  const endTime = startTime + (clipData.durationSeconds || 0);
-
-  return (
-    <div
-      className={`flex items-start justify-between rounded-lg px-3 py-2 text-sm font-medium cursor-pointer transition-all duration-200
-        ${selected
-          ? 'ring-2 ring-indigo-500 bg-indigo-50 text-gray-900'
-          : 'bg-gradient-to-r from-purple-500 to-indigo-400 text-white'
-        }
-        hover:bg-white hover:text-gray-900 hover:border-2 hover:border-light-lavender hover:shadow-lg hover:from-transparent hover:to-transparent`}
-      onClick={onSelect}
-      style={{ minWidth: 220 }}
-    >
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-2">
-          <GripVertical className="w-4 h-4  shrink-0" />
-          <h4 className="text-sm font-medium truncate">
-            Track {index + 1} - {clipData.name.replace(/\.[^/.]+$/, "")}
-          </h4>
-        </div>
-        <div className="flex items-center gap-3 text-xs">
-          <span>Duration</span>
-          <span>•</span>
-          <span>{clipData.duration}</span>
-        </div>
-        <div className="mt-2 text-xs">
-          Start: {formatDuration(startTime)}
-          <span className="mx-1">|</span>
-          End: {formatDuration(endTime)}
-        </div>
-      </div>
-      <button
-        onClick={e => {
-          e.stopPropagation();
-          onRemove();
-        }}
-        className="h-8 w-8 p-0 text-gray-400 hover:text-red-500 flex items-center justify-center"
-        title="Delete"
-      >
-        <Trash2 className="w-4 h-4" />
-      </button>
-    </div>
-  );
-};
-
-// Waveform Editor Component
-const WaveformEditor = ({ zoom, setZoom, waveformData, currentTime, totalTime }) => (
-  <div className="mb-6">
-    <WaveformHeader zoom={zoom} setZoom={setZoom} />
-    <WaveformDisplay 
-      waveformData={waveformData} 
-      currentTime={currentTime} 
-      totalTime={totalTime}
-      zoom={zoom}
-    />
-  </div>
-);
-
-// Waveform Header Component
-const WaveformHeader = ({ zoom, setZoom }) => (
-  <div className="flex items-center justify-between mb-4">
-    <h3 className="text-lg font-semibold text-gray-800">Waveform</h3>
-    <ZoomControls zoom={zoom} setZoom={setZoom} />
-  </div>
-);
-
-// Zoom Controls Component
-const ZoomControls = ({ zoom, setZoom }) => (
-  <div className="flex items-center gap-2">
-    <button 
-      onClick={() => setZoom(Math.max(0.5, zoom - 0.25))}
-      className="p-2 rounded hover:bg-gray-100"
-    >
-      <ZoomOut size={16} className="text-gray-600" />
-    </button>
-    
-    <span className="text-sm text-gray-600 min-w-[50px] text-center">
-      {Math.round(zoom * 100)}%
-    </span>
-    
-    <button 
-      onClick={() => setZoom(Math.min(3, zoom + 0.25))}
-      className="p-2 rounded hover:bg-gray-100"
-    >
-      <ZoomIn size={16} className="text-gray-600" />
-    </button>
-  </div>
-);
-
-// Waveform Display Component
-const WaveformDisplay = ({ waveformData, currentTime, totalTime, zoom }) => (
-  <div className="relative flex-1 h-32 bg-gray-100 rounded-lg overflow-hidden border">
-    <WaveformBars 
-      waveformData={waveformData} 
-      currentTime={currentTime} 
-      totalTime={totalTime}
-      zoom={zoom}
-    />
-    <PlayheadIndicator currentTime={currentTime} totalTime={totalTime} />
-    <SelectionArea />
-  </div>
-);
-
-// Waveform Bars Component
-const WaveformBars = ({ waveformData, currentTime, totalTime, zoom }) => (
-  <div className="flex items-center h-full px-2">
-    {waveformData.slice(0, Math.floor(800 * zoom)).map((bar, index) => (
-      <div
-        key={index}
-        className="w-px mx-px"
-        style={{
-          height: `${bar.amplitude * 100}%`,
-          backgroundColor: index < (currentTime / totalTime) * waveformData.length 
-            ? '#22d3ee' 
-            : '#94a3b8'
-        }}
-      />
-    ))}
-  </div>
-);
-
-// Selection Area Component
-const SelectionArea = () => (
-  <div 
-    className="absolute top-0 h-full bg-blue-200 opacity-30 border border-blue-400"
-    style={{ left: '30%', width: '25%' }}
-  >
-    <div className="absolute left-0 top-0 w-2 h-full bg-blue-500 cursor-w-resize"></div>
-    <div className="absolute right-0 top-0 w-2 h-full bg-blue-500 cursor-e-resize"></div>
-  </div>
-);
-
-// Bottom Controls Component
-const BottomControls = ({ onSave, onCancel }) => (
-  <div className="flex items-center justify-between">
-    <ActionButtons />
-    <SaveButtons onSave={onSave} onCancel={onCancel} />
-  </div>
-);
-
-// Action Buttons Component
-const ActionButtons = () => {
-  const actions = [
-    { icon : Scissors, label: 'Slip at 00:20:20', style: 'text-blue-600 hover:text-blue-700' },
-    { icon : Scissors, label: 'Trim clip', style: 'text-blue-600 hover:text-blue-700' },
-    { icon : LuRefreshCcw, label: 'Revert to original', style: 'text-gray-600 hover:text-gray-700' },
-    { icon : LuUndo  ,label: 'Undo', style: 'text-gray-600 hover:text-gray-700' },
-    { icon : LuRedo,label: 'Redo', style: 'text-gray-600 hover:text-gray-700' }
-  ];
-
-  return (
-    <div className="flex items-center gap-4">
-      {actions.map((action, index) => (
-        <button key={index} className={`text-sm ${action.style} flex items-center gap-3`}>
-         <action.icon size={20} className="text-gray-700" />
-          {action.label}
-          
-        </button>
-      ))}
-    </div>
-  );
-};
-
-// Save Buttons Component
-const SaveButtons = ({ onSave, onCancel }) => (
-  <div className="flex items-center gap-3">
-    <button 
-      onClick={onCancel}
-      className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
-    >
-      Cancel
-    </button>
-    
-    <button 
-      onClick={onSave}
-      className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
-    >
-      Save changes
-    </button>
-  </div>
-);
-
-// ============= MAIN COMPONENT =============
 
 const AudioEditor = () => {
-  const [currentTime, setCurrentTime] = useState(0); // Start at 0
-  const [totalTime, setTotalTime] = useState(305);
-  const [audioUrl, setAudioUrl] = useState("");
   const [audioClips, setAudioClips] = useState([]);
-  const [selectedClipIdx, setSelectedClipIdx] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [totalDuration, setTotalDuration] = useState(0);
+  const [zoom, setZoom] = useState(1);
+  const [selectedClipId, setSelectedClipId] = useState(null);
 
-  // Drag & drop handler
-  const handleFileDrop = (e) => {
-    e.preventDefault();
-    const file = e.dataTransfer.files[0];
-    if (file) {
-      const url = URL.createObjectURL(file);
-      const audio = new Audio(url);
-      audio.onloadedmetadata = () => {
-        if(audioUrl == ""){
-          setAudioUrl(url);
-        }
-        setAudioClips(prev => [
-          ...prev,
-          {
-            name: file.name,
-            url,
-            duration: formatDuration(audio.duration),
-            durationSeconds: audio.duration // <-- add this
-          }
-        ]);
-      };
+  const waveformRef = useRef(null);
+  const wavesurferRef = useRef(null);
+  const regionsRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const audioCtxRef = useRef(null);
+
+  // Init WaveSurfer
+  useEffect(() => {
+    if (!waveformRef.current) return;
+
+    const regions = RegionsPlugin.create();
+    regionsRef.current = regions;
+
+    const wavesurfer = WaveSurfer.create({
+      container: waveformRef.current,
+      waveColor: "blue",
+      progressColor: "lightblue",
+      barWidth: 2,
+      barGap: 1,
+      height: 120,
+      dragToSeek: true,
+      plugins: [regions],
+    });
+
+    wavesurferRef.current = wavesurfer;
+
+    wavesurfer.on("play", () => setIsPlaying(true));
+    wavesurfer.on("pause", () => setIsPlaying(false));
+    wavesurfer.on("timeupdate", (time) => setCurrentTime(time));
+    wavesurfer.on("ready", () => setTotalDuration(wavesurfer.getDuration()));
+
+    return () => {
+      wavesurfer.destroy();
+      if (audioCtxRef.current) {
+        audioCtxRef.current.close().catch(() => {});
+        audioCtxRef.current = null;
+      }
+    };
+  }, []);
+
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins.toString().padStart(2, "0")}:${secs
+      .toString()
+      .padStart(2, "0")}`;
+  };
+
+  // 🔥 Helper: Convert AudioBuffer → Blob (WAV)
+  const audioBufferToWav = (buffer) => {
+    const numOfChan = buffer.numberOfChannels,
+      length = buffer.length * numOfChan * 2 + 44,
+      bufferArray = new ArrayBuffer(length),
+      view = new DataView(bufferArray),
+      channels = [],
+      sampleRate = buffer.sampleRate;
+
+    let offset = 0;
+    let pos = 0;
+
+    const setUint16 = (data) => {
+      view.setUint16(pos, data, true);
+      pos += 2;
+    };
+    const setUint32 = (data) => {
+      view.setUint32(pos, data, true);
+      pos += 4;
+    };
+
+    // RIFF header
+    setUint32(0x46464952);
+    setUint32(length - 8);
+    setUint32(0x45564157);
+
+    // fmt chunk
+    setUint32(0x20746d66);
+    setUint32(16);
+    setUint16(1);
+    setUint16(numOfChan);
+    setUint32(sampleRate);
+    setUint32(sampleRate * 2 * numOfChan);
+    setUint16(numOfChan * 2);
+    setUint16(16);
+
+    // data chunk
+    setUint32(0x61746164);
+    setUint32(length - pos - 4);
+
+    for (let i = 0; i < buffer.numberOfChannels; i++) {
+      channels.push(buffer.getChannelData(i));
     }
-  };
 
-  // File select handler
-  const handleFileSelect = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const url = URL.createObjectURL(file);
-      const audio = new Audio(url);
-      audio.onloadedmetadata = () => {
-         if(audioUrl == ""){
-          setAudioUrl(url);
-        }
-        setAudioClips(prev => [
-          ...prev,
-          {
-            name: file.name,
-            url,
-            duration: formatDuration(audio.duration),
-            durationSeconds: audio.duration // <-- add this
-          }
-        ]);
-      };
+    while (pos < length) {
+      for (let i = 0; i < numOfChan; i++) {
+        const sample = Math.max(-1, Math.min(1, channels[i][offset]));
+        view.setInt16(
+          pos,
+          sample < 0 ? sample * 0x8000 : sample * 0x7fff,
+          true
+        );
+        pos += 2;
+      }
+      offset++;
     }
+
+    return new Blob([bufferArray], { type: "audio/wav" });
   };
 
-  const handleRemoveClip = (idx) => {
-    setAudioClips(prev => prev.filter((_, i) => i !== idx));
-  };
+  const loadCombinedAudio = useCallback(async (clips) => {
+    if (!wavesurferRef.current || clips.length === 0) return;
 
-  // Helper to format duration as mm:ss
-  function formatDuration(seconds) {
-    const min = Math.floor(seconds / 60).toString().padStart(2, "0");
-    const sec = Math.floor(seconds % 60).toString().padStart(2, "0");
-    return `${min}:${sec}`;
-  }
+    try {
+      const getAudioContext = () => {
+        if (!audioCtxRef.current) {
+          audioCtxRef.current = new AudioContext();
+        }
+        return audioCtxRef.current;
+      };
 
-  const handleSave = () => {
-    console.log('Saving changes...');
-  };
+      const ctx = getAudioContext();
 
-  const handleCancel = () => {
-    console.log('Cancelling changes...');
+      const decodedBuffers = await Promise.all(
+        clips.map(async (clip) => {
+          const arrayBuffer = await clip.file.arrayBuffer();
+          return await ctx.decodeAudioData(arrayBuffer.slice(0));
+        })
+      );
+
+      const sampleRate = ctx.sampleRate;
+      const totalDur = decodedBuffers.reduce((sum, b) => sum + b.duration, 0);
+      const length = Math.ceil(totalDur * sampleRate);
+      const offline = new OfflineAudioContext(1, length, sampleRate);
+
+      let offset = 0;
+      decodedBuffers.forEach((buffer) => {
+        const src = offline.createBufferSource();
+        src.buffer = buffer;
+        src.connect(offline.destination);
+        src.start(offset);
+        offset += buffer.duration;
+      });
+
+      const rendered = await offline.startRendering();
+      const blob = audioBufferToWav(rendered);
+
+      await wavesurferRef.current.loadBlob(blob);
+
+      setTotalDuration(rendered.duration);
+      regionsRef.current?.clearRegions();
+
+      let current = 0;
+      clips.forEach((clip, index) => {
+        const start = current;
+        const end = current + clip.duration;
+        regionsRef.current?.addRegion({
+          id: clip.id,
+          start,
+          end,
+          color: `rgba(0,0,255,0.2)`,
+          content: clip.name,
+          resize: false,
+          drag: false,
+        });
+        current = end;
+      });
+    } catch (err) {
+      console.error("Error loading combined audio:", err);
+    }
+  }, []);
+
+  const handleFileUpload = async (files) => {
+    const newClips = [];
+    let currentEndTime = totalDuration;
+
+    for (const file of Array.from(files)) {
+      if (!file.type.startsWith("audio/")) continue;
+
+      const audio = new Audio();
+      const url = URL.createObjectURL(file);
+      audio.src = url;
+
+      await new Promise((resolve) => {
+        audio.addEventListener("loadedmetadata", () => resolve());
+      });
+
+      const duration = audio.duration;
+
+      newClips.push({
+        id: `clip-${Date.now()}-${Math.random()}`,
+        name: file.name,
+        url,
+        duration,
+        startTime: currentEndTime,
+        endTime: currentEndTime + duration,
+        file,
+      });
+
+      currentEndTime += duration;
+    }
+
+    if (newClips.length > 0) {
+      const updatedClips = [...audioClips, ...newClips];
+      setAudioClips(updatedClips);
+      await loadCombinedAudio(updatedClips);
+    }
   };
 
   return (
     <BaseLayout>
-      <main className="p-6 bg-gray-50 flex flex-col">
-        {/* Heading Line */}
-        <div className="text-3xl font-headingPoppins font-bold text-light-purple mb-6">🎶 Shape Your Sound, Your Way</div>
-        
-        {/* Main Content Editing */}
-        <div className="border-2 mt-6 mb-6 rounded-2xl shadow-md overflow-hidden">
-          <AudioHeader />
-          <DropZone onFileDrop={handleFileDrop} onFileSelect={handleFileSelect} />
-          <AudioTrack clips={audioClips} onRemoveClip={handleRemoveClip}/>
-          <div className="flex-1  p-6">
-            {audioClips.length > 0 && (
-              <div className="flex gap-2 overflow-x-auto w-full">
-                {audioClips.map((clip, idx) => {
-                  // Calculate start time for each waveform (for future use)
-                  const startTime = audioClips
-                    .slice(0, idx)
-                    .reduce((sum, c) => sum + (c.durationSeconds || 0), 0);
-
-                  return (
-                    <Waveform
-                      key={clip.url}
-                      url={clip.url}
-                      duration={clip.durationSeconds}
-                      // startTime={startTime} // If you want to use for advanced features
-                    />
-                  );
-                })}
+      <div className="min-h-screen bg-gray-50">
+        <div className="flex h-screen">
+          {/* Left Sidebar */}
+          <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
+            {/* Header */}
+            <div className="p-6 border-b border-gray-200">
+              <h1 className="text-2xl font-bold text-gray-900 mb-4">Audio Editor</h1>
+      
+              {/* Upload Button */}
+              <button
+                onClick={() => fileInputRef.current.click()}
+                className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg transition-colors font-medium"
+              >
+                <Upload size={20} />
+                Upload Audio
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="audio/*"
+                className="hidden"
+      
+          onChange={(e) => e.target.files && handleFileUpload(e.target.files)}
+              />
+            </div>
+            {/* Track List */}
+            <div className="flex-1 overflow-y-auto">
+              <div className="p-4">
+                <h2 className="text-sm font-semibold text-gray-600 mb-3">
+                  Track List ({audioClips.length})
+                </h2>
+      
+                {audioClips.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <p className="text-sm">No tracks uploaded yet</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {audioClips.map((clip) => (
+                      <div
+                        key={clip.id}
+                        onClick={() => highlightClip(clip.id)}
+                        className={`p-3 rounded-lg border cursor-pointer transition-all hover:border-blue-300 ${
+                          selectedClipId === clip.id
+                            ? 'border-blue-500 bg-blue-50'
+                            : 'border-gray-200 bg-white hover:bg-gray-50'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-medium text-gray-900 text-sm truncate">
+                              {clip.name}
+                            </h3>
+                            <div className="text-xs text-gray-500 mt-1">
+                              <div>{formatTime(clip.duration)}</div>
+                              <div>{formatTime(clip.startTime)} - {formatTime(clip.endTime)}</div>
+                            </div>
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeClip(clip.id);
+                            }}
+                            className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
-            <BottomControls onSave={handleSave} onCancel={handleCancel} />
+            </div>
+          </div>
+          {/* Main Content */}
+          <div className="flex-1 flex flex-col">
+            {/* Top Controls Bar */}
+            <div className="bg-white border-b border-gray-200 px-6 py-4">
+              <div className="flex items-center justify-between">
+                {/* Playback Controls */}
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => wavesurferRef.current.playPause()}
+                      disabled={!audioClips.length}
+                      className="flex items-center justify-center w-10 h-10 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white rounded-full transition-colors"
+                    >
+                      {isPlaying ? <Pause size={18} /> : <Play size={18} />}
+                    </button>
+      
+                    <button
+                      onClick={() => wavesurferRef.current.stop()}
+                      disabled={!audioClips.length}
+                      className="flex items-center justify-center w-10 h-10 bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 text-gray-600 rounded-full transition-colors"
+                    >
+                      <Square size={16} />
+                    </button>
+                  </div>
+                  {/* Time Display */}
+                  <div className="text-gray-600 font-mono text-sm">
+                    {formatTime(currentTime)} / {formatTime(totalDuration)}
+                  </div>
+                </div>
+                {/* Zoom Controls */}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      const newZoom = Math.max(zoom / 1.5, 0.1);
+                      setZoom(newZoom);
+                      if (wavesurferRef.current) {
+                        wavesurferRef.current.zoom(newZoom * 50);
+                      }
+                    }}
+                    disabled={!audioClips.length}
+                    className="p-2 text-gray-600 hover:text-gray-800 disabled:text-gray-300 hover:bg-gray-100 rounded transition-colors"
+                  >
+                    <ZoomOut size={18} />
+                  </button>
+                  <button
+                    onClick={() => {
+                      const newZoom = Math.min(zoom * 1.5, 10);
+                      setZoom(newZoom);
+                      if (wavesurferRef.current) {
+                        wavesurferRef.current.zoom(newZoom * 50);
+                      }
+                    }}
+                    disabled={!audioClips.length}
+                    className="p-2 text-gray-600 hover:text-gray-800 disabled:text-gray-300 hover:bg-gray-100 rounded transition-colors"
+                  >
+                    <ZoomIn size={18} />
+                  </button>
+                </div>
+              </div>
+            </div>
+      
+              {/* Waveform Container */}
+      
+                  <div ref={waveformRef} style={{ width: "100%", height: "120px" }} />
+      
+      
           </div>
         </div>
-      </main>
+      </div>
     </BaseLayout>
   );
 };
+
 export default AudioEditor;
+
