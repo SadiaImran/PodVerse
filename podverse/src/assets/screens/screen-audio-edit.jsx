@@ -13,12 +13,22 @@ const AudioEditor = () => {
   const [zoom, setZoom] = useState(1);
   const [selectedClipId, setSelectedClipId] = useState(null);
 
+  // Added missing ref
+const waveformContainerRef = useRef(null);  
   const waveformRef = useRef(null);
   const wavesurferRef = useRef(null);
   const regionsRef = useRef(null);
   const fileInputRef = useRef(null);
   const audioCtxRef = useRef(null);
 
+
+    const getMinZoomLevel = useCallback(() => {
+  if (!waveformContainerRef.current || !totalDuration) return 0.1;
+  
+  const containerWidth = waveformContainerRef.current.clientWidth - 48; // subtract padding
+  const minZoom = containerWidth / (totalDuration * 50);
+  return Math.max(minZoom, 0.1);
+}, [totalDuration]);
   // Init WaveSurfer
   useEffect(() => {
     if (!waveformRef.current) return;
@@ -220,6 +230,68 @@ const AudioEditor = () => {
     }
   };
 
+  const removeClip = async (clipId) => {
+  // Filter out the removed clip
+  const updatedClips = audioClips.filter((clip) => clip.id !== clipId);
+
+  // Update state
+  setAudioClips(updatedClips);
+
+  // If there are clips left, reload waveform
+  if (updatedClips.length > 0) {
+    await loadCombinedAudio(updatedClips);
+  } else {
+    // If no clips left → clear waveform
+    wavesurferRef.current.empty();
+    regionsRef.current?.clearRegions();
+    setTotalDuration(0);
+    setCurrentTime(0);
+  }
+};
+
+const TimeMarkers = ({ duration, zoom, interval = 5 }) => {
+  if (!duration) return null;
+
+  const pixelsPerSecond = zoom * 50; // because you zoom with `wavesurfer.zoom(newZoom * 50)`
+  const totalWidth = duration * pixelsPerSecond;
+  const seconds = Math.ceil(duration);
+
+  const markers = [];
+  for (let i = 0; i <= seconds; i += interval) {
+    const left = i * pixelsPerSecond;
+    markers.push(
+      <div
+        key={i}
+        style={{
+          position: "absolute",
+          left: `${left}px`,
+          top: 0,
+          fontSize: "12px",
+          color: "#666",
+          transform: "translateX(-50%)",
+        }}
+      >
+        {`00:${i.toString().padStart(2, "0")}`}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        position: "relative",
+        width: `${totalWidth}px`,
+        height: "20px",
+        borderBottom: "1px solid #ccc",
+        background: "#fafafa",
+      }}
+    >
+      {markers}
+    </div>
+  );
+};
+
+
   return (
     <BaseLayout>
       <div className="min-h-screen bg-gray-50">
@@ -249,17 +321,17 @@ const AudioEditor = () => {
               />
             </div>
             {/* Track List */}
-            <div className="flex-1 overflow-y-auto">
-              <div className="p-4">
+            <div className="flex-1 overflow-hidden flex flex-col">
+              <div className="p-4 flex-shrink-0">
                 <h2 className="text-sm font-semibold text-gray-600 mb-3">
                   Track List ({audioClips.length})
                 </h2>
-      
-                {audioClips.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
-                    <p className="text-sm">No tracks uploaded yet</p>
-                  </div>
-                ) : (
+              </div>
+              <div className="flex-1 overflow-y-auto px-4 pb-4">
+                {audioClips.length === 0 ?
+                 (
+                  <div className="text-gray-500 text-sm italic">No audio clips uploaded yet.</div>
+                 ) : (
                   <div className="space-y-2">
                     {audioClips.map((clip) => (
                       <div
@@ -295,13 +367,13 @@ const AudioEditor = () => {
                     ))}
                   </div>
                 )}
-              </div>
+              </div>         
             </div>
           </div>
           {/* Main Content */}
-          <div className="flex-1 flex flex-col">
+          <div className="flex-1 flex flex-col min-w-0">
             {/* Top Controls Bar */}
-            <div className="bg-white border-b border-gray-200 px-6 py-4">
+            <div className="bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0">
               <div className="flex items-center justify-between">
                 {/* Playback Controls */}
                 <div className="flex items-center gap-4">
@@ -337,15 +409,15 @@ const AudioEditor = () => {
                         wavesurferRef.current.zoom(newZoom * 50);
                       }
                     }}
-                    disabled={!audioClips.length}
+                    disabled={!audioClips.length || zoom <= getMinZoomLevel()}
                     className="p-2 text-gray-600 hover:text-gray-800 disabled:text-gray-300 hover:bg-gray-100 rounded transition-colors"
                   >
                     <ZoomOut size={18} />
                   </button>
                   <button
                     onClick={() => {
-                      const newZoom = Math.min(zoom * 1.5, 10);
-                      setZoom(newZoom);
+                        const newZoom = Math.min(zoom * 1.5, 10);
+                        setZoom(newZoom);
                       if (wavesurferRef.current) {
                         wavesurferRef.current.zoom(newZoom * 50);
                       }
@@ -359,11 +431,31 @@ const AudioEditor = () => {
               </div>
             </div>
       
-              {/* Waveform Container */}
-      
-                  <div ref={waveformRef} style={{ width: "100%", height: "120px" }} />
-      
-      
+            {/* Waveform Container */}
+            <div
+            ref={waveformContainerRef}   
+            className="border-t border-b border-t-gray-300 border-b-gray-300 overflow-x-auto overflow-y-hidden flex-1"
+            >
+            <div className="h-full ">
+              <div className="p-6 h-full"
+               style={{ 
+    width: totalDuration > 0 ? `${totalDuration * zoom * 50 + 48}px` : '100%',
+    minWidth: '100%'
+  }}
+             >
+              {/* Time markers above waveform */}
+              <TimeMarkers duration={totalDuration} zoom={zoom} interval={5} />
+              {/* Waveform itself */}
+                <div
+                  ref={waveformRef}
+                  className="w-full h-32"
+                  style={{ 
+    width: totalDuration > 0 ? `${totalDuration * zoom * 50}px` : '100%' 
+  }}
+                />
+              </div>
+            </div>
+            </div>    
           </div>
         </div>
       </div>
