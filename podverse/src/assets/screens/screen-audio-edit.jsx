@@ -54,6 +54,15 @@ const waveformContainerRef = useRef(null);
     wavesurfer.on("timeupdate", (time) => setCurrentTime(time));
     wavesurfer.on("ready", () => setTotalDuration(wavesurfer.getDuration()));
 
+
+    wavesurfer.on("audioprocess", (time) => {
+    setCurrentTime(time);
+  });
+
+   wavesurfer.on("finish", () => {
+    setIsPlaying(false);
+    setCurrentTime(0);
+  });
     return () => {
       wavesurfer.destroy();
       if (audioCtxRef.current) {
@@ -63,13 +72,16 @@ const waveformContainerRef = useRef(null);
     };
   }, []);
 
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins.toString().padStart(2, "0")}:${secs
-      .toString()
-      .padStart(2, "0")}`;
-  };
+  // ✅ Format time helper
+const formatTime = (seconds) => {
+  if (!seconds || isNaN(seconds)) return "00:00";
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60); // 0–59 range
+  return `${mins.toString().padStart(2, "0")}:${secs
+    .toString()
+    .padStart(2, "0")}`;
+};
+
 
   // 🔥 Helper: Convert AudioBuffer → Blob (WAV)
   const audioBufferToWav = (buffer) => {
@@ -252,7 +264,7 @@ const waveformContainerRef = useRef(null);
 const TimeMarkers = ({ duration, zoom, interval = 5 }) => {
   if (!duration) return null;
 
-  const pixelsPerSecond = zoom * 50; // because you zoom with `wavesurfer.zoom(newZoom * 50)`
+  const pixelsPerSecond = zoom * 50; 
   const totalWidth = duration * pixelsPerSecond;
   const seconds = Math.ceil(duration);
 
@@ -271,7 +283,7 @@ const TimeMarkers = ({ duration, zoom, interval = 5 }) => {
           transform: "translateX(-50%)",
         }}
       >
-        {`00:${i.toString().padStart(2, "0")}`}
+        {formatTime(i)}   {/* ✅ ab properly MM:SS dikhayega */}
       </div>
     );
   }
@@ -290,7 +302,6 @@ const TimeMarkers = ({ duration, zoom, interval = 5 }) => {
     </div>
   );
 };
-
 
   return (
     <BaseLayout>
