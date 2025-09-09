@@ -3,8 +3,7 @@ import { supabase } from "../../../connection_supabase_client";
 import { useAuth } from "../../context/AuthContext";
 import axios from "axios";
 
-
-// Icons
+// Icons (keeping existing)
 const Icon = ({ name, className }) => {
   const icons = {
     play: <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3" /></svg>,
@@ -14,11 +13,12 @@ const Icon = ({ name, className }) => {
     edit: <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z" /></svg>,
     mic: <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" x2="12" y1="19" y2="23" /><line x1="8" x2="16" y1="23" y2="23" /></svg>,
     volume: <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><path d="M15.54 8.46a5 5 0 0 1 0 7.07" /><path d="M19.07 4.93a10 10 0 0 1 0 14.14" /></svg>,
+    podcast: <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6"/><path d="m21 12-6-3-6 3-6-3"/></svg>,
   };
   return icons[name] || null;
 };
 
-// Transcript bubble with speaking animation
+// Keep existing TranscriptBubble and Waveform components...
 const TranscriptBubble = ({ speaker, text, isTyping = false, isSpeaking = false }) => (
   <div className={`mb-3 max-w-xs p-3 rounded-lg flex flex-col transition-all duration-300 ${
     speaker === "You" 
@@ -56,7 +56,6 @@ const TranscriptBubble = ({ speaker, text, isTyping = false, isSpeaking = false 
   </div>
 );
 
-// Enhanced waveform with podcast-style visualization
 const Waveform = ({ isRecording, isSpeaking }) => (
   <div className="flex space-x-1 h-16 items-center justify-center p-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl">
     {[...Array(25)].map((_, i) => (
@@ -88,8 +87,16 @@ const Waveform = ({ isRecording, isSpeaking }) => (
   </div>
 );
 
-// Status indicator component
-const StatusIndicator = ({ isRecording, isProcessing, isSpeaking }) => {
+// Enhanced Status indicator
+const StatusIndicator = ({ isRecording, isProcessing, isSpeaking, conversationStarted }) => {
+  if (!conversationStarted) {
+    return (
+      <div className="flex items-center space-x-2 text-purple-600">
+        <Icon name="podcast" className="w-4 h-4" />
+        <span className="font-medium">Ready to start podcast</span>
+      </div>
+    );
+  }
   if (isRecording) {
     return (
       <div className="flex items-center space-x-2 text-red-600">
@@ -110,43 +117,109 @@ const StatusIndicator = ({ isRecording, isProcessing, isSpeaking }) => {
     return (
       <div className="flex items-center space-x-2 text-green-600">
         <div className="w-3 h-3 bg-green-600 rounded-full animate-pulse"></div>
-        <span className="font-medium">AI Speaking...</span>
+        <span className="font-medium">Host Speaking...</span>
       </div>
     );
   }
   return (
     <div className="flex items-center space-x-2 text-gray-500">
       <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
-      <span className="font-medium">Ready to record</span>
+      <span className="font-medium">Your turn to speak</span>
     </div>
   );
 };
 
 const NewPanelsRecording = () => {
+  // Existing state
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [currentSpeakingIndex, setCurrentSpeakingIndex] = useState(-1);
-  const [transcript, setTranscript] = useState([
-    { speaker: "AI Host", text: "Hello! Welcome to our podcast. I'm ready when you are. Let's have a great conversation!" },
-  ]);
+  const [transcript, setTranscript] = useState([]);
 
+  // NEW: Conversation management state
+  const [conversationStarted, setConversationStarted] = useState(false);
+  const [conversationId] = useState(() => `conv_${Date.now()}`); // Generate unique conversation ID
+  const [showName] = useState("AI Knowledge Podcast");
+  const [guestName] = useState("Expert Guest");
+  
+  // Existing refs
   const recorderRef = useRef(null);
   const gumStreamRef = useRef(null);
   const currentAudioRef = useRef(null);
   const transcriptEndRef = useRef(null);
-
+  const { user } = useAuth();
 
   // Auto-scroll to bottom of transcript
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [transcript]);
 
-  // Play base64 audio data from backend
+  // NEW: Start podcast conversation with host opening
+  const startPodcastConversation = async () => {
+    try {
+      setIsProcessing(true);
+      console.log("🎙️ Starting podcast conversation...");
+
+      const sessionData = await supabase.auth.getSession();
+      const token = sessionData?.data?.session?.access_token;
+
+      const formData = new FormData();
+      formData.append("show_name", showName);
+      formData.append("guest_name", guestName);
+      formData.append("conversation_id", conversationId);
+
+      const response = await fetch("http://localhost:8000/podcast/start/", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log("✅ Podcast started:", result);
+
+        // Add host opening to transcript
+        const hostMessageIndex = 0;
+        setTranscript([
+          { speaker: "AI Host", text: result.answer_text }
+        ]);
+
+        setConversationStarted(true);
+
+        // Play the host opening audio
+        if (result.audio_data) {
+          await playBase64Audio(result.audio_data, hostMessageIndex);
+        } else {
+          // Fallback to browser TTS
+          setTimeout(() => {
+            fallbackToWebSpeech(result.answer_text, hostMessageIndex);
+          }, 500);
+        }
+
+      } else {
+        throw new Error(`Failed to start podcast: ${response.status}`);
+      }
+
+    } catch (error) {
+      console.error("❌ Failed to start podcast:", error);
+      const errorMessage = "Sorry, I couldn't start the podcast. Let me try a simple greeting instead.";
+      setTranscript([
+        { speaker: "AI Host", text: "Welcome to the podcast! What would you like to explore today?" }
+      ]);
+      setConversationStarted(true);
+      fallbackToWebSpeech("Welcome to the podcast! What would you like to explore today?", 0);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Keep existing audio playback functions...
   const playBase64Audio = async (base64Audio, messageIndex) => {
     try {
-      // Stop any currently playing audio
       if (currentAudioRef.current) {
         currentAudioRef.current.pause();
         currentAudioRef.current = null;
@@ -155,7 +228,6 @@ const NewPanelsRecording = () => {
       setIsSpeaking(true);
       setCurrentSpeakingIndex(messageIndex);
 
-      // Convert base64 to blob
       const audioBytes = atob(base64Audio);
       const audioArray = new Uint8Array(audioBytes.length);
       for (let i = 0; i < audioBytes.length; i++) {
@@ -163,39 +235,31 @@ const NewPanelsRecording = () => {
       }
       const audioBlob = new Blob([audioArray], { type: 'audio/wav' });
 
-      // Create audio URL and play it
       const audioUrl = URL.createObjectURL(audioBlob);
       const audio = new Audio(audioUrl);
       currentAudioRef.current = audio;
 
-      // Set up audio event listeners
-      audio.onplay = () => {
-        console.log("🔊 HuggingFace audio started playing");
-      };
-
+      audio.onplay = () => console.log("🔊 Audio started playing");
       audio.onended = () => {
-        console.log("🔊 HuggingFace audio finished playing");
+        console.log("🔊 Audio finished playing");
         setIsSpeaking(false);
         setCurrentSpeakingIndex(-1);
         URL.revokeObjectURL(audioUrl);
         currentAudioRef.current = null;
       };
-
       audio.onerror = (error) => {
-        console.error("🔊 HuggingFace audio playback error:", error);
+        console.error("🔊 Audio playback error:", error);
         setIsSpeaking(false);
         setCurrentSpeakingIndex(-1);
         URL.revokeObjectURL(audioUrl);
         currentAudioRef.current = null;
       };
-
       audio.onpause = () => {
-        console.log("🔊 HuggingFace audio paused");
+        console.log("🔊 Audio paused");
         setIsSpeaking(false);
         setCurrentSpeakingIndex(-1);
       };
 
-      // Start playing the audio
       await audio.play();
 
     } catch (error) {
@@ -205,58 +269,6 @@ const NewPanelsRecording = () => {
     }
   };
 
-  // Enhanced TTS function using HuggingFace API via backend (kept as backup)
-  const speakText = async (text, messageIndex) => {
-    try {
-      // Stop any currently playing audio
-      if (currentAudioRef.current) {
-        currentAudioRef.current.pause();
-        currentAudioRef.current = null;
-      }
-
-      setIsSpeaking(true);
-      setCurrentSpeakingIndex(messageIndex);
-
-      // Get auth token
-      const sessionData = await supabase.auth.getSession();
-      const token = sessionData?.data?.session?.access_token;
-
-      // Send text to your backend TTS endpoint
-      const formData = new FormData();
-      formData.append("text", text);
-
-      console.log("🔊 Sending text for TTS:", text);
-      
-      const ttsResponse = await fetch("http://localhost:8000/text-to-speech/", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`
-        },
-        body: formData
-      });
-
-      if (!ttsResponse.ok) {
-        throw new Error(`TTS API failed: ${ttsResponse.status}`);
-      }
-
-      // Get the audio blob from response
-      const audioBlob = await ttsResponse.blob();
-      console.log("✅ Received TTS audio blob:", audioBlob);
-
-      await playAudioBlob(audioBlob, messageIndex);
-
-    } catch (error) {
-      console.error("TTS Error:", error);
-      setIsSpeaking(false);
-      setCurrentSpeakingIndex(-1);
-      
-      // Fallback to browser TTS if backend fails
-      console.log("🔄 Falling back to browser TTS");
-      fallbackToWebSpeech(text, messageIndex);
-    }
-  };
-
-  // Fallback function using browser's speechSynthesis
   const fallbackToWebSpeech = (text, messageIndex) => {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
@@ -296,13 +308,13 @@ const NewPanelsRecording = () => {
       window.speechSynthesis.speak(utterance);
     }
   };
-  const { user } = useAuth();
 
+  // MODIFIED: Use podcast endpoint instead of respond endpoint
   const sendChunkToBackend = async (chunkBlob) => {
     try {
       setIsProcessing(true);
       
-      // Step 1: Send audio and get transcribed text immediately
+      // Step 1: Transcribe audio
       const formData = new FormData();
       formData.append("user_id", user?.id || "unknown");
       formData.append("audio", chunkBlob, "query.wav");
@@ -320,7 +332,6 @@ const NewPanelsRecording = () => {
       const transcriptionResult = await transcriptionResponse.data;
       console.log("✅ Transcription response:", transcriptionResult);
 
-      // Immediately show the user's query
       if (transcriptionResult.query) {
         const userMessageIndex = transcript.length;
         setTranscript((prev) => [
@@ -328,35 +339,38 @@ const NewPanelsRecording = () => {
           { speaker: "You", text: transcriptionResult.query },
         ]);
 
-        // Step 2: Send the transcribed text to get AI response (text + audio)
-        console.log("🤖 Getting AI response for:", transcriptionResult.query);
+        // Step 2: Use podcast endpoint for host response
+        console.log("🤖 Getting host response for:", transcriptionResult.query);
         
-        // Add a "thinking" message
         const thinkingIndex = transcript.length + 1;
         setTranscript((prev) => [
           ...prev,
           { speaker: "AI Host", text: "Let me think about that...", isTyping: true },
         ]);
 
-        const responseFormData = new FormData();
-        responseFormData.append("query", transcriptionResult.query);
+        const podcastFormData = new FormData();
+        podcastFormData.append("message", transcriptionResult.query);
+        podcastFormData.append("persona", "host");
+        podcastFormData.append("show_name", showName);
+        podcastFormData.append("conversation_id", conversationId);
+        podcastFormData.append("guest_name", guestName);
+        podcastFormData.append("auto_duet", "false"); // Set to true if you want guest to auto-respond
 
-        console.log("🔊 Getting AI response (text + audio)...");
-        const aiResponse = await fetch("http://localhost:8000/respond/", {
+        const hostResponse = await fetch("http://localhost:8000/podcast/turn/", {
           method: "POST",
           headers: {
             Authorization: `Bearer ${token}`
           },
-          body: responseFormData
+          body: podcastFormData
         });
 
-        if (aiResponse.ok) {
-          const aiResult = await aiResponse.json();
-          console.log("✅ AI response received:", aiResult);
+        if (hostResponse.ok) {
+          const hostResult = await hostResponse.json();
+          console.log("✅ Host response received:", hostResult);
 
-          const responseText = aiResult.answer_text || "[No response generated]";
+          const responseText = hostResult.answer_text || "[No response generated]";
           
-          // Replace the "thinking" message with the actual response text
+          // Replace the "thinking" message with the actual response
           setTranscript((prev) => {
             const newTranscript = [...prev];
             if (newTranscript[newTranscript.length - 1].isTyping) {
@@ -369,31 +383,27 @@ const NewPanelsRecording = () => {
             return newTranscript;
           });
 
-          // Play the audio if available
-          if (aiResult.audio_data) {
-            console.log("🔊 Playing HuggingFace TTS audio...");
-            await playBase64Audio(aiResult.audio_data, thinkingIndex);
+          // Play the audio
+          if (hostResult.audio_data) {
+            console.log("🔊 Playing host TTS audio...");
+            await playBase64Audio(hostResult.audio_data, thinkingIndex);
           } else {
-            // Fallback to browser TTS if no audio data
-            console.log("🔄 No audio data, using fallback TTS");
             setTimeout(() => {
               fallbackToWebSpeech(responseText, thinkingIndex);
             }, 500);
           }
 
         } else {
-          throw new Error(`AI response failed: ${aiResponse.status}`);
+          throw new Error(`Host response failed: ${hostResponse.status}`);
         }
 
       } else {
-        // If no transcription, show error
         setTranscript((prev) => [
           ...prev,
           { speaker: "You", text: transcriptionResult.error || "[No speech detected]" },
           { speaker: "AI Host", text: "I couldn't understand the audio. Could you please try again?" },
         ]);
         
-        // Speak the error message using fallback
         setTimeout(() => {
           fallbackToWebSpeech("I couldn't understand the audio. Could you please try again?", transcript.length + 1);
         }, 500);
@@ -402,7 +412,6 @@ const NewPanelsRecording = () => {
     } catch (error) {
       console.error("❌ Error:", error.message);
       
-      // Remove any "thinking" message
       setTranscript((prev) => {
         const newTranscript = [...prev];
         if (newTranscript[newTranscript.length - 1]?.isTyping) {
@@ -418,7 +427,6 @@ const NewPanelsRecording = () => {
         { speaker: "AI Host", text: errorMessage },
       ]);
 
-      // Speak the error message using fallback
       setTimeout(() => {
         fallbackToWebSpeech(errorMessage, transcript.length + 1);
       }, 500);
@@ -427,6 +435,7 @@ const NewPanelsRecording = () => {
     }
   };
 
+  // Keep existing recording functions...
   const resetRecorder = () => {
     if (recorderRef.current) {
       recorderRef.current.stop();
@@ -440,7 +449,6 @@ const NewPanelsRecording = () => {
 
   const startRecording = async () => {
     try {
-      // Stop any ongoing speech/audio
       if (currentAudioRef.current) {
         currentAudioRef.current.pause();
         currentAudioRef.current = null;
@@ -497,31 +505,30 @@ const NewPanelsRecording = () => {
 
   const resumeRecording = () => startRecording();
 
+  // MODIFIED: Reset conversation entirely
   const restartRecording = () => {
     resetRecorder();
     
-    // Stop any audio playback
     if (currentAudioRef.current) {
       currentAudioRef.current.pause();
       currentAudioRef.current = null;
     }
     window.speechSynthesis.cancel();
     
-    setTranscript([{ speaker: "AI Host", text: "Hello! Welcome to our podcast. I'm ready when you are. Let's have a great conversation!" }]);
+    setTranscript([]);
     setIsRecording(false);
     setIsPaused(false);
     setIsProcessing(false);
     setIsSpeaking(false);
     setCurrentSpeakingIndex(-1);
+    setConversationStarted(false); // Reset conversation state
   };
 
   const stopSpeaking = () => {
-    // Stop HuggingFace TTS audio
     if (currentAudioRef.current) {
       currentAudioRef.current.pause();
       currentAudioRef.current = null;
     }
-    // Stop browser TTS as fallback
     window.speechSynthesis.cancel();
     setIsSpeaking(false);
     setCurrentSpeakingIndex(-1);
@@ -529,13 +536,13 @@ const NewPanelsRecording = () => {
 
   return (
     <div className="flex h-full divide-x divide-gray-200 bg-gradient-to-br from-purple-50 to-blue-50">
-      {/* Enhanced Transcript Section */}
+      {/* Transcript Section */}
       <div className="w-1/3 p-6 flex flex-col overflow-y-auto bg-white/80 backdrop-blur-sm rounded-l-lg shadow-inner">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="font-bold text-xl text-gray-800">Live Transcript</h2>
+          <h2 className="font-bold text-xl text-gray-800">{showName}</h2>
           <div className="flex items-center space-x-2 text-sm">
             <Icon name="volume" className="w-4 h-4 text-gray-500" />
-            <span className="text-gray-500">{transcript.length - 1} exchanges</span>
+            <span className="text-gray-500">{transcript.length} exchanges</span>
           </div>
         </div>
         
@@ -553,7 +560,7 @@ const NewPanelsRecording = () => {
         </div>
       </div>
 
-      {/* Enhanced Controls Section */}
+      {/* Controls Section */}
       <div className="w-2/3 p-8 flex flex-col justify-between bg-white rounded-r-lg">
         <div className="space-y-6">
           <div className="text-center">
@@ -562,6 +569,7 @@ const NewPanelsRecording = () => {
               isRecording={isRecording && !isPaused} 
               isProcessing={isProcessing} 
               isSpeaking={isSpeaking}
+              conversationStarted={conversationStarted}
             />
           </div>
 
@@ -569,13 +577,25 @@ const NewPanelsRecording = () => {
 
           {/* Main Control Buttons */}
           <div className="flex justify-center space-x-4">
-            {!isRecording && !isProcessing && !isSpeaking && (
+            {/* START PODCAST BUTTON - Shows when conversation hasn't started */}
+            {!conversationStarted && !isProcessing && (
+              <button 
+                onClick={startPodcastConversation} 
+                className="flex items-center space-x-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white px-8 py-4 rounded-full hover:from-purple-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105"
+              >
+                <Icon name="podcast" className="w-6 h-6" /> 
+                <span className="font-medium">Start Podcast</span>
+              </button>
+            )}
+
+            {/* RECORDING BUTTONS - Show when conversation is started */}
+            {conversationStarted && !isRecording && !isProcessing && !isSpeaking && (
               <button 
                 onClick={startRecording} 
                 className="flex items-center space-x-3 bg-gradient-to-r from-red-500 to-red-600 text-white px-8 py-4 rounded-full hover:from-red-600 hover:to-red-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105"
               >
                 <Icon name="mic" className="w-6 h-6" /> 
-                <span className="font-medium">Start Recording</span>
+                <span className="font-medium">Record Response</span>
               </button>
             )}
 
@@ -634,16 +654,19 @@ const NewPanelsRecording = () => {
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'
               }`}
             >
-              <Icon name="restart" className="w-4 h-4" /> <span>New Conversation</span>
+              <Icon name="restart" className="w-4 h-4" /> <span>New Podcast</span>
             </button>
           </div>
         </div>
 
         <div className="mt-8 text-center">
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-            <p className="text-sm text-blue-700 font-medium mb-2">🎙️ Natural Conversation Mode</p>
+            <p className="text-sm text-blue-700 font-medium mb-2">🎙️ Podcast Conversation Mode</p>
             <p className="text-xs text-blue-600">
-              Speak naturally, and I'll respond with voice just like a real podcast conversation!
+              {!conversationStarted 
+                ? "Click 'Start Podcast' to begin with a host introduction!"
+                : "The host will ask questions, and you can respond naturally with voice!"
+              }
             </p>
           </div>
         </div>

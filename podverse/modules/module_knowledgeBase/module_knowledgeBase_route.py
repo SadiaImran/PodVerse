@@ -10,38 +10,117 @@ from langchain.text_splitter import CharacterTextSplitter
 from langchain.prompts import PromptTemplate
 from langchain_core.documents import Document
 from langchain.schema import BaseRetriever
-from gtts import gTTS
 import speech_recognition as sr
+import base64
 import os
 import time
 import tempfile
-import requests
 import re
-import json
 from typing import Dict, Optional, List
-from connection_supabase_client import get_authenticated_supabase_client, get_service_role_client
-from supabase import Client, create_client
+from collections import defaultdict, deque
+
+from connection_supabase_client import (
+    get_authenticated_supabase_client,
+    get_service_role_client,
+)
+
+from gradio_client import Client as GradioClient
 
 router = APIRouter()
 
 # ========= Config =========
-os.environ["TOGETHER_API_KEY"] = os.environ.get(
-    "TOGETHER_API_KEY", "f98103d1acc08e8528e75028deee01807c69312f742eaddbd877d1b87123dffb"
-)
+os.environ["TOGETHER_API_KEY"] = os.environ.get( "TOGETHER_API_KEY", "f98103d1acc08e8528e75028deee01807c69312f742eaddbd877d1b87123dffb" )
 
-SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
-EMBEDDING_DIM = 384
+EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+CHUNK_SIZE = 500
+CHUNK_OVERLAP = 100
+DEFAULT_AI_PERSONA = "host"
 
-def make_llm(temperature=0.1, max_tokens=512):
+def make_enhanced_llm(temperature=0.8, max_tokens=600):
     return ChatOpenAI(
         openai_api_base="https://api.together.xyz/v1",
         openai_api_key=os.environ.get("TOGETHER_API_KEY"),
-        model_name="mistralai/Mistral-7B-Instruct-v0.1",
+        model_name="mistralai/Mistral-7B-Instruct-v0.1",  # Better conversational model 
         temperature=temperature,
         max_tokens=max_tokens,
     )
 
+# ========= Enhanced Prompts ========= (REPLACE ENTIRE SECTION)
+PODCAST_SYSTEM = """
+You are an AI participating in a dynamic, engaging podcast conversation. 
+
+CRITICAL RULES:
+- Stay STRICTLY within the provided Context/Knowledge Base - never invent facts
+- If you don't know something from the context, say: "That's not covered in what I have here"
+- Sound completely natural - like a real human having an authentic conversation
+- Be enthusiastic, curious, and conversational
+- Use natural speech patterns: "you know", "I mean", "actually", "that's fascinating"
+- NO bullet points, lists, or formal structure
+- Keep responses conversational length (2-4 sentences typically)
+"""
+
+ENHANCED_HOST_PROMPT = PromptTemplate(
+    input_variables=["context", "question", "chat_history", "show_name", "guest_name"],
+    template="""
+{system_prompt}
+
+You are the HOST of "{show_name}" - an engaging, curious interviewer who makes guests feel comfortable.
+
+Your conversation partner: {guest_name}
+
+HOSTING STYLE:
+- Be genuinely curious and enthusiastic about the topics
+- Ask follow-up questions that dig deeper into interesting points
+- Connect different ideas together naturally
+- Use the guest's name occasionally to keep it personal
+- Show you're actively listening by referencing what they just said
+- ALWAYS end your response with an engaging question
+
+If this is the very start (no chat history), give a warm welcome and ask an intriguing opening question based on the context.
+
+Available Knowledge:
+{context}
+
+Conversation so far:
+{chat_history}
+
+Current message: {question}
+
+Your turn as host:
+""".replace("{system_prompt}", PODCAST_SYSTEM)
+)
+
+ENHANCED_GUEST_PROMPT = PromptTemplate(
+    input_variables=["context", "question", "chat_history", "show_name", "guest_name"],
+    template="""
+{system_prompt}
+
+You are {guest_name}, a knowledgeable guest on "{show_name}".
+
+GUEST STYLE:
+- Be conversational and authentic, like talking to a friend
+- Share insights and examples from the knowledge base naturally
+- Show personality - be enthusiastic about interesting topics
+- Build on what the host says - show you're engaged in the conversation
+- Add "you know what's interesting..." or "actually, what I find fascinating is..."
+- NEVER ask questions back - you're the guest being interviewed
+- If you mention a specific fact, smoothly reference the source like "according to the document" or "as mentioned in [filename]"
+
+Available Knowledge:
+{context}
+
+Conversation so far:
+{chat_history}
+
+Host's question/comment: {question}
+
+Your response as guest:
+""".replace("{system_prompt}", PODCAST_SYSTEM)
+)
+
+PERSONA_TO_VOICE = {"host": "m-us-1", "guest": "f-us-1"}
+
+# Keep the SAFE_PROMPT for the /respond/ route
 SAFE_PROMPT = PromptTemplate(
     input_variables=["context", "question"],
     template="""
@@ -64,18 +143,15 @@ Answer:
 """,
 )
 
-CHUNK_SIZE = 500
-CHUNK_OVERLAP = 100
-EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-
-SMALL_TALK_PATTERNS = {
-    r"^\s*(hi|hello|hey)\b": "Hey there! How can I help with your documents today?",
-    r"\b(thank(s)?|thank you|appreciate it)\b": "You're welcome! If you'd like, ask me something about your documents.",
-    r"\b(bye|goodbye|see ya|see you)\b": "Bye! If you need anything from your documents later, just ask.",
+# ========= Helpers =========
+SMALL_TALK_PATTERNS: Dict[str, str] = {
+    r"^\s*(hi|hello|hey)\b": "Welcome—glad you're here. What should we explore first?",
+    r"\b(thank(s)?|thank you|appreciate it)\b": "Happy to have you! Where would you like to take the conversation next?",
+    r"\b(bye|goodbye|see ya|see you)\b": "Thanks for joining—talk soon!",
 }
 
-# ========= Helpers =========
 def parse_pdf_bytes_to_docs(file_bytes: bytes, filename: str) -> List[Document]:
+    """Extract text from PDF bytes into LangChain Documents."""
     docs: List[Document] = []
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         tmp.write(file_bytes)
@@ -87,7 +163,12 @@ def parse_pdf_bytes_to_docs(file_bytes: bytes, filename: str) -> List[Document]:
             for pnum, page in enumerate(reader.pages):
                 text = page.extract_text() or ""
                 if text.strip():
-                    docs.append(Document(page_content=text, metadata={"source": filename, "page": pnum + 1}))
+                    docs.append(
+                        Document(
+                            page_content=text,
+                            metadata={"source": filename, "page": pnum + 1},
+                        )
+                    )
         except Exception:
             loader = PyPDFLoader(tmp_path)
             docs = loader.load()
@@ -120,65 +201,290 @@ def detect_small_talk(text: str) -> Optional[str]:
     return None
 
 def check_document_chunks_exist(supabase_client, user_id: str, storage_path: str) -> bool:
-    """Check if chunks for a document already exist in the documents table"""
+    """Check if chunks for a document already exist in the documents table."""
     try:
-        result = supabase_client.table("documents").select("id").eq("user_id", user_id).eq("metadata->>file_path", storage_path).limit(1).execute()
+        result = (
+            supabase_client.table("documents")
+            .select("id")
+            .eq("user_id", user_id)
+            .eq("metadata->>file_path", storage_path)
+            .limit(1)
+            .execute()
+        )
         return len(result.data) > 0
     except Exception as e:
         print(f"Error checking existing chunks: {e}")
         return False
 
 class StaticRetriever(BaseRetriever):
+    """A simple retriever that returns the provided docs as-is."""
     def __init__(self, docs: List[Document]):
         super().__init__()
         self._docs = docs
-    
+
     def _get_relevant_documents(self, query: str) -> List[Document]:
         return self._docs
-    
+
     @property
     def docs(self):
         return self._docs
 
-# ========= Endpoints =========
+def format_chat_history(turns: List[Dict[str, str]]) -> str:
+    lines = []
+    for t in turns[-14:]:
+        role = t.get("role", "")
+        txt = (t.get("text") or "").strip()
+        if not txt:
+            continue
+        if role == "user":
+            lines.append(f"User: {txt}")
+        elif role == "ai-host":
+            lines.append(f"Host: {txt}")
+        elif role == "ai-guest":
+            lines.append(f"Guest: {txt}")
+        else:
+            lines.append(f"{role}: {txt}")
+    return "\n".join(lines)
+
+def choose_voice_for(persona: str) -> str:
+    return PERSONA_TO_VOICE.get((persona or "").lower(), "f-us-1")
+
+def extract_last_question(text: str) -> Optional[str]:
+    t = (text or "").strip()
+    if not t:
+        return None
+    parts = re.split(r"(\?)", t)
+    last_q = None
+    for i in range(0, len(parts), 2):
+        base = parts[i].strip()
+        punct = parts[i + 1] if i + 1 < len(parts) else ""
+        cur = (base + punct).strip()
+        if cur.endswith("?"):
+            last_q = cur
+    return last_q
+
+
+# ========= New Helper Functions ========= (ADD THESE)
+def make_response_natural(answer: str, persona: str) -> str:
+    """Make responses sound more natural and conversational"""
+    if not answer:
+        return "I don't know based on the provided documents."
+    
+    # Clean up the response
+    answer = answer.strip()
+    
+    # Remove any formatting artifacts
+    answer = re.sub(r'\n+', ' ', answer)
+    answer = re.sub(r'\s+', ' ', answer)
+    
+    # Ensure proper capitalization
+    if answer and not answer[0].isupper():
+        answer = answer[0].upper() + answer[1:]
+    
+    # For host: ensure it ends with a question
+    if persona == "host":
+        if not answer.endswith('?'):
+            # If no question mark found, add a natural follow-up
+            if not answer.endswith(('.', '!', '?')):
+                answer += '.'
+            
+            # Add natural follow-ups based on content
+            natural_questions = [
+                " What do you think about that?",
+                " Can you tell us more about that?", 
+                " What's your take on this?",
+                " How does that work in practice?",
+                " What else should we know about this?"
+            ]
+            
+            import random
+            answer += random.choice(natural_questions)
+    
+    # For guest: remove any questions
+    elif persona == "guest":
+        # Find and remove question sentences
+        sentences = re.split(r'[.!?]+', answer)
+        filtered_sentences = []
+        
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if sentence and not sentence.endswith('?') and '?' not in sentence:
+                filtered_sentences.append(sentence)
+        
+        if filtered_sentences:
+            answer = '. '.join(filtered_sentences)
+            if not answer.endswith('.'):
+                answer += '.'
+        else:
+            answer = "That's really interesting to think about."
+    
+    return answer
+
+def get_relevant_context_for_podcast(supabase_client, user_id: str, query: str, max_docs: int = 4) -> tuple[str, List[dict]]:
+    """Get more targeted context for podcast conversations"""
+    try:
+        embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+        query_vector = embeddings.embed_query(query)
+        
+        # Try semantic search first
+        try:
+            rpc_result = supabase_client.rpc(
+                "match_documents_v2",
+                {
+                    "query_embedding": query_vector, 
+                    "match_count": max_docs, 
+                    "metadata_filter": {"user_id": user_id}
+                }
+            ).execute()
+            
+            if rpc_result.data:
+                candidate_rows = rpc_result.data
+            else:
+                candidate_rows = []
+        except Exception as e:
+            print(f"RPC search failed: {e}")
+            candidate_rows = []
+        
+        # Fallback to recent documents
+        if not candidate_rows:
+            try:
+                fallback = (
+                    supabase_client.table("documents")
+                    .select("content, metadata")
+                    .eq("user_id", user_id)
+                    .limit(max_docs)
+                    .execute()
+                )
+                candidate_rows = fallback.data or []
+            except Exception as e:
+                print(f"Fallback search failed: {e}")
+                candidate_rows = []
+        
+        # Format context
+        context_text = ""
+        sources = []
+        
+        for row in candidate_rows:
+            content = row.get("content", "").strip()
+            metadata = row.get("metadata", {})
+            
+            if content:
+                context_text += f"\n\nFrom {metadata.get('title', 'document')}: {content}"
+                sources.append({
+                    "title": metadata.get("title"),
+                    "file_path": metadata.get("file_path"),
+                    "snippet": content[:200] + "..." if len(content) > 200 else content
+                })
+        
+        return context_text.strip(), sources
+    
+    except Exception as e:
+        print(f"Context retrieval error: {e}")
+        return "", []
+
+def generate_host_opening(context: str, show_name: str, guest_name: str) -> str:
+    """Generate an engaging opening for the host"""
+    if not context:
+        return f"Welcome to {show_name}! I'm excited to dive into some fascinating topics with you today. What should we start exploring?"
+    
+    # Extract interesting topics from context
+    topics = []
+    lines = context.split('\n')
+    for line in lines[:10]:  # Look at first few lines
+        if len(line) > 50:  # Substantial content
+            topics.append(line.strip())
+    
+    if topics:
+        opening_starters = [
+            f"Welcome to {show_name}! I've been looking through some fascinating material here, and I'm really curious about",
+            f"Hey {guest_name}, welcome to the show! I've got some really interesting content to explore with you. Let's start with",
+            f"Welcome everyone to {show_name}! I'm here with {guest_name} and we've got some compelling topics to dive into. I'm particularly intrigued by"
+        ]
+        
+        import random
+        starter = random.choice(opening_starters)
+        first_topic = topics[0][:100] + "..."
+        
+        return f"{starter} {first_topic} What can you tell us about this?"
+    
+    return f"Welcome to {show_name}, {guest_name}! I'm really excited to explore these topics with you. What should we dive into first?"
+
+# ========= Conversation memory =========
+# conversation_state[(user_id, conversation_id)] = deque of {"role":"user"/"ai-host"/"ai-guest","text":"..."}
+conversation_state = defaultdict(lambda: deque(maxlen=24))
+
+# ========= TTS via HF Space =========
+_tts_client = None
+
+def get_tts_client():
+    global _tts_client
+    if _tts_client is None:
+        _tts_client = GradioClient(
+            "https://sadiaimran-styletts2-f1.hf.space/",
+            hf_token=os.environ.get("HF_TOKEN", ""),
+        )
+    return _tts_client
+
+def generate_tts_audio(text: str, voice: str = "f-us-1", steps: int = 3):
+    """Generate TTS audio using HuggingFace Space and return base64 (or None on failure)."""
+    try:
+        tts_client = get_tts_client()
+        result_path = tts_client.predict(text, voice, steps, api_name="/synthesize")
+        with open(result_path, "rb") as audio_file:
+            audio_bytes = audio_file.read()
+        try:
+            if os.path.exists(result_path):
+                os.remove(result_path)
+        except Exception:
+            pass
+        return base64.b64encode(audio_bytes).decode("utf-8")
+    except Exception as e:
+        print(f"TTS generation failed: {e}")
+        return None
+
+# ========= Routes =========
 @router.get("/knowledge-base/")
 async def get_knowledge_base_files(auth_data: dict = Depends(get_authenticated_supabase_client)):
+    """List the user's knowledge-base files."""
     supabase_authenticated = auth_data["client"]
     user_id = auth_data["user_id"]
     try:
-        response = supabase_authenticated.table("knowledge_base").select("*").eq("user_id", user_id).execute()
+        response = (
+            supabase_authenticated.table("knowledge_base")
+            .select("*")
+            .eq("user_id", user_id)
+            .execute()
+        )
         return JSONResponse(content=response.data)
     except Exception as e:
         print(f"knowledge-base error: {e}")
         raise HTTPException(status_code=500, detail="An internal server error occurred.")
 
 @router.post("/upload-knowledge-base/")
-async def upload_knowledge_base(file: UploadFile = File(...), auth_data: dict = Depends(get_authenticated_supabase_client)):
+async def upload_knowledge_base(
+    file: UploadFile = File(...), auth_data: dict = Depends(get_authenticated_supabase_client)
+):
+    """Upload a PDF/TXT, create embeddings & chunks (if not already present), and store metadata."""
     supabase_authenticated = auth_data["client"]
     user_id = auth_data["user_id"]
 
-    # Validate file type
-    allowed = {
-        "application/pdf": ".pdf",
-        "text/plain": ".txt",
-    }
+    allowed = {"application/pdf": ".pdf", "text/plain": ".txt"}
     if file.content_type not in allowed:
         raise HTTPException(status_code=400, detail="Only PDF and TXT files are allowed.")
 
-    # Read file
     file_data = await file.read()
     if not file_data:
         raise HTTPException(status_code=400, detail="File is empty.")
-    
+
     timestamp = int(time.time())
     clean_filename = file.filename.replace(" ", "_")
     storage_name = f"{timestamp}_{clean_filename}"
 
     print(f"[upload] Processing {file.filename} as {storage_name} (size: {len(file_data)} bytes)")
 
-    # Upload to storage (KEEP THIS - don't change the storage functionality)
+    # store file
     try:
-        upload_result = supabase_authenticated.storage.from_("knowledge-base").upload(
+        supabase_authenticated.storage.from_("knowledge-base").upload(
             storage_name, file_data, {"content-type": file.content_type}
         )
         public_url = supabase_authenticated.storage.from_("knowledge-base").get_public_url(storage_name)
@@ -186,39 +492,39 @@ async def upload_knowledge_base(file: UploadFile = File(...), auth_data: dict = 
         print(f"[upload] Storage upload failed: {e}")
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
-    # Save metadata to knowledge_base table
+    # metadata
     try:
-        meta_result = supabase_authenticated.table("knowledge_base").insert({
-            "user_id": user_id,
-            "file_name": file.filename,
-            "public_url": public_url,
-            "storage_path": storage_name,
-        }).execute()
+        supabase_authenticated.table("knowledge_base").insert(
+            {
+                "user_id": user_id,
+                "file_name": file.filename,
+                "public_url": public_url,
+                "storage_path": storage_name,
+            }
+        ).execute()
     except Exception as e:
         print(f"[upload] Metadata save failed: {e}")
         try:
             supabase_authenticated.storage.from_("knowledge-base").remove([storage_name])
-        except:
+        except Exception:
             pass
         raise HTTPException(status_code=500, detail=f"Metadata save failed: {str(e)}")
 
-    # Check if chunks already exist for this document
+    # chunks (skip if already exist)
     service_client = get_service_role_client()
-    chunks_exist = check_document_chunks_exist(service_client, user_id, storage_name)
-    
-    if chunks_exist:
+    if check_document_chunks_exist(service_client, user_id, storage_name):
         print(f"[upload] Chunks already exist for {storage_name}, skipping chunk creation")
         return {
             "message": "Document uploaded successfully. Chunks already exist in database.",
             "public_url": public_url,
-            "chunks_created": False
+            "chunks_created": False,
         }
 
-    # Process document content and create embeddings (only if chunks don't exist)
+    chunks_created = False
     try:
         docs: List[Document] = []
         ext = os.path.splitext(file.filename)[1].lower()
-        
+
         if ext == ".pdf":
             docs = parse_pdf_bytes_to_docs(file_data, file.filename)
         elif ext == ".txt":
@@ -227,111 +533,77 @@ async def upload_knowledge_base(file: UploadFile = File(...), auth_data: dict = 
                 docs = [Document(page_content=text, metadata={"source": file.filename})]
 
         if not docs:
-            print("[upload] No content extracted from document")
             return {
                 "message": "Document uploaded but no content could be extracted.",
                 "public_url": public_url,
-                "chunks_created": False
+                "chunks_created": False,
             }
 
-        # Create chunks
         chunks = chunk_docs(docs)
-        print(f"[upload] Created {len(chunks)} chunks")
-        
         if not chunks:
             return {
                 "message": "Document uploaded but no chunks created.",
                 "public_url": public_url,
-                "chunks_created": False
+                "chunks_created": False,
             }
 
-        # Add metadata to chunks
         for chunk in chunks:
-            chunk.metadata.update({
-                "title": file.filename,
-                "file_path": storage_name,
-                "user_id": user_id
-            })
+            chunk.metadata.update({"title": file.filename, "file_path": storage_name, "user_id": user_id})
 
-        # Generate embeddings
         embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
-        texts = [chunk.page_content for chunk in chunks]
-        vectors = embeddings.embed_documents(texts)
-        
-        # Prepare rows for insertion
-        rows = []
-        for i, chunk in enumerate(chunks):
-            rows.append({
-                "content": chunk.page_content,
-                "metadata": chunk.metadata,
-                "embedding": vectors[i],
-                "user_id": user_id,
-            })
+        vectors = embeddings.embed_documents([c.page_content for c in chunks])
 
-        # Insert using service role client
-        try:
-            result = service_client.table("documents").insert(rows).execute()
-            print(f"[upload] Successfully inserted {len(rows)} document chunks")
-            chunks_created = True
-        except Exception as e:
-            print(f"[upload] Failed to insert into documents table: {e}")
-            chunks_created = False
-            
+        rows = [
+            {"content": c.page_content, "metadata": c.metadata, "embedding": vectors[i], "user_id": user_id}
+            for i, c in enumerate(chunks)
+        ]
+
+        get_service_role_client().table("documents").insert(rows).execute()
+        print(f"[upload] Successfully inserted {len(rows)} document chunks")
+        chunks_created = True
     except Exception as e:
         print(f"[upload] Document processing failed: {e}")
-        chunks_created = False
 
-    return {
-        "message": "Document uploaded successfully.",
-        "public_url": public_url,
-        "chunks_created": chunks_created
-    }
+    return {"message": "Document uploaded successfully.", "public_url": public_url, "chunks_created": chunks_created}
 
 @router.post("/process-existing-document/")
 async def process_existing_document(
-    storage_path: str = Form(...),
-    auth_data: dict = Depends(get_authenticated_supabase_client)
+    storage_path: str = Form(...), auth_data: dict = Depends(get_authenticated_supabase_client)
 ):
-    """Process an existing document from knowledge-base to create chunks if they don't exist"""
+    """Re-process an existing stored file to create missing chunks."""
     supabase_authenticated = auth_data["client"]
     user_id = auth_data["user_id"]
     service_client = get_service_role_client()
 
-    # Check if the document belongs to the user
     try:
-        kb_result = supabase_authenticated.table("knowledge_base").select("*").eq("user_id", user_id).eq("storage_path", storage_path).execute()
+        kb_result = (
+            supabase_authenticated.table("knowledge_base")
+            .select("*")
+            .eq("user_id", user_id)
+            .eq("storage_path", storage_path)
+            .execute()
+        )
         if not kb_result.data:
             raise HTTPException(status_code=404, detail="Document not found or access denied.")
-        
         document_info = kb_result.data[0]
     except Exception as e:
         print(f"Error fetching document info: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch document information.")
 
-    # Check if chunks already exist
-    chunks_exist = check_document_chunks_exist(service_client, user_id, storage_path)
-    
-    if chunks_exist:
-        return {
-            "message": "Chunks already exist for this document.",
-            "chunks_created": False,
-            "storage_path": storage_path
-        }
+    if check_document_chunks_exist(service_client, user_id, storage_path):
+        return {"message": "Chunks already exist for this document.", "chunks_created": False, "storage_path": storage_path}
 
-    # Download the file from storage
     try:
-        file_response = supabase_authenticated.storage.from_("knowledge-base").download(storage_path)
-        file_data = file_response
+        file_data = supabase_authenticated.storage.from_("knowledge-base").download(storage_path)
     except Exception as e:
         print(f"Error downloading file: {e}")
         raise HTTPException(status_code=500, detail="Failed to download file from storage.")
 
-    # Process the document
     try:
         docs: List[Document] = []
         filename = document_info["file_name"]
         ext = os.path.splitext(filename)[1].lower()
-        
+
         if ext == ".pdf":
             docs = parse_pdf_bytes_to_docs(file_data, filename)
         elif ext == ".txt":
@@ -340,68 +612,42 @@ async def process_existing_document(
                 docs = [Document(page_content=text, metadata={"source": filename})]
 
         if not docs:
-            return {
-                "message": "No content could be extracted from document.",
-                "chunks_created": False,
-                "storage_path": storage_path
-            }
+            return {"message": "No content could be extracted from document.", "chunks_created": False, "storage_path": storage_path}
 
-        # Create chunks
         chunks = chunk_docs(docs)
-        
         if not chunks:
-            return {
-                "message": "No chunks created from document.",
-                "chunks_created": False,
-                "storage_path": storage_path
-            }
+            return {"message": "No chunks created from document.", "chunks_created": False, "storage_path": storage_path}
 
-        # Add metadata to chunks
         for chunk in chunks:
-            chunk.metadata.update({
-                "title": filename,
-                "file_path": storage_path,
-                "user_id": user_id
-            })
+            chunk.metadata.update({"title": filename, "file_path": storage_path, "user_id": user_id})
 
-        # Generate embeddings
         embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
-        texts = [chunk.page_content for chunk in chunks]
-        vectors = embeddings.embed_documents(texts)
-        texts = [chunk.page_content for chunk in chunks]
-        vectors = embeddings.embed_documents(texts)
-        
-        # Prepare rows for insertion
-        rows = []
-        for i, chunk in enumerate(chunks):
-            rows.append({
-                "content": chunk.page_content,
-                "metadata": chunk.metadata,
-                "embedding": vectors[i],
-                "user_id": user_id,
-            })
+        vectors = embeddings.embed_documents([c.page_content for c in chunks])
 
-        # Insert chunks
-        result = service_client.table("documents").insert(rows).execute()
+        rows = [
+            {"content": c.page_content, "metadata": c.metadata, "embedding": vectors[i], "user_id": user_id}
+            for i, c in enumerate(chunks)
+        ]
+
+        service_client.table("documents").insert(rows).execute()
         print(f"[process-existing] Successfully inserted {len(rows)} document chunks")
-        
+
         return {
             "message": f"Successfully created {len(rows)} chunks for existing document.",
             "chunks_created": True,
             "storage_path": storage_path,
-            "chunk_count": len(rows)
+            "chunk_count": len(rows),
         }
-        
     except Exception as e:
         print(f"Error processing existing document: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to process document: {str(e)}")
 
 @router.post("/query_audio/")
 async def query_audio(audio: UploadFile = File(...), auth_data: dict = Depends(get_authenticated_supabase_client)):
-    """Process audio and return transcribed text immediately"""
+    """Process audio and return transcribed text immediately."""
     recognizer = sr.Recognizer()
     temp_path = f"temp_{audio.filename}"
-    
+
     try:
         with open(temp_path, "wb") as f:
             f.write(await audio.read())
@@ -412,10 +658,9 @@ async def query_audio(audio: UploadFile = File(...), auth_data: dict = Depends(g
         with sr.AudioFile(temp_path) as source:
             audio_data = recognizer.record(source)
             query_text = recognizer.recognize_google(audio_data)
-            
-        # Return transcribed text immediately
+
         return JSONResponse(content={"query": query_text, "success": True})
-            
+
     except sr.UnknownValueError:
         return JSONResponse(content={"error": "Could not understand audio", "query": "[No speech detected]"}, status_code=400)
     except Exception as e:
@@ -423,157 +668,110 @@ async def query_audio(audio: UploadFile = File(...), auth_data: dict = Depends(g
     finally:
         try:
             os.remove(temp_path)
-        except:
+        except Exception:
             pass
-
-
-# Add these imports at the top of your file
-import os
-import base64
-import tempfile
-from fastapi.responses import JSONResponse
-from gradio_client import Client
-
-_tts_client = None
-
-def get_tts_client():
-    global _tts_client
-    if _tts_client is None:
-        _tts_client = Client(
-            "https://sadiaimran-styletts2-f1.hf.space/",
-            hf_token="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",
-        )
-    return _tts_client
-
-def generate_tts_audio(text: str, voice: str = "f-us-1", steps: int = 3):
-    """Generate TTS audio using HuggingFace and return base64"""
-    try:
-        tts_client = get_tts_client()
-        result = tts_client.predict(text, voice, steps, api_name="/synthesize")
-        # Read the audio file and convert to base64
-        with open(result, 'rb') as audio_file:
-            audio_bytes = audio_file.read()
-        
-        # Clean up temp file
-        if os.path.exists(result):
-            os.remove(result)
-            
-        # Convert to base64
-        audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
-        return audio_base64
-        
-    except Exception as e:
-        print(f"TTS generation failed: {e}")
-        return None
 
 @router.post("/respond/")
 async def generate_response(query: str = Form(...), auth_data: dict = Depends(get_authenticated_supabase_client)):
-    """Generate AI response for the given query - returns both text and audio"""
+    """Generate AI response for the given query - returns both text and audio; grounded to user's docs."""
     try:
         supabase_authenticated = auth_data["client"]
         user_id = auth_data["user_id"]
         q = (query or "").strip()
 
-        # Handle small talk
+        # small talk quick path
         smalltalk = detect_small_talk(q)
         if smalltalk:
-            audio_data = generate_tts_audio(smalltalk)
             return {
-                "answer_text": smalltalk, 
-                "sources": [], 
-                "audio_data": audio_data,
-                "audio_type": "audio/wav"
+                "answer_text": smalltalk,
+                "sources": [],
+                "audio_data": generate_tts_audio(smalltalk),
+                "audio_type": "audio/wav",
             }
 
-        # Check if user has documents
+        # ensure docs exist
         try:
-            docs_resp = supabase_authenticated.table("documents").select("id, content").eq("user_id", user_id).limit(3).execute()
+            docs_resp = (
+                supabase_authenticated.table("documents")
+                .select("id")
+                .eq("user_id", user_id)
+                .limit(1)
+                .execute()
+            )
             if not docs_resp.data:
                 msg = "I don't have any documents for you yet. Please upload a file first."
-                audio_data = generate_tts_audio(msg)
                 return {
-                    "answer_text": msg, 
-                    "sources": [], 
-                    "audio_data": audio_data,
-                    "audio_type": "audio/wav"
+                    "answer_text": msg,
+                    "sources": [],
+                    "audio_data": generate_tts_audio(msg),
+                    "audio_type": "audio/wav",
                 }
         except Exception as e:
             print(f"[respond] Error checking documents: {e}")
 
-        # Generate query embedding and search
+        # retrieve candidates
         embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
         query_vector = embeddings.embed_query(q)
 
-        # Search for similar documents
         candidate_rows = []
         try:
-            # Try the RPC function first
-            rpc_result = supabase_authenticated.rpc("match_documents_v2", {
-                "query_embedding": query_vector,
-                "match_count": 5,
-                "metadata_filter": {"user_id": user_id}
-            }).execute()
-            
+            rpc_result = supabase_authenticated.rpc(
+                "match_documents_v2",
+                {"query_embedding": query_vector, "match_count": 5, "metadata_filter": {"user_id": user_id}},
+            ).execute()
             if rpc_result.data:
                 candidate_rows = rpc_result.data
-                print(f"[respond] Found {len(candidate_rows)} candidate documents via RPC")
         except Exception as e:
             print(f"[respond] RPC search failed: {e}")
-            
-        # If RPC failed or returned no results, use fallback search
+
         if not candidate_rows:
+            # last-resort simple fetch
             try:
-                # Fallback: simple similarity search using cosine distance
-                fallback = supabase_authenticated.table("documents").select(
-                    "content, metadata, embedding"
-                ).eq("user_id", user_id).limit(20).execute()
-                
+                fallback = (
+                    supabase_authenticated.table("documents")
+                    .select("content, metadata, embedding")
+                    .eq("user_id", user_id)
+                    .limit(20)
+                    .execute()
+                )
                 if fallback.data:
-                    # Calculate similarity manually and sort
                     import numpy as np
-                    
-                    query_np = np.array(query_vector)
-                    similarities = []
-                    
+                    qv = np.array(query_vector)
+                    scored = []
                     for row in fallback.data:
-                        doc_embedding = np.array(row['embedding'])
-                        # Cosine similarity
-                        similarity = np.dot(query_np, doc_embedding) / (np.linalg.norm(query_np) * np.linalg.norm(doc_embedding))
-                        similarities.append((similarity, row))
-                    
-                    # Sort by similarity (highest first) and take top 5
-                    similarities.sort(key=lambda x: x[0], reverse=True)
-                    candidate_rows = [row for _, row in similarities[:5]]
-                    print(f"[respond] Found {len(candidate_rows)} candidate documents via fallback")
-                    
+                        dv = np.array(row["embedding"])
+                        sim = float(np.dot(qv, dv) / (np.linalg.norm(qv) * np.linalg.norm(dv)))
+                        scored.append((sim, row))
+                    scored.sort(key=lambda x: x[0], reverse=True)
+                    candidate_rows = [r for _, r in scored[:5]]
             except Exception as fe:
                 print(f"[respond] Fallback search failed: {fe}")
-                # Last resort: just get any documents for this user
                 try:
-                    simple_fallback = supabase_authenticated.table("documents").select("content, metadata").eq("user_id", user_id).limit(5).execute()
-                    candidate_rows = simple_fallback.data or []
-                    print(f"[respond] Using simple fallback: {len(candidate_rows)} documents")
+                    simple = (
+                        supabase_authenticated.table("documents")
+                        .select("content, metadata")
+                        .eq("user_id", user_id)
+                        .limit(5)
+                        .execute()
+                    )
+                    candidate_rows = simple.data or []
                 except Exception as sfe:
                     print(f"[respond] Simple fallback failed: {sfe}")
 
         if not candidate_rows:
             answer = "I don't know based on the provided documents."
-            audio_data = generate_tts_audio(answer)
             return {
-                "answer_text": answer, 
-                "sources": [], 
-                "audio_data": audio_data,
-                "audio_type": "audio/wav"
+                "answer_text": answer,
+                "sources": [],
+                "audio_data": generate_tts_audio(answer),
+                "audio_type": "audio/wav",
             }
 
-        # Convert to documents
-        retrieved_documents = []
-        for row in candidate_rows:
-            content = row.get("content", "")
-            metadata = row.get("metadata", {})
-            retrieved_documents.append(Document(page_content=content, metadata=metadata))
+        retrieved_documents = [
+            Document(page_content=row.get("content", ""), metadata=row.get("metadata", {}))
+            for row in candidate_rows
+        ]
 
-        # Generate answer
         llm = make_llm(temperature=0.1, max_tokens=512)
         qa = RetrievalQA.from_chain_type(
             llm=llm,
@@ -585,27 +783,213 @@ async def generate_response(query: str = Form(...), auth_data: dict = Depends(ge
 
         result = qa.invoke({"query": q})
         answer = polish_answer(result.get("result", ""))
-        
-        # Prepare sources
-        sources = []
-        for doc in result.get("source_documents", []):
-            sources.append({
+
+        sources = [
+            {
                 "title": doc.metadata.get("title"),
                 "file_path": doc.metadata.get("file_path"),
                 "page": doc.metadata.get("page"),
-                "snippet": doc.page_content[:300]
-            })
+                "snippet": doc.page_content[:300],
+            }
+            for doc in result.get("source_documents", [])
+        ]
 
-        # Generate audio for the final answer
-        audio_data = generate_tts_audio(answer)
-        
         return {
             "answer_text": answer,
             "sources": sources,
-            "audio_data": audio_data,
-            "audio_type": "audio/wav"
+            "audio_data": generate_tts_audio(answer),
+            "audio_type": "audio/wav",
         }
 
     except Exception as e:
         print(f"[respond] Error: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
+
+@router.post("/podcast/turn/")
+async def enhanced_podcast_turn(
+    message: str = Form(...),
+    persona: str = Form(DEFAULT_AI_PERSONA),
+    show_name: str = Form("AI Knowledge Podcast"),
+    conversation_id: str = Form("default"),
+    guest_name: str = Form("Expert Guest"),
+    auto_duet: bool = Form(False),
+    is_conversation_start: bool = Form(False),  # New parameter
+    auth_data: dict = Depends(get_authenticated_supabase_client),
+):
+    """
+    Enhanced podcast conversation with natural flow and proper host/guest dynamics
+    """
+    try:
+        supabase_authenticated = auth_data["client"]
+        user_id = auth_data["user_id"]
+        key = (user_id, conversation_id)
+        
+        # Check if user has documents
+        try:
+            docs_check = (
+                supabase_authenticated.table("documents")
+                .select("id")
+                .eq("user_id", user_id)
+                .limit(1)
+                .execute()
+            )
+            if not docs_check.data:
+                return {
+                    "answer_text": "I'd love to chat, but I don't have any documents to discuss yet. Please upload some content first so we can have a real conversation about your materials!",
+                    "sources": [],
+                    "audio_data": generate_tts_audio("I'd love to chat, but I don't have any documents to discuss yet. Please upload some content first!"),
+                    "audio_type": "audio/wav"
+                }
+        except Exception as e:
+            print(f"Document check error: {e}")
+        
+        # Handle conversation start with host opening
+        if is_conversation_start and persona == "host":
+            # Host opens the conversation
+            context_text, sources = get_relevant_context_for_podcast(supabase_authenticated, user_id, "introduction overview summary", max_docs=3)
+            
+            opening = generate_host_opening(context_text, show_name, guest_name)
+            conversation_state[key].append({"role": "ai-host", "text": opening})
+            
+            # Generate TTS with host voice
+            host_voice = "m-us-1"  # Male voice for host
+            audio_b64 = generate_tts_audio(opening, voice=host_voice, steps=5)  # Higher quality
+            
+            return {
+                "answer_text": opening,
+                "follow_up": extract_last_question(opening),
+                "sources": sources,
+                "audio_data": audio_b64,
+                "audio_type": "audio/wav"
+            }
+        
+        # Add user message to conversation memory
+        if message and message.strip():
+            conversation_state[key].append({"role": "user", "text": message})
+        
+        # Get relevant context
+        context_text, sources = get_relevant_context_for_podcast(supabase_authenticated, user_id, message)
+        
+        # Build conversation history
+        chat_history = format_chat_history(list(conversation_state[key]))
+        
+        # Choose prompt and generate response
+        if persona == "host":
+            prompt_template = ENHANCED_HOST_PROMPT
+            llm = make_enhanced_llm(temperature=0.8, max_tokens=500)
+            voice = "m-us-1"  # Male host voice
+        else:  # guest
+            prompt_template = ENHANCED_GUEST_PROMPT
+            llm = make_enhanced_llm(temperature=0.7, max_tokens=450)
+            voice = "f-us-1"  # Female guest voice
+        
+        # Generate response
+        filled_prompt = prompt_template.format(
+            context=context_text,
+            question=message,
+            chat_history=chat_history,
+            show_name=show_name,
+            guest_name=guest_name
+        )
+        
+        result = llm.invoke(filled_prompt)
+        raw_answer = getattr(result, "content", str(result))
+        
+        # Process and clean the response
+        answer = make_response_natural(raw_answer, persona)
+        
+        # Add AI response to conversation memory
+        role = "ai-host" if persona == "host" else "ai-guest"
+        conversation_state[key].append({"role": role, "text": answer})
+        
+        # Generate high-quality TTS
+        audio_b64 = generate_tts_audio(answer, voice=voice, steps=5)
+        
+        response = {
+            "answer_text": answer,
+            "follow_up": extract_last_question(answer) if persona == "host" else None,
+            "sources": sources,
+            "audio_data": audio_b64,
+            "audio_type": "audio/wav"
+        }
+        
+        # Auto-duet: Guest responds to host
+        if auto_duet and persona == "host":
+            # Small delay for natural flow
+            import time
+            time.sleep(0.5)
+            
+            guest_prompt_filled = ENHANCED_GUEST_PROMPT.format(
+                context=context_text,
+                question=answer,  # Host's question becomes guest's input
+                chat_history=format_chat_history(list(conversation_state[key])),
+                show_name=show_name,
+                guest_name=guest_name
+            )
+            
+            guest_llm = make_enhanced_llm(temperature=0.7, max_tokens=400)
+            guest_result = guest_llm.invoke(guest_prompt_filled)
+            guest_raw = getattr(guest_result, "content", str(guest_result))
+            guest_answer = make_response_natural(guest_raw, "guest")
+            
+            conversation_state[key].append({"role": "ai-guest", "text": guest_answer})
+            guest_audio = generate_tts_audio(guest_answer, voice="f-us-1", steps=4)
+            
+            response["duet_guest"] = {
+                "answer_text": guest_answer,
+                "audio_data": guest_audio,
+                "audio_type": "audio/wav"
+            }
+        
+        return response
+    
+    except Exception as e:
+        print(f"Enhanced podcast turn error: {e}")
+        error_msg = "Sorry, I'm having trouble right now. Can we try that again?"
+        return {
+            "answer_text": error_msg,
+            "sources": [],
+            "audio_data": generate_tts_audio(error_msg),
+            "audio_type": "audio/wav"
+        }
+
+@router.post("/podcast/start/")
+async def start_podcast_conversation(
+    show_name: str = Form("AI Knowledge Podcast"),
+    guest_name: str = Form("Expert Guest"),
+    conversation_id: str = Form("default"),
+    auth_data: dict = Depends(get_authenticated_supabase_client),
+):
+    """
+    Start a new podcast conversation with host opening
+    """
+    try:
+        supabase_authenticated = auth_data["client"]
+        user_id = auth_data["user_id"]
+        key = (user_id, conversation_id)
+        
+        # Clear previous conversation
+        conversation_state[key].clear()
+        
+        # Get context for opening
+        context_text, sources = get_relevant_context_for_podcast(supabase_authenticated, user_id, "overview introduction summary")
+        
+        # Generate host opening
+        opening = generate_host_opening(context_text, show_name, guest_name)
+        conversation_state[key].append({"role": "ai-host", "text": opening})
+        
+        # Generate TTS
+        audio_b64 = generate_tts_audio(opening, voice="m-us-1", steps=5)
+        
+        return {
+            "answer_text": opening,
+            "follow_up": extract_last_question(opening),
+            "sources": sources,
+            "audio_data": audio_b64,
+            "audio_type": "audio/wav",
+            "conversation_started": True
+        }
+    
+    except Exception as e:
+        print(f"Start podcast error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
