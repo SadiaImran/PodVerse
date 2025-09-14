@@ -117,7 +117,7 @@ const StatusIndicator = ({ isRecording, isProcessing, isSpeaking, conversationSt
     return (
       <div className="flex items-center space-x-2 text-green-600">
         <div className="w-3 h-3 bg-green-600 rounded-full animate-pulse"></div>
-        <span className="font-medium">Host Speaking...</span>
+        <span className="font-medium">AI Speaking...</span>
       </div>
     );
   }
@@ -130,6 +130,9 @@ const StatusIndicator = ({ isRecording, isProcessing, isSpeaking, conversationSt
 };
 
 const NewPanelsRecording = () => {
+  // **HARDCODED AGENT SELECTION** - Change this to switch modes:
+  const SELECTED_AGENT = 'guest'; // Change to 'guest' for different behavior
+  
   // Existing state
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -138,9 +141,9 @@ const NewPanelsRecording = () => {
   const [currentSpeakingIndex, setCurrentSpeakingIndex] = useState(-1);
   const [transcript, setTranscript] = useState([]);
 
-  // NEW: Conversation management state
+  // Conversation management state
   const [conversationStarted, setConversationStarted] = useState(false);
-  const [conversationId] = useState(() => `conv_${Date.now()}`); // Generate unique conversation ID
+  const [conversationId] = useState(() => `conv_${Date.now()}`);
   const [showName] = useState("AI Knowledge Podcast");
   const [guestName] = useState("Expert Guest");
   
@@ -156,11 +159,22 @@ const NewPanelsRecording = () => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [transcript]);
 
-  // NEW: Start podcast conversation with host opening
+  // Start conversation based on agent selection
+  const startConversation = async () => {
+    if (SELECTED_AGENT === 'host') {
+      // HOST MODE: AI starts the conversation using podcast/start endpoint
+      await startPodcastConversation();
+    } else {
+      // GUEST MODE: Just mark conversation as started, user goes first
+      setConversationStarted(true);
+    }
+  };
+
+  // HOST MODE: Start podcast conversation with host opening
   const startPodcastConversation = async () => {
     try {
       setIsProcessing(true);
-      console.log("🎙️ Starting podcast conversation...");
+      console.log("🎙️ Starting podcast conversation (HOST mode)...");
 
       const sessionData = await supabase.auth.getSession();
       const token = sessionData?.data?.session?.access_token;
@@ -182,19 +196,16 @@ const NewPanelsRecording = () => {
         const result = await response.json();
         console.log("✅ Podcast started:", result);
 
-        // Add host opening to transcript
         const hostMessageIndex = 0;
         setTranscript([
-          { speaker: "AI Host", text: result.answer_text }
+          { speaker: "AI", text: result.answer_text }
         ]);
 
         setConversationStarted(true);
 
-        // Play the host opening audio
         if (result.audio_data) {
           await playBase64Audio(result.audio_data, hostMessageIndex);
         } else {
-          // Fallback to browser TTS
           setTimeout(() => {
             fallbackToWebSpeech(result.answer_text, hostMessageIndex);
           }, 500);
@@ -206,12 +217,12 @@ const NewPanelsRecording = () => {
 
     } catch (error) {
       console.error("❌ Failed to start podcast:", error);
-      const errorMessage = "Sorry, I couldn't start the podcast. Let me try a simple greeting instead.";
+      const errorMessage = "Welcome to the podcast! What would you like to explore today?";
       setTranscript([
-        { speaker: "AI Host", text: "Welcome to the podcast! What would you like to explore today?" }
+        { speaker: "AI", text: errorMessage }
       ]);
       setConversationStarted(true);
-      fallbackToWebSpeech("Welcome to the podcast! What would you like to explore today?", 0);
+      fallbackToWebSpeech(errorMessage, 0);
     } finally {
       setIsProcessing(false);
     }
@@ -309,12 +320,12 @@ const NewPanelsRecording = () => {
     }
   };
 
-  // MODIFIED: Use podcast endpoint instead of respond endpoint
+  // **KEY ROUTING LOGIC** - Route to different endpoints based on SELECTED_AGENT
   const sendChunkToBackend = async (chunkBlob) => {
     try {
       setIsProcessing(true);
       
-      // Step 1: Transcribe audio
+      // Step 1: Transcribe audio (same for both modes)
       const formData = new FormData();
       formData.append("user_id", user?.id || "unknown");
       formData.append("audio", chunkBlob, "query.wav");
@@ -333,75 +344,26 @@ const NewPanelsRecording = () => {
       console.log("✅ Transcription response:", transcriptionResult);
 
       if (transcriptionResult.query) {
-        const userMessageIndex = transcript.length;
+        // Add user message to transcript
         setTranscript((prev) => [
           ...prev,
           { speaker: "You", text: transcriptionResult.query },
         ]);
 
-        // Step 2: Use podcast endpoint for host response
-        console.log("🤖 Getting host response for:", transcriptionResult.query);
-        
-        const thinkingIndex = transcript.length + 1;
-        setTranscript((prev) => [
-          ...prev,
-          { speaker: "AI Host", text: "Let me think about that...", isTyping: true },
-        ]);
-
-        const podcastFormData = new FormData();
-        podcastFormData.append("message", transcriptionResult.query);
-        podcastFormData.append("persona", "host");
-        podcastFormData.append("show_name", showName);
-        podcastFormData.append("conversation_id", conversationId);
-        podcastFormData.append("guest_name", guestName);
-        podcastFormData.append("auto_duet", "false"); // Set to true if you want guest to auto-respond
-
-        const hostResponse = await fetch("http://localhost:8000/podcast/turn/", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`
-          },
-          body: podcastFormData
-        });
-
-        if (hostResponse.ok) {
-          const hostResult = await hostResponse.json();
-          console.log("✅ Host response received:", hostResult);
-
-          const responseText = hostResult.answer_text || "[No response generated]";
-          
-          // Replace the "thinking" message with the actual response
-          setTranscript((prev) => {
-            const newTranscript = [...prev];
-            if (newTranscript[newTranscript.length - 1].isTyping) {
-              newTranscript.pop();
-            }
-            newTranscript.push({
-              speaker: "AI Host",
-              text: responseText
-            });
-            return newTranscript;
-          });
-
-          // Play the audio
-          if (hostResult.audio_data) {
-            console.log("🔊 Playing host TTS audio...");
-            await playBase64Audio(hostResult.audio_data, thinkingIndex);
-          } else {
-            setTimeout(() => {
-              fallbackToWebSpeech(responseText, thinkingIndex);
-            }, 500);
-          }
-
+        // **ROUTING LOGIC BASED ON AGENT**
+        if (SELECTED_AGENT === 'host') {
+          // HOST MODE: Use podcast/turn endpoint
+          await handleHostMode(transcriptionResult.query, token);
         } else {
-          throw new Error(`Host response failed: ${hostResponse.status}`);
+          // GUEST MODE: Use regular respond endpoint  
+          await handleGuestMode(transcriptionResult.query, token);
         }
 
       } else {
         setTranscript((prev) => [
           ...prev,
           { speaker: "You", text: transcriptionResult.error || "[No speech detected]" },
-          { speaker: "AI Host", text: "I couldn't understand the audio. Could you please try again?" },
+          { speaker: "AI", text: "I couldn't understand the audio. Could you please try again?" },
         ]);
         
         setTimeout(() => {
@@ -424,7 +386,7 @@ const NewPanelsRecording = () => {
       setTranscript((prev) => [
         ...prev,
         { speaker: "You", text: "[Recording Sent]" },
-        { speaker: "AI Host", text: errorMessage },
+        { speaker: "AI", text: errorMessage },
       ]);
 
       setTimeout(() => {
@@ -432,6 +394,122 @@ const NewPanelsRecording = () => {
       }, 500);
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  // HOST MODE: Use podcast endpoints
+  const handleHostMode = async (query, token) => {
+    console.log("🤖 Getting HOST response for:", query);
+    
+    const thinkingIndex = transcript.length + 1;
+    setTranscript((prev) => [
+      ...prev,
+      { speaker: "AI", text: "Let me think about that...", isTyping: true },
+    ]);
+
+    const podcastFormData = new FormData();
+    podcastFormData.append("message", query);
+    podcastFormData.append("persona", "host");
+    podcastFormData.append("show_name", showName);
+    podcastFormData.append("conversation_id", conversationId);
+    podcastFormData.append("guest_name", guestName);
+    podcastFormData.append("auto_duet", "false");
+
+    const hostResponse = await fetch("http://localhost:8000/podcast/turn/", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`
+      },
+      body: podcastFormData
+    });
+
+    if (hostResponse.ok) {
+      const hostResult = await hostResponse.json();
+      console.log("✅ Host response received:", hostResult);
+
+      const responseText = hostResult.answer_text || "[No response generated]";
+      
+      // Replace the "thinking" message with the actual response
+      setTranscript((prev) => {
+        const newTranscript = [...prev];
+        if (newTranscript[newTranscript.length - 1].isTyping) {
+          newTranscript.pop();
+        }
+        newTranscript.push({
+          speaker: "AI",
+          text: responseText
+        });
+        return newTranscript;
+      });
+
+      // Play the audio
+      if (hostResult.audio_data) {
+        console.log("🔊 Playing host TTS audio...");
+        await playBase64Audio(hostResult.audio_data, thinkingIndex);
+      } else {
+        setTimeout(() => {
+          fallbackToWebSpeech(responseText, thinkingIndex);
+        }, 500);
+      }
+
+    } else {
+      throw new Error(`Host response failed: ${hostResponse.status}`);
+    }
+  };
+
+  // GUEST MODE: Use regular respond endpoint
+  const handleGuestMode = async (query, token) => {
+    console.log("🤖 Getting GUEST response for:", query);
+    
+    const thinkingIndex = transcript.length + 1;
+    setTranscript((prev) => [
+      ...prev,
+      { speaker: "AI", text: "Let me think about that...", isTyping: true },
+    ]);
+
+    const responseFormData = new FormData();
+    responseFormData.append("user_id", user?.id || "unknown");
+    responseFormData.append("query", query);
+
+    const response = await fetch("http://localhost:8000/respond/", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`
+      },
+      body: responseFormData
+    });
+
+    if (response.ok) {
+      const result = await response.json();
+      console.log("✅ Guest response received:", result);
+
+      const responseText = result.answer_text || "[No response generated]";
+      
+      // Replace the "thinking" message with the actual response
+      setTranscript((prev) => {
+        const newTranscript = [...prev];
+        if (newTranscript[newTranscript.length - 1].isTyping) {
+          newTranscript.pop();
+        }
+        newTranscript.push({
+          speaker: "AI",
+          text: responseText
+        });
+        return newTranscript;
+      });
+
+      // Play the audio
+      if (result.audio_data) {
+        console.log("🔊 Playing guest TTS audio...");
+        await playBase64Audio(result.audio_data, thinkingIndex);
+      } else {
+        setTimeout(() => {
+          fallbackToWebSpeech(responseText, thinkingIndex);
+        }, 500);
+      }
+
+    } else {
+      throw new Error(`Guest response failed: ${response.status}`);
     }
   };
 
@@ -505,7 +583,6 @@ const NewPanelsRecording = () => {
 
   const resumeRecording = () => startRecording();
 
-  // MODIFIED: Reset conversation entirely
   const restartRecording = () => {
     resetRecorder();
     
@@ -521,7 +598,7 @@ const NewPanelsRecording = () => {
     setIsProcessing(false);
     setIsSpeaking(false);
     setCurrentSpeakingIndex(-1);
-    setConversationStarted(false); // Reset conversation state
+    setConversationStarted(false);
   };
 
   const stopSpeaking = () => {
@@ -577,10 +654,10 @@ const NewPanelsRecording = () => {
 
           {/* Main Control Buttons */}
           <div className="flex justify-center space-x-4">
-            {/* START PODCAST BUTTON - Shows when conversation hasn't started */}
+            {/* START PODCAST BUTTON */}
             {!conversationStarted && !isProcessing && (
               <button 
-                onClick={startPodcastConversation} 
+                onClick={startConversation} 
                 className="flex items-center space-x-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white px-8 py-4 rounded-full hover:from-purple-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105"
               >
                 <Icon name="podcast" className="w-6 h-6" /> 
@@ -588,7 +665,7 @@ const NewPanelsRecording = () => {
               </button>
             )}
 
-            {/* RECORDING BUTTONS - Show when conversation is started */}
+            {/* RECORDING BUTTONS */}
             {conversationStarted && !isRecording && !isProcessing && !isSpeaking && (
               <button 
                 onClick={startRecording} 
@@ -606,23 +683,6 @@ const NewPanelsRecording = () => {
                   className="flex items-center space-x-2 bg-yellow-500 text-white px-6 py-3 rounded-full hover:bg-yellow-600 transition-all duration-200 shadow-lg"
                 >
                   <Icon name="pause" className="w-5 h-5" /> <span>Pause</span>
-                </button>
-                <button 
-                  onClick={stopRecording} 
-                  className="flex items-center space-x-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white px-6 py-3 rounded-full hover:from-blue-600 hover:to-blue-700 transition-all duration-200 shadow-lg"
-                >
-                  <Icon name="stop" className="w-5 h-5" /> <span>Send</span>
-                </button>
-              </>
-            )}
-
-            {isRecording && isPaused && !isProcessing && (
-              <>
-                <button 
-                  onClick={resumeRecording} 
-                  className="flex items-center space-x-2 bg-green-600 text-white px-6 py-3 rounded-full hover:bg-green-700 transition-all duration-200 shadow-lg"
-                >
-                  <Icon name="play" className="w-5 h-5" /> <span>Resume</span>
                 </button>
                 <button 
                   onClick={stopRecording} 
@@ -664,9 +724,15 @@ const NewPanelsRecording = () => {
             <p className="text-sm text-blue-700 font-medium mb-2">🎙️ Podcast Conversation Mode</p>
             <p className="text-xs text-blue-600">
               {!conversationStarted 
-                ? "Click 'Start Podcast' to begin with a host introduction!"
-                : "The host will ask questions, and you can respond naturally with voice!"
+                ? SELECTED_AGENT === 'host' 
+                  ? "Click 'Start Podcast' to begin with AI host introduction!"
+                  : "Click 'Start Podcast' to begin - you'll speak first!"
+                : "Continue the podcast conversation by recording your responses!"
               }
+            </p>
+            {/* Debug info - remove in production */}
+            <p className="text-xs text-gray-500 mt-1">
+              Current mode: {SELECTED_AGENT.toUpperCase()} (change SELECTED_AGENT variable to switch)
             </p>
           </div>
         </div>
