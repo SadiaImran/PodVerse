@@ -3,11 +3,11 @@ import WaveSurfer from "wavesurfer.js";
 import RegionsPlugin from "wavesurfer.js/dist/plugin/wavesurfer.regions.min.js";
 import { Play, Pause, Square, Upload, Trash2, ZoomIn, ZoomOut } from 'lucide-react';
 import BaseLayout from "../components/layouts/BaseLayout";
-
+import { Sidebar } from "../components/comp-audio-editing/comp-audio-edit-sidebar";
+import { MainPanel } from "../components/comp-audio-editing/comp-audio-edit-main-panel";
 
 const AudioEditor = () => {
   const [audioClips, setAudioClips] = useState([]);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [totalDuration, setTotalDuration] = useState(0);
   const [zoom, setZoom] = useState(1);
@@ -307,168 +307,16 @@ const TimeMarkers = ({ duration, zoom, interval = 5 }) => {
     <BaseLayout>
       <div className="min-h-screen bg-gray-50">
         <div className="flex h-screen">
-          {/* Left Sidebar */}
-          <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
-            {/* Header */}
-            <div className="p-6 border-b border-gray-200">
-              <h1 className="text-2xl font-bold text-gray-900 mb-4">Audio Editor</h1>
-      
-              {/* Upload Button */}
-              <button
-                onClick={() => fileInputRef.current.click()}
-                className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg transition-colors font-medium"
-              >
-                <Upload size={20} />
-                Upload Audio
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                accept="audio/*"
-                className="hidden"
-      
-          onChange={(e) => e.target.files && handleFileUpload(e.target.files)}
-              />
-            </div>
-            {/* Track List */}
-            <div className="flex-1 overflow-hidden flex flex-col">
-              <div className="p-4 flex-shrink-0">
-                <h2 className="text-sm font-semibold text-gray-600 mb-3">
-                  Track List ({audioClips.length})
-                </h2>
-              </div>
-              <div className="flex-1 overflow-y-auto px-4 pb-4">
-                {audioClips.length === 0 ?
-                 (
-                  <div className="text-gray-500 text-sm italic">No audio clips uploaded yet.</div>
-                 ) : (
-                  <div className="space-y-2">
-                    {audioClips.map((clip) => (
-                      <div
-                        key={clip.id}
-                        onClick={() => highlightClip(clip.id)}
-                        className={`p-3 rounded-lg border cursor-pointer transition-all hover:border-blue-300 ${
-                          selectedClipId === clip.id
-                            ? 'border-blue-500 bg-blue-50'
-                            : 'border-gray-200 bg-white hover:bg-gray-50'
-                        }`}
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1 min-w-0">
-                            <h3 className="font-medium text-gray-900 text-sm truncate">
-                              {clip.name}
-                            </h3>
-                            <div className="text-xs text-gray-500 mt-1">
-                              <div>{formatTime(clip.duration)}</div>
-                              <div>{formatTime(clip.startTime)} - {formatTime(clip.endTime)}</div>
-                            </div>
-                          </div>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              removeClip(clip.id);
-                            }}
-                            className="p-1 text-gray-400 hover:text-red-500 transition-colors"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>         
-            </div>
-          </div>
+            {/* Left Sidebar */}
+          <Sidebar></Sidebar>
           {/* Main Content */}
-          <div className="flex-1 flex flex-col min-w-0">
-            {/* Top Controls Bar */}
-            <div className="bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0">
-              <div className="flex items-center justify-between">
-                {/* Playback Controls */}
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => wavesurferRef.current.playPause()}
-                      disabled={!audioClips.length}
-                      className="flex items-center justify-center w-10 h-10 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white rounded-full transition-colors"
-                    >
-                      {isPlaying ? <Pause size={18} /> : <Play size={18} />}
-                    </button>
-      
-                    <button
-                      onClick={() => wavesurferRef.current.stop()}
-                      disabled={!audioClips.length}
-                      className="flex items-center justify-center w-10 h-10 bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 text-gray-600 rounded-full transition-colors"
-                    >
-                      <Square size={16} />
-                    </button>
-                  </div>
-                  {/* Time Display */}
-                  <div className="text-gray-600 font-mono text-sm">
-                    {formatTime(currentTime)} / {formatTime(totalDuration)}
-                  </div>
-                </div>
-                {/* Zoom Controls */}
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      const newZoom = Math.max(zoom / 1.5, 0.1);
-                      setZoom(newZoom);
-                      if (wavesurferRef.current) {
-                        wavesurferRef.current.zoom(newZoom * 50);
-                      }
-                    }}
-                    disabled={!audioClips.length || zoom <= getMinZoomLevel()}
-                    className="p-2 text-gray-600 hover:text-gray-800 disabled:text-gray-300 hover:bg-gray-100 rounded transition-colors"
-                  >
-                    <ZoomOut size={18} />
-                  </button>
-                  <button
-                    onClick={() => {
-                        const newZoom = Math.min(zoom * 1.5, 10);
-                        setZoom(newZoom);
-                      if (wavesurferRef.current) {
-                        wavesurferRef.current.zoom(newZoom * 50);
-                      }
-                    }}
-                    disabled={!audioClips.length}
-                    className="p-2 text-gray-600 hover:text-gray-800 disabled:text-gray-300 hover:bg-gray-100 rounded transition-colors"
-                  >
-                    <ZoomIn size={18} />
-                  </button>
-                </div>
-              </div>
-            </div>
-      
-            {/* Waveform Container */}
-            <div
-            ref={waveformContainerRef}   
-            className="border-t border-b border-t-gray-300 border-b-gray-300 overflow-x-auto overflow-y-hidden flex-1"
-            >
-            <div className="h-full ">
-              <div className="p-6 h-full"
-               style={{ 
-    width: totalDuration > 0 ? `${totalDuration * zoom * 50 + 48}px` : '100%',
-    minWidth: '100%'
-  }}
-             >
-              {/* Time markers above waveform */}
-              <TimeMarkers duration={totalDuration} zoom={zoom} interval={5} />
-              {/* Waveform itself */}
-                <div
-                  ref={waveformRef}
-                  className="w-full h-32"
-                  style={{ 
-    width: totalDuration > 0 ? `${totalDuration * zoom * 50}px` : '100%' 
-  }}
-                />
-              </div>
-            </div>
-            </div>    
-          </div>
+         
+
+          <MainPanel></MainPanel>
         </div>
+
+
+
       </div>
     </BaseLayout>
   );
