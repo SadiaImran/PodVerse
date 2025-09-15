@@ -7,28 +7,32 @@ import { Sidebar } from "../components/comp-audio-editing/comp-audio-edit-sideba
 import { MainPanel } from "../components/comp-audio-editing/comp-audio-edit-main-panel";
 
 const AudioEditor = () => {
+  // State for audio tracks/clips
   const [audioClips, setAudioClips] = useState([]);
+  const [audioBuffers, setAudioBuffers] = useState({});
+  const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [totalDuration, setTotalDuration] = useState(0);
+  const [volume, setVolume] = useState(75);
   const [zoom, setZoom] = useState(1);
   const [selectedClipId, setSelectedClipId] = useState(null);
 
-  // Added missing ref
-const waveformContainerRef = useRef(null);  
+  // Refs
+  const waveformContainerRef = useRef(null);  
   const waveformRef = useRef(null);
   const wavesurferRef = useRef(null);
   const regionsRef = useRef(null);
   const fileInputRef = useRef(null);
   const audioCtxRef = useRef(null);
 
+  const getMinZoomLevel = useCallback(() => {
+    if (!waveformContainerRef.current || !totalDuration) return 0.1;
+    
+    const containerWidth = waveformContainerRef.current.clientWidth - 48;
+    const minZoom = containerWidth / (totalDuration * 50);
+    return Math.max(minZoom, 0.1);
+  }, [totalDuration]);
 
-    const getMinZoomLevel = useCallback(() => {
-  if (!waveformContainerRef.current || !totalDuration) return 0.1;
-  
-  const containerWidth = waveformContainerRef.current.clientWidth - 48; // subtract padding
-  const minZoom = containerWidth / (totalDuration * 50);
-  return Math.max(minZoom, 0.1);
-}, [totalDuration]);
   // Init WaveSurfer
   useEffect(() => {
     if (!waveformRef.current) return;
@@ -38,13 +42,15 @@ const waveformContainerRef = useRef(null);
 
     const wavesurfer = WaveSurfer.create({
       container: waveformRef.current,
-      waveColor: "blue",
-      progressColor: "lightblue",
+      waveColor: "#8b5cf6", // Purple theme
+      progressColor: "#a855f7",
       barWidth: 2,
       barGap: 1,
       height: 120,
       dragToSeek: true,
       plugins: [regions],
+      backend: 'WebAudio',
+      mediaControls: false,
     });
 
     wavesurferRef.current = wavesurfer;
@@ -54,17 +60,25 @@ const waveformContainerRef = useRef(null);
     wavesurfer.on("timeupdate", (time) => setCurrentTime(time));
     wavesurfer.on("ready", () => setTotalDuration(wavesurfer.getDuration()));
 
-
     wavesurfer.on("audioprocess", (time) => {
-    setCurrentTime(time);
-  });
+      setCurrentTime(time);
+    });
 
-   wavesurfer.on("finish", () => {
-    setIsPlaying(false);
-    setCurrentTime(0);
-  });
+    wavesurfer.on("finish", () => {
+      setIsPlaying(false);
+      setCurrentTime(0);
+    });
+
+    wavesurfer.on("error", (e) => {
+      console.error("WaveSurfer error:", e);
+    });
+
     return () => {
-      wavesurfer.destroy();
+      try {
+        wavesurfer.destroy();
+      } catch (e) {
+        console.error("Error destroying wavesurfer:", e);
+      }
       if (audioCtxRef.current) {
         audioCtxRef.current.close().catch(() => {});
         audioCtxRef.current = null;
@@ -72,18 +86,17 @@ const waveformContainerRef = useRef(null);
     };
   }, []);
 
-  // ✅ Format time helper
-const formatTime = (seconds) => {
-  if (!seconds || isNaN(seconds)) return "00:00";
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60); // 0–59 range
-  return `${mins.toString().padStart(2, "0")}:${secs
-    .toString()
-    .padStart(2, "0")}`;
-};
+  // Format time helper
+  const formatTime = (seconds) => {
+    if (!seconds || isNaN(seconds)) return "00:00";
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins.toString().padStart(2, "0")}:${secs
+      .toString()
+      .padStart(2, "0")}`;
+  };
 
-
-  // 🔥 Helper: Convert AudioBuffer → Blob (WAV)
+  // Helper: Convert AudioBuffer → Blob (WAV)
   const audioBufferToWav = (buffer) => {
     const numOfChan = buffer.numberOfChannels,
       length = buffer.length * numOfChan * 2 + 44,
@@ -144,183 +157,153 @@ const formatTime = (seconds) => {
   };
 
   const loadCombinedAudio = useCallback(async (clips) => {
-    if (!wavesurferRef.current || clips.length === 0) return;
+    if (clips.length === 0) return;
 
     try {
-      const getAudioContext = () => {
-        if (!audioCtxRef.current) {
-          audioCtxRef.current = new AudioContext();
-        }
-        return audioCtxRef.current;
-      };
-
-      const ctx = getAudioContext();
-
-      const decodedBuffers = await Promise.all(
-        clips.map(async (clip) => {
-          const arrayBuffer = await clip.file.arrayBuffer();
-          return await ctx.decodeAudioData(arrayBuffer.slice(0));
-        })
-      );
-
-      const sampleRate = ctx.sampleRate;
-      const totalDur = decodedBuffers.reduce((sum, b) => sum + b.duration, 0);
-      const length = Math.ceil(totalDur * sampleRate);
-      const offline = new OfflineAudioContext(1, length, sampleRate);
-
-      let offset = 0;
-      decodedBuffers.forEach((buffer) => {
-        const src = offline.createBufferSource();
-        src.buffer = buffer;
-        src.connect(offline.destination);
-        src.start(offset);
-        offset += buffer.duration;
-      });
-
-      const rendered = await offline.startRendering();
-      const blob = audioBufferToWav(rendered);
-
-      await wavesurferRef.current.loadBlob(blob);
-
-      setTotalDuration(rendered.duration);
-      regionsRef.current?.clearRegions();
-
-      let current = 0;
-      clips.forEach((clip, index) => {
-        const start = current;
-        const end = current + clip.duration;
-        regionsRef.current?.addRegion({
-          id: clip.id,
-          start,
-          end,
-          color: `rgba(0,0,255,0.2)`,
-          content: clip.name,
-          resize: false,
-          drag: false,
-        });
-        current = end;
-      });
+      // For individual tracks, we don't need to combine them
+      // Just set the total duration to the longest track
+      const maxDuration = Math.max(...clips.map(clip => clip.duration));
+      setTotalDuration(maxDuration);
+      
+      // No need for regions since we're using individual track waveforms
+      console.log(`Loaded ${clips.length} tracks, max duration: ${maxDuration}s`);
     } catch (err) {
       console.error("Error loading combined audio:", err);
     }
   }, []);
 
+  // Handle file upload from Sidebar - THIS IS THE KEY FUNCTION
   const handleFileUpload = async (files) => {
     const newClips = [];
-    let currentEndTime = totalDuration;
+    const newBuffers = { ...audioBuffers };
 
-    for (const file of Array.from(files)) {
-      if (!file.type.startsWith("audio/")) continue;
+    // Process all files in parallel for better performance
+    const filePromises = Array.from(files).map(async (file) => {
+      if (!file.type.startsWith("audio/")) return null;
 
-      const audio = new Audio();
-      const url = URL.createObjectURL(file);
-      audio.src = url;
+      try {
+        const audio = new Audio();
+        const url = URL.createObjectURL(file);
+        audio.src = url;
 
-      await new Promise((resolve) => {
-        audio.addEventListener("loadedmetadata", () => resolve());
-      });
+        await new Promise((resolve) => {
+          audio.addEventListener("loadedmetadata", () => resolve());
+        });
 
-      const duration = audio.duration;
+        const duration = audio.duration;
+        const clipId = `clip-${Date.now()}-${Math.random()}`;
 
-      newClips.push({
-        id: `clip-${Date.now()}-${Math.random()}`,
-        name: file.name,
-        url,
-        duration,
-        startTime: currentEndTime,
-        endTime: currentEndTime + duration,
-        file,
-      });
+        const clip = {
+          id: clipId,
+          name: file.name,
+          url,
+          duration,
+          startTime: 0, // All tracks start from the beginning
+          endTime: duration,
+          file,
+          color: 'bg-purple-500'
+        };
 
-      currentEndTime += duration;
-    }
+        // Load audio buffer for individual track waveforms
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          const audioContext = new AudioContext();
+          const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+          newBuffers[clipId] = audioBuffer;
+        } catch (bufferError) {
+          console.error('Error loading audio buffer:', bufferError);
+        }
 
-    if (newClips.length > 0) {
-      const updatedClips = [...audioClips, ...newClips];
+        return clip;
+      } catch (error) {
+        console.error('Error processing file:', file.name, error);
+        return null;
+      }
+    });
+
+    // Wait for all files to be processed
+    const processedClips = await Promise.all(filePromises);
+    const validClips = processedClips.filter(clip => clip !== null);
+
+    if (validClips.length > 0) {
+      const updatedClips = [...audioClips, ...validClips];
       setAudioClips(updatedClips);
+      setAudioBuffers(newBuffers);
       await loadCombinedAudio(updatedClips);
     }
   };
 
+  // Handle clip removal
   const removeClip = async (clipId) => {
-  // Filter out the removed clip
-  const updatedClips = audioClips.filter((clip) => clip.id !== clipId);
+    const updatedClips = audioClips.filter((clip) => clip.id !== clipId);
+    setAudioClips(updatedClips);
 
-  // Update state
-  setAudioClips(updatedClips);
+    // Remove from audio buffers
+    const newBuffers = { ...audioBuffers };
+    delete newBuffers[clipId];
+    setAudioBuffers(newBuffers);
 
-  // If there are clips left, reload waveform
-  if (updatedClips.length > 0) {
-    await loadCombinedAudio(updatedClips);
-  } else {
-    // If no clips left → clear waveform
-    wavesurferRef.current.empty();
-    regionsRef.current?.clearRegions();
-    setTotalDuration(0);
-    setCurrentTime(0);
-  }
-};
+    if (updatedClips.length > 0) {
+      await loadCombinedAudio(updatedClips);
+    } else {
+      wavesurferRef.current?.empty();
+      regionsRef.current?.clearRegions();
+      setTotalDuration(0);
+      setCurrentTime(0);
+    }
+  };
 
-const TimeMarkers = ({ duration, zoom, interval = 5 }) => {
-  if (!duration) return null;
+  // Playback controls
+  const togglePlayback = () => {
+    if (wavesurferRef.current) {
+      wavesurferRef.current.playPause();
+    }
+  };
 
-  const pixelsPerSecond = zoom * 50; 
-  const totalWidth = duration * pixelsPerSecond;
-  const seconds = Math.ceil(duration);
+  // Zoom controls
+  const handleZoomIn = () => {
+    setZoom(prev => Math.min(3, prev + 0.2));
+  };
 
-  const markers = [];
-  for (let i = 0; i <= seconds; i += interval) {
-    const left = i * pixelsPerSecond;
-    markers.push(
-      <div
-        key={i}
-        style={{
-          position: "absolute",
-          left: `${left}px`,
-          top: 0,
-          fontSize: "12px",
-          color: "#666",
-          transform: "translateX(-50%)",
-        }}
-      >
-        {formatTime(i)}   {/* ✅ ab properly MM:SS dikhayega */}
-      </div>
-    );
-  }
-
-  return (
-    <div
-      style={{
-        position: "relative",
-        width: `${totalWidth}px`,
-        height: "20px",
-        borderBottom: "1px solid #ccc",
-        background: "#fafafa",
-      }}
-    >
-      {markers}
-    </div>
-  );
-};
+  const handleZoomOut = () => {
+    setZoom(prev => Math.max(0.1, prev - 0.2));
+  };
 
   return (
     <BaseLayout>
       <div className="min-h-screen bg-gray-50">
         <div className="flex h-screen">
-            {/* Left Sidebar */}
-          <Sidebar></Sidebar>
-          {/* Main Content */}
-         
-
-          <MainPanel></MainPanel>
+          {/* Pass props to Sidebar */}
+          <Sidebar 
+            onFileUpload={handleFileUpload}
+            audioTracks={audioClips}
+          />
+          
+          {/* Pass props to MainPanel */}
+          <MainPanel 
+            audioTracks={audioClips}
+            audioBuffers={audioBuffers}
+            onRemoveTrack={removeClip}
+            isPlaying={isPlaying}
+            setIsPlaying={setIsPlaying}
+            currentTime={currentTime}
+            setCurrentTime={setCurrentTime}
+            totalDuration={totalDuration}
+            volume={volume}
+            setVolume={setVolume}
+            zoom={zoom}
+            setZoom={setZoom}
+          />
         </div>
 
-
-
+        {/* Hidden WaveSurfer container for audio processing */}
+        <div 
+          ref={waveformRef} 
+          className="hidden"
+        ></div>
       </div>
     </BaseLayout>
   );
 };
 
 export default AudioEditor;
-

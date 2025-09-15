@@ -78,7 +78,7 @@ export default function TopBar({ open }) {
 
   return (
     <nav className="bg-white containerr flex items-center justify-between px-4 py-4 shadow-md font-subheadingDMSans w-full relative">
-      {!open && (
+      {open && (
         <div className="hidden md:flex items-center gap-2 mr-6">
           <img src={Logo} alt="Logo" className="w-10 md:w-12" />
           <span className="text-lg font-bold text-light-charcoal font-headingPoppins tracking-wider">
@@ -88,7 +88,7 @@ export default function TopBar({ open }) {
       )}
 
       <div className="flex items-center justify-between gap-4 flex-1 max-w-full">
-        <div className="relative w-full max-w-[600px] md:mx-auto flex-1">
+        <div className="relative w-full max-w-[600px] md:mx-auto flex-1 border border-gray-300 rounded-lg">
           <input
             type="text"
             placeholder="Search..."
