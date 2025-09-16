@@ -23,3 +23,4 @@ langchain-text-splitters
 PyPDF2
 numpy
 gradio_client
+python-multipart
