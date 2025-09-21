@@ -77,7 +77,7 @@ export default function TopBar({ open }) {
   };
 
   return (
-    <nav className="bg-white containerr flex items-center justify-between px-4 py-4 shadow-md font-subheadingDMSans w-full relative">
+    <nav className="bg-white sticky top-0 flex items-center justify-between p-4 shadow-md font-subheadingDMSans w-full z-50">
       {open && (
         <div className="hidden md:flex items-center gap-2 mr-6">
           <img src={Logo} alt="Logo" className="w-10 md:w-12" />
