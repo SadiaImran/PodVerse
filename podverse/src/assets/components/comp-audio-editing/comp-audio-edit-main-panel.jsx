@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import WaveSurfer from 'wavesurfer.js';
 import {
   Play,
   Pause,
@@ -53,51 +54,41 @@ const AudioTrack = ({
   useEffect(() => {
     if (!waveformRef.current || !track.url) return;
 
-    // Wait for WaveSurfer to be available
-    const initWaveSurfer = () => {
-      if (!window.WaveSurfer) {
-        setTimeout(initWaveSurfer, 100);
-        return;
+    // Clean up previous instance
+    if (wavesurferRef.current) {
+      try {
+        wavesurferRef.current.destroy();
+      } catch (e) {
+        console.error("Error destroying wavesurfer:", e);
       }
+    }
 
-      // Clean up previous instance
-      if (wavesurferRef.current) {
-        try {
-          wavesurferRef.current.destroy();
-        } catch (e) {
-          console.error("Error destroying wavesurfer:", e);
-        }
-      }
+    const wavesurfer = WaveSurfer.create({
+      container: waveformRef.current,
+      waveColor: '#9ca3af',
+      progressColor: '#8b5cf6',
+      barWidth: 2,
+      barGap: 1,
+      height: 60,
+      dragToSeek: false,
+      backend: 'WebAudio',
+      mediaControls: false,
+      normalize: true,
+      responsive: false,
+      interact: false,
+      cursorColor: 'transparent'
+    });
 
-      const wavesurfer = window.WaveSurfer.create({
-        container: waveformRef.current,
-        waveColor: '#9ca3af',
-        progressColor: '#8b5cf6',
-        barWidth: 2,
-        barGap: 1,
-        height: 60,
-        dragToSeek: false,
-        backend: 'WebAudio',
-        mediaControls: false,
-        normalize: true,
-        responsive: false,
-        interact: false,
-        cursorColor: 'transparent'
-      });
+    wavesurferRef.current = wavesurfer;
+    wavesurfer.load(track.url);
 
-      wavesurferRef.current = wavesurfer;
-      wavesurfer.load(track.url);
+    wavesurfer.on('ready', () => {
+      console.log(`Track ${track.name} loaded`);
+    });
 
-      wavesurfer.on('ready', () => {
-        console.log(`Track ${track.name} loaded`);
-      });
-
-      wavesurfer.on('error', (e) => {
-        console.error('WaveSurfer error:', e);
-      });
-    };
-
-    initWaveSurfer();
+    wavesurfer.on('error', (e) => {
+      console.error('WaveSurfer error:', e);
+    });
 
     return () => {
       if (wavesurferRef.current) {
@@ -334,18 +325,6 @@ export const MainPanel = ({
   const [currentTime, setCurrentTime] = useState(0);
   const [tracks, setTracks] = useState([]);
   const containerRef = useRef(null);
-
-  // Load WaveSurfer
-  useEffect(() => {
-    if (!window.WaveSurfer) {
-      const script = document.createElement('script');
-      script.src = 'https://unpkg.com/wavesurfer.js@7/dist/wavesurfer.min.js';
-      script.onload = () => {
-        console.log('WaveSurfer loaded');
-      };
-      document.head.appendChild(script);
-    }
-  }, []);
 
   // Convert audioTracks to positioned tracks
   useEffect(() => {
