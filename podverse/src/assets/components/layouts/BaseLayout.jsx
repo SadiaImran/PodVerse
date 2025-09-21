@@ -11,7 +11,7 @@ const BaseLayout = ({ children , homeScreen }) => {
       {homeScreen ? null : <LeftSidebar open={open} setOpen={setOpen} />  }
     
       <div className="flex-1 flex flex-col overflow-auto">
-        <Topbar homeScreen={homeScreen} />
+        <Topbar open={homeScreen} />
 
         {/* page content */}
         <div className="flex-1 bg-white">

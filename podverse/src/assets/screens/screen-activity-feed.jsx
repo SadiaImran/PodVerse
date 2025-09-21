@@ -29,7 +29,7 @@ const LeftSidebar = () => {
   ];
 
   return (
-    <div className="w-64 bg-white h-full border-r border-gray-100 p-6 sticky top-0">
+    <div className="w-64  h-full border rounded-xl mt-6 border-gray-300 p-6 sticky top-20">
       {/* Navigation Menu */}
       <nav className="space-y-2 mb-8">
         {menuItems.map((item, idx) => (

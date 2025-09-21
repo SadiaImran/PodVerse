@@ -24,3 +24,5 @@ PyPDF2
 numpy
 gradio_client
 python-multipart
+mutagen
+pydub

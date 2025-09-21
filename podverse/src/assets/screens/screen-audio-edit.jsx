@@ -172,6 +172,42 @@ const AudioEditor = () => {
     }
   }, []);
 
+  // Handle adding stock audio from Sidebar to main panel
+  const handleAddStockAudio = async (stockTrack) => {
+    try {
+      console.log('Adding stock audio to main panel:', stockTrack);
+      
+      // Create audio buffer for the stock track
+      const newBuffers = { ...audioBuffers };
+      
+      try {
+        // Fetch the audio file and create buffer
+        const response = await fetch(stockTrack.url);
+        const arrayBuffer = await response.arrayBuffer();
+        const audioContext = new AudioContext();
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+        newBuffers[stockTrack.id] = audioBuffer;
+      } catch (bufferError) {
+        console.error('Error loading audio buffer for stock track:', bufferError);
+      }
+
+      // Add to audio clips
+      const updatedClips = [...audioClips, stockTrack];
+      setAudioClips(updatedClips);
+      setAudioBuffers(newBuffers);
+      
+      // Small delay to ensure URL is properly set before loading
+      setTimeout(async () => {
+        await loadCombinedAudio(updatedClips);
+      }, 100);
+      
+      console.log('Stock audio added successfully to main panel');
+    } catch (error) {
+      console.error('Error adding stock audio to main panel:', error);
+      alert('Error adding audio to panel: ' + error.message);
+    }
+  };
+
   // Handle file upload from Sidebar - THIS IS THE KEY FUNCTION
   const handleFileUpload = async (files) => {
     const newClips = [];
@@ -270,13 +306,14 @@ const AudioEditor = () => {
   };
 
   return (
-    <BaseLayout>
+    <BaseLayout homeScreen={true}>
       <div className="min-h-screen bg-gray-50">
         <div className="flex h-screen">
           {/* Pass props to Sidebar */}
           <Sidebar 
             onFileUpload={handleFileUpload}
             audioTracks={audioClips}
+            onAddStockAudio={handleAddStockAudio}
           />
           
           {/* Pass props to MainPanel */}

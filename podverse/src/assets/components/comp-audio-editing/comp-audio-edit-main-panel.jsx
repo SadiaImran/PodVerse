@@ -16,11 +16,12 @@ import {
 // Simple styles
 const styles = `
   .timeline-scrollbar::-webkit-scrollbar {
-    height: 8px;
+    height: 12px;
+    width: 12px;
   }
   .timeline-scrollbar::-webkit-scrollbar-track {
     background: #f1f5f9;
-    border-radius: 4px;
+    border-radius: 6px;
   }
   .timeline-scrollbar::-webkit-scrollbar-thumb {
     background: #8b5cf6;
@@ -54,7 +55,6 @@ const AudioTrack = ({
   useEffect(() => {
     if (!waveformRef.current || !track.url) return;
 
-    // Clean up previous instance
     if (wavesurferRef.current) {
       try {
         wavesurferRef.current.destroy();
@@ -110,7 +110,6 @@ const AudioTrack = ({
       const progress = (currentTime - trackStart) / track.duration;
       wavesurferRef.current.seekTo(Math.max(0, Math.min(1, progress)));
     } else if (!isGlobalPlaying) {
-      // Reset to beginning when stopped
       wavesurferRef.current.seekTo(0);
     }
   }, [currentTime, isGlobalPlaying, track.startTime, track.duration]);
@@ -171,7 +170,7 @@ const AudioTrack = ({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const trackWidth = Math.max(300, track.duration * pixelsPerSecond); // Minimum 300px width
+  const trackWidth = Math.max(300, track.duration * pixelsPerSecond);
   const trackLeft = track.startTime * pixelsPerSecond;
 
   return (
@@ -229,7 +228,6 @@ const AudioEngine = ({ tracks, isPlaying, currentTime, volume, onTimeUpdate, onP
   const intervalRef = useRef(null);
   const startTimeRef = useRef(0);
 
-  // Create audio elements for tracks
   useEffect(() => {
     tracks.forEach(track => {
       if (!audioElementsRef.current[track.id]) {
@@ -240,7 +238,6 @@ const AudioEngine = ({ tracks, isPlaying, currentTime, volume, onTimeUpdate, onP
       }
     });
 
-    // Clean up removed tracks
     Object.keys(audioElementsRef.current).forEach(trackId => {
       if (!tracks.find(t => t.id === trackId)) {
         const audio = audioElementsRef.current[trackId];
@@ -251,19 +248,16 @@ const AudioEngine = ({ tracks, isPlaying, currentTime, volume, onTimeUpdate, onP
     });
   }, [tracks, volume]);
 
-  // Update volume
   useEffect(() => {
     Object.values(audioElementsRef.current).forEach(audio => {
       audio.volume = volume / 100;
     });
   }, [volume]);
 
-  // Handle playback
   useEffect(() => {
     if (isPlaying) {
       startTimeRef.current = Date.now() - (currentTime * 1000);
       
-      // Start playing tracks that should be active
       tracks.forEach(track => {
         const audio = audioElementsRef.current[track.id];
         if (!audio) return;
@@ -278,12 +272,10 @@ const AudioEngine = ({ tracks, isPlaying, currentTime, volume, onTimeUpdate, onP
         }
       });
 
-      // Update time
       intervalRef.current = setInterval(() => {
         const elapsed = (Date.now() - startTimeRef.current) / 1000;
         onTimeUpdate(elapsed);
         
-        // Check if we should stop
         const maxDuration = Math.max(...tracks.map(t => t.startTime + t.duration));
         if (elapsed >= maxDuration) {
           onPlaybackEnd();
@@ -291,7 +283,6 @@ const AudioEngine = ({ tracks, isPlaying, currentTime, volume, onTimeUpdate, onP
       }, 50);
 
     } else {
-      // Pause all audio
       Object.values(audioElementsRef.current).forEach(audio => {
         audio.pause();
       });
@@ -326,7 +317,6 @@ export const MainPanel = ({
   const [tracks, setTracks] = useState([]);
   const containerRef = useRef(null);
 
-  // Convert audioTracks to positioned tracks
   useEffect(() => {
     const newTracks = audioTracks.map((track, index) => ({
       ...track,
@@ -339,10 +329,9 @@ export const MainPanel = ({
     Math.max(max, track.startTime + track.duration), 0
   );
 
-  const pixelsPerSecond = 100 * zoom; // More pixels per second for longer waveforms
+  const pixelsPerSecond = 100 * zoom;
   const trackHeight = 100;
 
-  // Playback controls
   const handlePlayPause = useCallback(() => {
     if (tracks.length === 0) return;
     setIsPlaying(!isPlaying);
@@ -362,7 +351,6 @@ export const MainPanel = ({
     setCurrentTime(0);
   }, []);
 
-  // Track management
   const updateTrackPosition = useCallback((trackId, newStartTime) => {
     setTracks(prev => prev.map(track => 
       track.id === trackId 
@@ -409,7 +397,6 @@ export const MainPanel = ({
     onRemoveTrack?.(trackId);
   }, [onRemoveTrack]);
 
-  // Timeline click
   const handleTimelineClick = useCallback((e) => {
     if (!containerRef.current) return;
     
@@ -472,6 +459,9 @@ export const MainPanel = ({
           <span className="text-purple-700 font-bold">{formatTime(currentTime)}</span>
           <span className="text-gray-400 mx-2">/</span>
           <span className="text-gray-600">{formatTime(totalDuration)}</span>
+          <span className="text-xs text-gray-500 ml-2">
+            ({audioTracks.length} track{audioTracks.length !== 1 ? 's' : ''})
+          </span>
         </div>
 
         <div className="flex items-center gap-4">
