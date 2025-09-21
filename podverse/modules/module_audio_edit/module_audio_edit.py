@@ -98,10 +98,10 @@ async def get_audio_url(
 
         file_path = sound_response.data[0]["path"]
 
-        # Generate signed URL using the path from the table
+        # Generate signed URL using the path from the table (7 days = 604800 seconds)
         response = service_client.storage.from_("sounds").create_signed_url(
             file_path, 
-            3600
+            604800  # 7 days instead of 1 hour
         )
         if response.get("error"):
             raise HTTPException(status_code=404, detail="File not found in storage")

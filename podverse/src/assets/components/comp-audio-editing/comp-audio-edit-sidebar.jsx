@@ -17,7 +17,7 @@ import { supabase , getSupabaseAuthorizedtoken } from '../../supabaseClient'
 
 const API_BASE_URL = "http://localhost:8000"; 
 
-export const Sidebar = ({ onFileUpload, audioTracks }) => {
+export const Sidebar = ({ onFileUpload, audioTracks, onAddStockAudio }) => {
   const fileInputRef = useRef(null);
   const [stockAudioData, setStockAudioData] = useState({
     ambient: [],
@@ -44,6 +44,66 @@ export const Sidebar = ({ onFileUpload, audioTracks }) => {
   const handleFileUpload = (files) => {
     if (onFileUpload && files.length > 0) {
       onFileUpload(files);
+    }
+  };
+
+  // Add stock audio to main panel
+  const addStockAudioToPanel = async (track) => {
+    try {
+      console.log('Adding stock audio to panel:', track);
+      
+      // Get signed URL for the track
+      const token = await getSupabaseAuthorizedtoken();
+      const response = await fetch(`${API_BASE_URL}/audio-edit/audio-url/${track.id}`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to get audio URL: ${response.status}`);
+      }
+
+      const result = await response.json();
+      if (!result.success) {
+        throw new Error(result.error || "Failed to get audio URL");
+      }
+
+      console.log('Got signed URL:', result.url);
+
+      // Validate the URL before proceeding
+      if (!result.url || result.url.trim() === '') {
+        throw new Error('Invalid audio URL received');
+      }
+
+      // Create a track object similar to uploaded files
+      const trackToAdd = {
+        id: `stock-${track.id}`,
+        name: track.name,
+        url: result.url,
+        duration: parseFloat(track.duration),
+        startTime: 0,
+        endTime: parseFloat(track.duration),
+        type: 'stock',
+        category: track.category,
+        color: track.category === 'music' ? 'bg-purple-500' : 
+               track.category === 'ambient' ? 'bg-blue-500' :
+               track.category === 'audience' ? 'bg-green-500' : 'bg-orange-500'
+      };
+
+      console.log('Track to add:', trackToAdd);
+
+      // Call the parent function to add to main panel
+      if (onAddStockAudio) {
+        onAddStockAudio(trackToAdd);
+      }
+
+      console.log('Stock audio added to panel successfully');
+    } catch (error) {
+      console.error('Error adding stock audio to panel:', error);
+      alert('Error adding audio to panel: ' + error.message);
     }
   };
 
@@ -470,11 +530,17 @@ export const Sidebar = ({ onFileUpload, audioTracks }) => {
                     trackId={track.id}
                   />
                 </div>
-                <button className={`opacity-0 group-hover:opacity-100 w-8 h-8 flex items-center justify-center ${
-                  title === "Sound Effects" 
-                    ? "bg-light-secondary hover:bg-light-buttonBase" 
-                    : "bg-light-purple hover:bg-light-lavender"
-                } text-white rounded-lg transition-all shadow-sm`}>
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    addStockAudioToPanel(track);
+                  }}
+                  className={`opacity-0 group-hover:opacity-100 w-8 h-8 flex items-center justify-center ${
+                    title === "Sound Effects" 
+                      ? "bg-light-secondary hover:bg-light-buttonBase" 
+                      : "bg-light-purple hover:bg-light-lavender"
+                  } text-white rounded-lg transition-all shadow-sm`}
+                >
                   <span className="text-lg font-bold">+</span>
                 </button>
               </div>
@@ -735,7 +801,13 @@ export const Sidebar = ({ onFileUpload, audioTracks }) => {
                       trackId={track.id}
                     />
                   </div>
-                  <button className="opacity-0 group-hover:opacity-100 w-8 h-8 flex items-center justify-center bg-light-purple text-white rounded-lg hover:bg-light-lavender transition-all shadow-sm">
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      addStockAudioToPanel(track);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 w-8 h-8 flex items-center justify-center bg-light-purple text-white rounded-lg hover:bg-light-lavender transition-all shadow-sm"
+                  >
                     <span className="text-lg font-bold">+</span>
                   </button>
                 </div>
@@ -816,7 +888,13 @@ export const Sidebar = ({ onFileUpload, audioTracks }) => {
                       trackId={track.id}
                     />
                   </div>
-                  <button className="opacity-0 group-hover:opacity-100 w-8 h-8 flex items-center justify-center bg-light-secondary text-white rounded-lg hover:bg-light-buttonBase transition-all shadow-sm">
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      addStockAudioToPanel(track);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 w-8 h-8 flex items-center justify-center bg-light-secondary text-white rounded-lg hover:bg-light-buttonBase transition-all shadow-sm"
+                  >
                     <span className="text-lg font-bold">+</span>
                   </button>
                 </div>

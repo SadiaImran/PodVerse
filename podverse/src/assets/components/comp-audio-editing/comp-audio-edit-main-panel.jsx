@@ -18,34 +18,48 @@ import {
 // Custom scrollbar styles
 const scrollbarStyles = `
   .timeline-scrollbar::-webkit-scrollbar {
-    height: 8px;
+    height: 12px;
+    width: 12px;
   }
   .timeline-scrollbar::-webkit-scrollbar-track {
     background: #f1f5f9;
-    border-radius: 4px;
+    border-radius: 6px;
   }
   .timeline-scrollbar::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 4px;
+    background: #8b5cf6;
+    border-radius: 6px;
+    border: 2px solid #f1f5f9;
   }
   .timeline-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
+    background: #7c3aed;
+  }
+  .timeline-scrollbar::-webkit-scrollbar-corner {
+    background: #f1f5f9;
   }
   .timeline-scrollbar {
     scrollbar-width: thin;
-    scrollbar-color: #cbd5e1 #f1f5f9;
+    scrollbar-color: #8b5cf6 #f1f5f9;
+  }
+  .timeline-scrollbar:hover {
+    scrollbar-color: #7c3aed #f1f5f9;
   }
 `;
 
 // Track Waveform Component with WaveSurfer
-const TrackWaveform = ({ track, audioBuffer, isPlaying, currentTime, onPlay, onRemove, zoom = 1 }) => {
+const TrackWaveform = ({ track, audioBuffer, isPlaying, currentTime, onPlay, onRemove, zoom = 1, onTrackStateChange }) => {
   const waveformRef = useRef(null);
   const wavesurferRef = useRef(null);
   const [isTrackPlaying, setIsTrackPlaying] = useState(false);
   const [hasPlayed, setHasPlayed] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     if (!waveformRef.current || !track.url) return;
+
+    // Reset playing state for new tracks
+    setIsTrackPlaying(false);
+    setHasPlayed(false);
+    setIsLoading(true);
 
     // Destroy existing wavesurfer if it exists
     if (wavesurferRef.current) {
@@ -79,10 +93,18 @@ const TrackWaveform = ({ track, audioBuffer, isPlaying, currentTime, onPlay, onR
     wavesurfer.on("play", () => {
       setIsTrackPlaying(true);
       setHasPlayed(true);
+      onTrackStateChange && onTrackStateChange(track.id, true);
     });
-    wavesurfer.on("pause", () => setIsTrackPlaying(false));
+    wavesurfer.on("pause", () => {
+      setIsTrackPlaying(false);
+      onTrackStateChange && onTrackStateChange(track.id, false);
+    });
     wavesurfer.on("error", (e) => {
       console.error("WaveSurfer error:", e);
+    });
+    wavesurfer.on("ready", () => {
+      console.log("WaveSurfer ready for track:", track.name);
+      setIsLoading(false);
     });
 
     return () => {
@@ -94,7 +116,7 @@ const TrackWaveform = ({ track, audioBuffer, isPlaying, currentTime, onPlay, onR
         console.error("Error destroying wavesurfer:", e);
       }
     };
-  }, [track.url, hasPlayed, zoom]);
+  }, [track.url, track.id, zoom]); // Added track.id to dependencies
 
   const handlePlay = () => {
     if (wavesurferRef.current) {
@@ -116,9 +138,16 @@ const TrackWaveform = ({ track, audioBuffer, isPlaying, currentTime, onPlay, onR
         <div className="flex items-center gap-3">
           <button 
             onClick={handlePlay}
-            className="w-9 h-9 bg-purple-600 hover:bg-purple-700 text-white rounded-full flex items-center justify-center shadow-sm transition-all duration-200 hover:scale-105"
+            disabled={isLoading}
+            className={`w-9 h-9 ${isLoading ? 'bg-gray-400 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700'} text-white rounded-full flex items-center justify-center shadow-sm transition-all duration-200 hover:scale-105`}
           >
-            {isTrackPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
+            {isLoading ? (
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+            ) : isTrackPlaying ? (
+              <Pause className="w-4 h-4" />
+            ) : (
+              <Play className="w-4 h-4 ml-0.5" />
+            )}
           </button>
           <div className="text-sm text-purple-700 font-semibold truncate max-w-64">{track.name}</div>
         </div>
@@ -161,6 +190,16 @@ export const MainPanel = ({
   zoom = 1,
   setZoom
 }) => {
+  const [trackStates, setTrackStates] = useState({}); // Track which tracks are playing
+  
+  // Handle track state changes
+  const handleTrackStateChange = (trackId, isPlaying) => {
+    setTrackStates(prev => ({
+      ...prev,
+      [trackId]: isPlaying
+    }));
+  };
+
   const formatTime = (seconds) => {
     if (!seconds || isNaN(seconds)) return "00:00.0";
     const mins = Math.floor(seconds / 60);
@@ -182,7 +221,42 @@ export const MainPanel = ({
           </button>
           
           <button 
-            onClick={() => setIsPlaying && setIsPlaying(!isPlaying)}
+            onClick={() => {
+              if (setIsPlaying) {
+                // Check if any track is currently playing using our state
+                const anyTrackPlaying = Object.values(trackStates).some(isPlaying => isPlaying);
+                
+                if (anyTrackPlaying) {
+                  // If any track is playing, stop all tracks
+                  setIsPlaying(false);
+                  audioTracks.forEach(track => {
+                    if (trackStates[track.id]) {
+                      const trackElement = document.querySelector(`[data-track-id="${track.id}"]`);
+                      if (trackElement) {
+                        const playButton = trackElement.querySelector('button');
+                        if (playButton) {
+                          playButton.click();
+                        }
+                      }
+                    }
+                  });
+                } else {
+                  // If no track is playing, start all tracks
+                  setIsPlaying(true);
+                  audioTracks.forEach(track => {
+                    if (!trackStates[track.id]) {
+                      const trackElement = document.querySelector(`[data-track-id="${track.id}"]`);
+                      if (trackElement) {
+                        const playButton = trackElement.querySelector('button');
+                        if (playButton) {
+                          playButton.click();
+                        }
+                      }
+                    }
+                  });
+                }
+              }
+            }}
             className={`w-10 h-10 bg-purple-600 hover:bg-purple-700 text-white rounded-full flex items-center justify-center transition-colors shadow-sm ${audioTracks.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
             disabled={audioTracks.length === 0}
           >
@@ -199,6 +273,9 @@ export const MainPanel = ({
           <span className="text-gray-900 font-semibold">{formatTime(currentTime || 0)}</span>
           <span className="text-gray-400">/</span>
           <span className="text-gray-600">{formatTime(totalDuration)}</span>
+          <span className="text-xs text-gray-500 ml-2">
+            ({audioTracks.length} track{audioTracks.length !== 1 ? 's' : ''})
+          </span>
         </div>
 
         {/* Right Controls */}
@@ -365,7 +442,7 @@ export const MainPanel = ({
               {/* Track Layout */}
               <div className="space-y-4 px-4 py-3">
                 {audioTracks.map((track) => (
-                  <div key={track.id} className="track-waveform">
+                  <div key={track.id} className="track-waveform" data-track-id={track.id}>
                     <TrackWaveform
                       track={track}
                       audioBuffer={audioBuffers[track.id]}
@@ -376,6 +453,7 @@ export const MainPanel = ({
                         console.log('Playing track:', trackId);
                       }}
                       onRemove={onRemoveTrack}
+                      onTrackStateChange={handleTrackStateChange}
                     />
                   </div>
                 ))}
