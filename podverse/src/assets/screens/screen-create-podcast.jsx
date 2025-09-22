@@ -12,7 +12,7 @@ const CreatePodcastPage = () => {
   const navigate = useNavigate();
 
   return (
-    <BaseLayout homeScreen={false}>
+    <BaseLayout homeScreen={false} autoCollapse={true}>
       <main className="flex-1 overflow-y-auto p-6 md:p-10 bg-light space-y-8">
 
         {/* Top Header */}
