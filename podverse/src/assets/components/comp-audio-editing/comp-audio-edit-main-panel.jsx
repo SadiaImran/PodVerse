@@ -16,7 +16,7 @@ import {
   Move
 } from 'lucide-react';
 
-// Enhanced scrollbar styles with drag functionality
+// Enhanced scrollbar styles
 const scrollbarStyles = `
   .timeline-scrollbar::-webkit-scrollbar {
     height: 12px;
@@ -59,8 +59,19 @@ const scrollbarStyles = `
   }
 `;
 
-// Enhanced Track Waveform Component with WaveSurfer + Drag + Split
-const TrackWaveform = ({ track, audioBuffer, isPlaying, currentTime, onPlay, onRemove, zoom = 1, onTrackStateChange, onUpdatePosition, onSplit, onWaveSurferReady }) => {
+// Enhanced Draggable Track Component with WaveSurfer
+const DraggableTrackWaveform = ({ 
+  track, 
+  zoom = 1,
+  pixelsPerSecond,
+  currentTime,
+  isGlobalPlaying,
+  onPlay, 
+  onRemove, 
+  onUpdatePosition,
+  onSplit,
+  onTrackStateChange 
+}) => {
   const waveformRef = useRef(null);
   const wavesurferRef = useRef(null);
   const trackRef = useRef(null);
@@ -72,15 +83,15 @@ const TrackWaveform = ({ track, audioBuffer, isPlaying, currentTime, onPlay, onR
   const [splitPosition, setSplitPosition] = useState(null);
   const [showSplitIndicator, setShowSplitIndicator] = useState(false);
 
+  // Initialize WaveSurfer with better audio settings
   useEffect(() => {
     if (!waveformRef.current || !track.url) return;
 
-    // Reset playing state for new tracks
+    setIsLoading(true);
     setIsTrackPlaying(false);
     setHasPlayed(false);
-    setIsLoading(true);
 
-    // Destroy existing wavesurfer if it exists
+    // Destroy existing wavesurfer
     if (wavesurferRef.current) {
       try {
         wavesurferRef.current.destroy();
@@ -93,20 +104,29 @@ const TrackWaveform = ({ track, audioBuffer, isPlaying, currentTime, onPlay, onR
       container: waveformRef.current,
       waveColor: hasPlayed ? "#8b5cf6" : "#9ca3af",
       progressColor: "#a855f7",
-      barWidth: Math.max(1, Math.min(6, 2 * zoom)),
-      barGap: Math.max(0.5, Math.min(3, 1 * zoom)),
+      barWidth: Math.max(1, Math.min(3, 2 * zoom)),
+      barGap: Math.max(1, 1 * zoom),
       height: 80,
-      dragToSeek: true,
+      dragToSeek: false,
       backend: 'WebAudio',
       mediaControls: false,
       normalize: true,
       responsive: true,
-      pixelRatio: 1,
+      pixelRatio: window.devicePixelRatio || 1,
+      interact: false,
+      // Better audio quality settings
+      audioContext: null, // Let WaveSurfer create its own
+      sampleRate: 44100,
+      audioRate: 1,
+      hideScrollbar: true,
+      autoCenter: true,
+      fillParent: true,
+      minPxPerSec: 50
     });
 
     wavesurferRef.current = wavesurfer;
 
-    // Load the audio using the URL
+    // Load with better error handling
     wavesurfer.load(track.url);
 
     wavesurfer.on("play", () => {
@@ -120,15 +140,18 @@ const TrackWaveform = ({ track, audioBuffer, isPlaying, currentTime, onPlay, onR
       onTrackStateChange && onTrackStateChange(track.id, false);
     });
 
-    wavesurfer.on("error", (e) => {
-      console.error("WaveSurfer error:", e);
+    wavesurfer.on("ready", () => {
+      console.log("WaveSurfer ready for track:", track.name, "Duration:", wavesurfer.getDuration());
+      setIsLoading(false);
     });
 
-    wavesurfer.on("ready", () => {
-      console.log("WaveSurfer ready for track:", track.name);
+    wavesurfer.on("error", (e) => {
+      console.error("WaveSurfer error for track", track.name, ":", e);
       setIsLoading(false);
-      // Notify parent that this WaveSurfer is ready
-      onWaveSurferReady && onWaveSurferReady(track.id, wavesurfer);
+    });
+
+    wavesurfer.on("loading", (percent) => {
+      console.log(`Loading ${track.name}: ${percent}%`);
     });
 
     return () => {
@@ -141,6 +164,35 @@ const TrackWaveform = ({ track, audioBuffer, isPlaying, currentTime, onPlay, onR
       }
     };
   }, [track.url, track.id, zoom]);
+
+  // Update WaveSurfer progress based on global timeline with better sync
+  useEffect(() => {
+    if (!wavesurferRef.current || !wavesurferRef.current.isReady) return;
+
+    const trackStart = track.startTime || 0;
+    const trackEnd = trackStart + track.duration;
+
+    if (isGlobalPlaying && currentTime >= trackStart && currentTime < trackEnd) {
+      const progress = (currentTime - trackStart) / track.duration;
+      const clampedProgress = Math.max(0, Math.min(1, progress));
+      
+      // Update WaveSurfer progress to match the red playhead
+      wavesurferRef.current.seekTo(clampedProgress);
+      
+      if (!isTrackPlaying) {
+        setIsTrackPlaying(true);
+        onTrackStateChange && onTrackStateChange(track.id, true);
+      }
+    } else {
+      if (isTrackPlaying && !isDragging) {
+        setIsTrackPlaying(false);
+        onTrackStateChange && onTrackStateChange(track.id, false);
+      }
+      if (!isGlobalPlaying) {
+        wavesurferRef.current.seekTo(0);
+      }
+    }
+  }, [currentTime, isGlobalPlaying, track.startTime, track.duration, isTrackPlaying, isDragging, onTrackStateChange, track.id]);
 
   // Drag handlers
   const handleMouseDown = useCallback((e) => {
@@ -158,17 +210,17 @@ const TrackWaveform = ({ track, audioBuffer, isPlaying, currentTime, onPlay, onR
     if (!isDragging) return;
 
     const deltaX = e.clientX - dragStart.x;
-    const deltaTime = deltaX / (50 * zoom); // pixels per second
+    const deltaTime = deltaX / pixelsPerSecond;
     const newStartTime = Math.max(0, dragStart.startTime + deltaTime);
 
     onUpdatePosition && onUpdatePosition(track.id, newStartTime);
-  }, [isDragging, dragStart, zoom, onUpdatePosition, track.id]);
+  }, [isDragging, dragStart, pixelsPerSecond, onUpdatePosition, track.id]);
 
   const handleMouseUp = useCallback(() => {
     setIsDragging(false);
   }, []);
 
-  // Global mouse event listeners for drag
+  // Global mouse event listeners
   useEffect(() => {
     if (isDragging) {
       document.addEventListener('mousemove', handleMouseMove);
@@ -204,7 +256,7 @@ const TrackWaveform = ({ track, audioBuffer, isPlaying, currentTime, onPlay, onR
   };
 
   const handlePlay = () => {
-    if (wavesurferRef.current && !isLoading) {
+    if (wavesurferRef.current && !isLoading && wavesurferRef.current.isReady) {
       wavesurferRef.current.playPause();
       onPlay && onPlay(track.id);
     }
@@ -217,8 +269,8 @@ const TrackWaveform = ({ track, audioBuffer, isPlaying, currentTime, onPlay, onR
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
-  const trackWidth = Math.max(400, track.duration * 50 * zoom);
-  const trackLeft = (track.startTime || 0) * 50 * zoom;
+  const trackWidth = track.duration * pixelsPerSecond; // Exact match with timeline
+  const trackLeft = (track.startTime || 0) * pixelsPerSecond;
 
   return (
     <div 
@@ -231,53 +283,55 @@ const TrackWaveform = ({ track, audioBuffer, isPlaying, currentTime, onPlay, onR
       style={{ 
         left: `${trackLeft}px`,
         width: `${trackWidth}px`,
-        height: '140px',
+        height: '120px', // Reduced height
         cursor: isDragging ? 'grabbing' : 'grab'
       }}
       onMouseDown={handleMouseDown}
     >
       {/* Track Header */}
-      <div className="flex items-center justify-between p-3 bg-gradient-to-r from-purple-50 to-purple-100 border-b border-purple-200">
-        <div className="flex items-center gap-3">
-          <Move className="w-4 h-4 text-purple-600" />
+      <div className="flex items-center justify-between p-2 bg-gradient-to-r from-purple-50 to-purple-100 border-b border-purple-200 min-h-[50px]">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <Move className="w-4 h-4 text-purple-600 flex-shrink-0" />
           <button 
             onClick={handlePlay}
             disabled={isLoading}
-            className={`no-drag w-8 h-8 ${isLoading ? 'bg-gray-400' : 'bg-purple-600 hover:bg-purple-700'} text-white rounded-full flex items-center justify-center shadow-sm transition-all duration-200`}
+            className={`no-drag w-7 h-7 flex-shrink-0 ${isLoading ? 'bg-gray-400' : 'bg-purple-600 hover:bg-purple-700'} text-white rounded-full flex items-center justify-center shadow-sm transition-all duration-200`}
           >
             {isLoading ? (
-              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+              <div className="animate-spin rounded-full h-2.5 w-2.5 border-b-2 border-white"></div>
             ) : isTrackPlaying ? (
-              <Pause className="w-3 h-3" />
+              <Pause className="w-2.5 h-2.5" />
             ) : (
-              <Play className="w-3 h-3 ml-0.5" />
+              <Play className="w-2.5 h-2.5 ml-0.5" />
             )}
           </button>
-          <div className="text-sm text-purple-700 font-semibold truncate max-w-48">
+          <div className="text-xs text-purple-700 font-semibold truncate">
             {track.name}
           </div>
           {isTrackPlaying && (
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+            <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse flex-shrink-0" />
           )}
         </div>
-        <div className="flex items-center gap-3">
-          <div className="text-sm text-purple-600 font-medium bg-purple-100 px-2 py-1 rounded">
-            {formatTime(track.duration)}
-          </div>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {trackWidth > 150 && (
+            <div className="text-xs text-purple-600 font-medium bg-purple-100 px-1.5 py-0.5 rounded">
+              {formatTime(track.duration)}
+            </div>
+          )}
           <button
             onClick={(e) => {
               e.stopPropagation();
               onRemove && onRemove(track.id);
             }}
-            className="no-drag w-7 h-7 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-sm"
+            className="no-drag w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-sm flex-shrink-0"
           >
-            <Trash2 className="w-3.5 h-3.5" />
+            <Trash2 className="w-3 h-3" />
           </button>
         </div>
       </div>
 
       {/* Waveform Container */}
-      <div className="relative p-3">
+      <div className="relative p-2">
         <div 
           ref={waveformRef} 
           className="rounded-lg overflow-hidden bg-gray-50 relative"
@@ -289,26 +343,26 @@ const TrackWaveform = ({ track, audioBuffer, isPlaying, currentTime, onPlay, onR
           }}
           onDoubleClick={handleSplit}
           style={{ 
-            minHeight: '80px',
+            minHeight: '60px',
             cursor: 'crosshair'
           }}
         />
         
         {/* Split Indicator */}
-        {showSplitIndicator && splitPosition && (
+        {showSplitIndicator && splitPosition && trackWidth > 100 && (
           <div 
             className="split-indicator"
-            style={{ left: `${splitPosition + 12}px` }}
+            style={{ left: `${splitPosition + 8}px` }}
           />
         )}
         
         {/* Split Tooltip */}
-        {showSplitIndicator && splitPosition && (
+        {showSplitIndicator && splitPosition && trackWidth > 100 && (
           <div 
             className="absolute -top-2 bg-red-500 text-white text-xs px-2 py-1 rounded shadow-lg font-medium"
             style={{ left: `${Math.max(0, splitPosition - 20)}px` }}
           >
-            Double-click to split
+            Split
           </div>
         )}
       </div>
@@ -316,31 +370,187 @@ const TrackWaveform = ({ track, audioBuffer, isPlaying, currentTime, onPlay, onR
   );
 };
 
+// Simplified Multi-track Audio Engine
+const MultiTrackAudioEngine = ({ tracks, isPlaying, currentTime, volume, onTimeUpdate, onPlaybackEnd }) => {
+  const audioElementsRef = useRef({});
+  const intervalRef = useRef(null);
+  const startTimeRef = useRef(0);
+
+  // Create audio elements
+  useEffect(() => {
+    tracks.forEach(track => {
+      if (!audioElementsRef.current[track.id]) {
+        const audio = new Audio(track.url);
+        audio.volume = volume / 100;
+        audio.preload = 'auto';
+        audioElementsRef.current[track.id] = audio;
+      }
+    });
+
+    // Clean up removed tracks
+    Object.keys(audioElementsRef.current).forEach(trackId => {
+      if (!tracks.find(t => t.id === trackId)) {
+        const audio = audioElementsRef.current[trackId];
+        audio.pause();
+        URL.revokeObjectURL(audio.src);
+        delete audioElementsRef.current[trackId];
+      }
+    });
+  }, [tracks]);
+
+  // Update volume
+  useEffect(() => {
+    Object.values(audioElementsRef.current).forEach(audio => {
+      audio.volume = volume / 100;
+    });
+  }, [volume]);
+
+  // Handle playback with corrected timing
+  useEffect(() => {
+    if (isPlaying) {
+      startTimeRef.current = performance.now() - (currentTime * 1000);
+      
+      intervalRef.current = setInterval(() => {
+        const elapsed = (performance.now() - startTimeRef.current) / 1000;
+        onTimeUpdate(elapsed);
+        
+        // Manage track playback
+        tracks.forEach(track => {
+          const audio = audioElementsRef.current[track.id];
+          if (!audio) return;
+
+          const trackStart = track.startTime || 0;
+          const trackEnd = trackStart + track.duration;
+
+          if (elapsed >= trackStart && elapsed < trackEnd) {
+            const trackTime = elapsed - trackStart;
+            if (audio.paused) {
+              audio.currentTime = trackTime;
+              audio.play().catch(console.error);
+            }
+          } else if (!audio.paused) {
+            audio.pause();
+          }
+        });
+        
+        // Check end
+        const maxDuration = Math.max(...tracks.map(t => (t.startTime || 0) + t.duration));
+        if (elapsed >= maxDuration) {
+          onPlaybackEnd();
+        }
+      }, 50); // Slower updates to match audio better
+
+    } else {
+      Object.values(audioElementsRef.current).forEach(audio => audio.pause());
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    }
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [isPlaying, tracks, onTimeUpdate, onPlaybackEnd]);
+
+  return null;
+};
+
+// Generate a simple audio tone for demonstration
+const generateAudioTone = (frequency, duration, sampleRate = 44100) => {
+  const samples = duration * sampleRate;
+  const buffer = new ArrayBuffer(44 + samples * 2);
+  const view = new DataView(buffer);
+  
+  // WAV header
+  const writeString = (offset, string) => {
+    for (let i = 0; i < string.length; i++) {
+      view.setUint8(offset + i, string.charCodeAt(i));
+    }
+  };
+  
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + samples * 2, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeString(36, 'data');
+  view.setUint32(40, samples * 2, true);
+  
+  // Generate tone
+  for (let i = 0; i < samples; i++) {
+    const sample = Math.sin(2 * Math.PI * frequency * i / sampleRate) * 0.3;
+    view.setInt16(44 + i * 2, sample * 32767, true);
+  }
+  
+  const blob = new Blob([buffer], { type: 'audio/wav' });
+  return URL.createObjectURL(blob);
+};
+
+// Sample data for demonstration
+const generateSampleTracks = () => [
+  {
+    id: 'track1',
+    name: 'Demo Tone A (440Hz)',
+    duration: 15,
+    startTime: 0,
+    url: generateAudioTone(440, 15)
+  },
+  {
+    id: 'track2',
+    name: 'Demo Tone C (261Hz)',
+    duration: 12,
+    startTime: 5,
+    url: generateAudioTone(261, 12)
+  }
+];
+
 // Main Panel Component
 export const MainPanel = ({ 
-  audioTracks = [], 
+  audioTracks = generateSampleTracks(), 
   audioBuffers = {}, 
   onRemoveTrack, 
-  isPlaying, 
-  setIsPlaying, 
-  currentTime, 
-  setCurrentTime,
+  isPlaying: externalIsPlaying, 
+  setIsPlaying: externalSetIsPlaying, 
+  currentTime: externalCurrentTime, 
+  setCurrentTime: externalSetCurrentTime,
   totalDuration = 0, 
-  volume, 
-  setVolume,
-  zoom = 1,
-  setZoom
+  volume: externalVolume = 75, 
+  setVolume: externalSetVolume,
+  zoom: externalZoom = 1,
+  setZoom: externalSetZoom
 }) => {
+  // Internal state with fallbacks
+  const [internalIsPlaying, setInternalIsPlaying] = useState(false);
+  const [internalCurrentTime, setInternalCurrentTime] = useState(0);
+  const [internalVolume, setInternalVolume] = useState(75);
+  const [internalZoom, setInternalZoom] = useState(1);
+  
   const [tracks, setTracks] = useState([]);
   const [trackStates, setTrackStates] = useState({});
-  const [waveSurferInstances, setWaveSurferInstances] = useState({});
   const containerRef = useRef(null);
+
+  // Use external props if provided, otherwise use internal state
+  const isPlaying = externalIsPlaying !== undefined ? externalIsPlaying : internalIsPlaying;
+  const setIsPlaying = externalSetIsPlaying || setInternalIsPlaying;
+  const currentTime = externalCurrentTime !== undefined ? externalCurrentTime : internalCurrentTime;
+  const setCurrentTime = externalSetCurrentTime || setInternalCurrentTime;
+  const volume = externalVolume !== undefined ? externalVolume : internalVolume;
+  const setVolume = externalSetVolume || setInternalVolume;
+  const zoom = externalZoom !== undefined ? externalZoom : internalZoom;
+  const setZoom = externalSetZoom || setInternalZoom;
 
   // Convert audioTracks to positioned tracks
   useEffect(() => {
     const newTracks = audioTracks.map((track, index) => ({
       ...track,
-      startTime: track.startTime !== undefined ? track.startTime : index * 3 // 3 second spacing
+      startTime: track.startTime !== undefined ? track.startTime : index * 5 // 5 second spacing
     }));
     setTracks(newTracks);
   }, [audioTracks]);
@@ -351,23 +561,22 @@ export const MainPanel = ({
   );
 
   const pixelsPerSecond = 50 * zoom;
-  const trackHeight = 140;
-  
+  const trackHeight = 120; // Reduced to match component
+
   // Handle track state changes
-  const handleTrackStateChange = (trackId, isPlaying) => {
+  const handleTrackStateChange = useCallback((trackId, isPlaying) => {
     setTrackStates(prev => ({
       ...prev,
       [trackId]: isPlaying
     }));
-  };
-
-  // Handle WaveSurfer ready
-  const handleWaveSurferReady = useCallback((trackId, wavesurfer) => {
-    setWaveSurferInstances(prev => ({
-      ...prev,
-      [trackId]: wavesurfer
-    }));
   }, []);
+
+  // Handle playback end
+  const handlePlaybackEnd = useCallback(() => {
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setTrackStates({});
+  }, [setIsPlaying, setCurrentTime]);
 
   // Track management functions
   const updateTrackPosition = useCallback((trackId, newStartTime) => {
@@ -413,27 +622,27 @@ export const MainPanel = ({
 
   const removeTrack = useCallback((trackId) => {
     setTracks(prev => prev.filter(track => track.id !== trackId));
-    // Clean up WaveSurfer instance
-    setWaveSurferInstances(prev => {
-      const newInstances = { ...prev };
-      delete newInstances[trackId];
-      return newInstances;
-    });
-    // Clean up track state
-    setTrackStates(prev => {
-      const newStates = { ...prev };
-      delete newStates[trackId];
-      return newStates;
-    });
     onRemoveTrack && onRemoveTrack(trackId);
   }, [onRemoveTrack]);
+
+  // Master playback control
+  const handleMasterPlayPause = () => {
+    const anyTrackPlaying = Object.values(trackStates).some(isPlaying => isPlaying);
+    
+    if (anyTrackPlaying || isPlaying) {
+      setIsPlaying(false);
+      setTrackStates({});
+    } else {
+      setIsPlaying(true);
+    }
+  };
 
   // Timeline click handler
   const handleTimelineClick = (e) => {
     if (!containerRef.current) return;
     
     const rect = containerRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
+    const x = e.clientX - rect.left - 10; // Adjust for offset
     const clickTime = Math.max(0, x / pixelsPerSecond);
     setCurrentTime(Math.min(clickTime, dynamicTotalDuration));
   };
@@ -447,57 +656,48 @@ export const MainPanel = ({
 
   return (
     <div className="flex-1 bg-gray-50 flex flex-col h-screen overflow-hidden">
-      {/* Inject custom scrollbar styles */}
       <style>{scrollbarStyles}</style>
       
-      {/* Top Control Bar - Fixed Height */}
+      {/* Multi-track Audio Engine */}
+      <MultiTrackAudioEngine
+        tracks={tracks}
+        isPlaying={isPlaying}
+        currentTime={currentTime}
+        volume={volume}
+        onTimeUpdate={setCurrentTime}
+        onPlaybackEnd={handlePlaybackEnd}
+      />
+      
+      {/* Top Control Bar */}
       <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between flex-shrink-0">
-        {/* Playback Controls */}
         <div className="flex items-center gap-3">
-          <button className="p-2 hover:bg-purple-50 rounded-lg transition-colors">
+          <button 
+            onClick={() => setCurrentTime(0)}
+            className="p-2 hover:bg-purple-50 rounded-lg transition-colors"
+          >
             <SkipBack className="w-4 h-4 text-gray-600" />
           </button>
           
           <button 
-            onClick={() => {
-              if (setIsPlaying) {
-                // Check if any track is currently playing using our state
-                const anyTrackPlaying = Object.values(trackStates).some(isPlaying => isPlaying);
-                
-                if (anyTrackPlaying) {
-                  // If any track is playing, stop all tracks
-                  setIsPlaying(false);
-                  setTrackStates({}); // Reset all track states
-                  // Stop all WaveSurfer instances directly
-                  Object.values(waveSurferInstances).forEach(wavesurfer => {
-                    if (wavesurfer && wavesurfer.isPlaying()) {
-                      wavesurfer.pause();
-                    }
-                  });
-                } else {
-                  // If no track is playing, start all tracks
-                  setIsPlaying(true);
-                  // Start all WaveSurfer instances directly
-                  Object.values(waveSurferInstances).forEach(wavesurfer => {
-                    if (wavesurfer && !wavesurfer.isPlaying()) {
-                      wavesurfer.play();
-                    }
-                  });
-                }
-              }
-            }}
+            onClick={handleMasterPlayPause}
             className={`w-10 h-10 bg-purple-600 hover:bg-purple-700 text-white rounded-full flex items-center justify-center transition-colors shadow-sm ${tracks.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
             disabled={tracks.length === 0}
           >
-            {Object.values(trackStates).some(isPlaying => isPlaying) ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
+            {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
           </button>
           
-          <button className="p-2 hover:bg-purple-50 rounded-lg transition-colors">
+          <button 
+            onClick={() => {
+              setIsPlaying(false);
+              setCurrentTime(0);
+              setTrackStates({});
+            }}
+            className="p-2 hover:bg-purple-50 rounded-lg transition-colors"
+          >
             <SkipForward className="w-4 h-4 text-gray-600" />
           </button>
         </div>
 
-        {/* Time Display */}
         <div className="flex items-center gap-2 text-sm font-mono">
           <span className="text-gray-900 font-semibold">{formatTime(currentTime || 0)}</span>
           <span className="text-gray-400">/</span>
@@ -507,38 +707,57 @@ export const MainPanel = ({
           </span>
         </div>
 
-        {/* Right Controls */}
         <div className="flex items-center gap-3">
-          {/* Volume Control */}
           <div className="flex items-center gap-2">
             <Volume2 className="w-4 h-4 text-gray-600" />
-            <div className="w-16 h-1 bg-gray-200 rounded-full relative">
-              <div 
-                className="h-full bg-purple-600 rounded-full" 
-                style={{ width: `${volume}%` }}
-              ></div>
-              <div 
-                className="absolute top-1/2 transform -translate-y-1/2 w-3 h-3 bg-purple-600 rounded-full border-2 border-white shadow-sm cursor-pointer"
-                style={{ left: `${volume}%`, transform: 'translateX(-50%) translateY(-50%)' }}
-                onClick={(e) => {
-                  const rect = e.currentTarget.parentElement.getBoundingClientRect();
-                  const x = e.clientX - rect.left;
-                  const newVolume = Math.max(0, Math.min(100, (x / rect.width) * 100));
-                  setVolume && setVolume(newVolume);
-                }}
-              ></div>
-            </div>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={volume}
+              onChange={(e) => setVolume && setVolume(parseInt(e.target.value))}
+              className="w-16 accent-purple-600"
+            />
+            <span className="text-sm w-8">{volume}%</span>
           </div>
 
-          {/* Speed Control */}
           <div className="flex items-center gap-2">
             <Settings className="w-4 h-4 text-gray-600" />
             <span className="text-sm text-gray-600">1.0x</span>
           </div>
 
-          <button className="p-2 hover:bg-purple-50 rounded-lg transition-colors">
-            <MoreHorizontal className="w-4 h-4 text-gray-600" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => setZoom && setZoom(Math.max(0.1, zoom - 0.2))}
+              className="p-1.5 hover:bg-purple-50 rounded transition-colors"
+              disabled={zoom <= 0.1}
+            >
+              <ZoomOut className="w-4 h-4 text-gray-600" />
+            </button>
+            <span className="text-sm text-gray-600 min-w-12 text-center">{Math.round(zoom * 100)}%</span>
+            <button 
+              onClick={() => setZoom && setZoom(Math.min(3, zoom + 0.2))}
+              className="p-1.5 hover:bg-purple-50 rounded transition-colors"
+              disabled={zoom >= 3}
+            >
+              <ZoomIn className="w-4 h-4 text-gray-600" />
+            </button>
+            
+            <button 
+              onClick={() => {
+                if (tracks.length > 0 && setZoom) {
+                  const maxDuration = Math.max(...tracks.map(track => track.duration));
+                  const containerWidth = 600; // Smaller fit width
+                  const fitZoom = containerWidth / (maxDuration * 50);
+                  const finalZoom = Math.max(0.1, Math.min(3, fitZoom));
+                  setZoom(finalZoom);
+                }
+              }}
+              className="px-3 py-1 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded transition-colors text-sm font-medium"
+            >
+              Fit
+            </button>
+          </div>
 
           <button className="px-3 py-1.5 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-lg transition-colors text-sm font-medium">
             Export
@@ -546,81 +765,24 @@ export const MainPanel = ({
         </div>
       </div>
 
-      {/* Tools Bar - Fixed Height */}
+      {/* Tools Bar */}
       <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center gap-3 flex-shrink-0">
         <div className="flex items-center gap-2">
           <Scissors className="w-4 h-4 text-purple-600" />
-          <span className="text-sm text-gray-700">Split</span>
+          <span className="text-sm text-gray-700">Double-click waveform to split</span>
         </div>
-        
-        <div className="flex items-center gap-2 ml-auto">
-          <button 
-            onClick={() => setZoom && setZoom(Math.max(0.1, zoom - 0.2))}
-            className="p-1.5 hover:bg-purple-50 rounded transition-colors"
-            disabled={zoom <= 0.1}
-          >
-            <ZoomOut className="w-4 h-4 text-gray-600" />
-          </button>
-          <div className="w-20 h-1 bg-gray-200 rounded-full relative mx-2">
-            <div 
-              className="h-full bg-purple-600 rounded-full transition-all duration-200" 
-              style={{ width: `${Math.min((zoom / 3) * 100, 100)}%` }}
-            ></div>
-            <div 
-              className="absolute top-1/2 w-3 h-3 bg-purple-600 rounded-full border-2 border-white shadow-sm cursor-pointer"
-              style={{ 
-                left: `${Math.min((zoom / 3) * 100, 100)}%`, 
-                transform: 'translateX(-50%) translateY(-50%)' 
-              }}
-              onClick={(e) => {
-                const rect = e.currentTarget.parentElement.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const newZoom = Math.max(0.1, Math.min(3, (x / rect.width) * 3));
-                setZoom && setZoom(newZoom);
-              }}
-            ></div>
-          </div>
-          <button 
-            onClick={() => setZoom && setZoom(Math.min(3, zoom + 0.2))}
-            className="p-1.5 hover:bg-purple-50 rounded transition-colors"
-            disabled={zoom >= 3}
-          >
-            <ZoomIn className="w-4 h-4 text-gray-600" />
-          </button>
-          
-          <button 
-            onClick={() => {
-              if (audioTracks.length > 0 && setZoom) {
-                const maxDuration = Math.max(...audioTracks.map(track => track.duration));
-                const containerWidth = 800; // Account for padding
-                const fitZoom = containerWidth / (maxDuration * 50);
-                const finalZoom = Math.max(0.1, Math.min(3, fitZoom));
-                setZoom(finalZoom);
-              }
-            }}
-            className="px-3 py-1 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded transition-colors text-sm font-medium"
-          >
-            Fit
-          </button>
-          
-          <span className="text-sm text-gray-600 ml-2">{Math.round(zoom * 100)}%</span>
-        </div>
+        <span className="text-sm text-gray-600 ml-auto">Zoom: {Math.round(zoom * 100)}%</span>
       </div>
 
       {/* Content Area */}
       {tracks.length === 0 ? (
-        // Centered Empty State when no tracks
         <div className="flex-1 bg-gray-50 flex justify-center mt-8">
           <div className="text-center">
             <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <Music className="w-8 h-8 text-purple-400" />
             </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No audio files uploaded</h3>
-            <p className="text-gray-500 mb-4">Upload audio files from the sidebar to start editing</p>
-            <div className="w-full max-w-md h-12 border-2 border-dashed border-purple-300 rounded-lg text-purple-500 flex items-center justify-center gap-2 mx-auto">
-              <Music className="w-4 h-4" />
-              <span className="text-sm">Your audio tracks will appear here</span>
-            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Multi-Track Audio Editor</h3>
+            <p className="text-gray-500 mb-4">Click play to start editing - drag tracks to reposition, double-click to split</p>
           </div>
         </div>
       ) : (
@@ -640,18 +802,18 @@ export const MainPanel = ({
               >
                 {/* Timeline Ruler */}
                 {dynamicTotalDuration > 0 && (
-                  <div className="sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-gray-200">
+                  <div className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-gray-200">
                     <div className="relative h-12">
                       {Array.from({ length: Math.ceil(dynamicTotalDuration / 5) + 1 }, (_, i) => {
                         const time = i * 5;
                         const position = time * pixelsPerSecond;
                         const isMajorMarker = time % 10 === 0;
                         return (
-                          <div key={time} className="absolute" style={{ left: `${position}px` }}>
-                            <span className="absolute top-1 left-1/2 transform -translate-x-1/2 text-xs text-gray-600 font-semibold whitespace-nowrap bg-white px-1 rounded">
+                          <div key={time} className="absolute" style={{ left: `${position + 10}px` }}>
+                            <span className="absolute top-1 left-1/2 transform -translate-x-1/2 text-xs text-gray-700 font-semibold whitespace-nowrap bg-white px-2 py-0.5 rounded shadow-sm">
                               {time < 60 ? `${time}s` : `${Math.floor(time / 60)}:${(time % 60).toString().padStart(2, '0')}`}
                             </span>
-                            <div className={`absolute top-7 left-1/2 transform -translate-x-1/2 w-px ${isMajorMarker ? 'h-5 bg-gray-400' : 'h-3 bg-gray-300'}`}></div>
+                            <div className={`absolute top-8 left-1/2 transform -translate-x-1/2 w-px ${isMajorMarker ? 'h-4 bg-gray-500' : 'h-2 bg-gray-300'}`}></div>
                           </div>
                         );
                       })}
@@ -663,36 +825,37 @@ export const MainPanel = ({
                 {dynamicTotalDuration > 0 && (
                   <div 
                     className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20 pointer-events-none shadow-lg" 
-                    style={{ left: `${currentTime * pixelsPerSecond}px` }}
+                    style={{ left: `${currentTime * pixelsPerSecond + 10}px` }}
                   >
                     <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-3 h-3 bg-red-500 rounded-full shadow-lg border-2 border-white"></div>
+                    <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-red-500 text-white text-xs px-2 py-1 rounded shadow-lg whitespace-nowrap">
+                      {formatTime(currentTime)}
+                    </div>
                   </div>
                 )}
 
                 {/* Tracks */}
-                <div className="relative px-4 py-4" style={{ paddingTop: '60px' }}>
+                <div className="relative px-4 py-4" style={{ paddingTop: '80px', paddingLeft: '14px' }}>
                   {tracks.map((track, index) => (
                     <div
                       key={track.id}
                       className="relative"
-                      data-track-id={track.id}
                       style={{
                         marginBottom: '20px',
                         height: `${trackHeight}px`
                       }}
                     >
-                      <TrackWaveform
+                      <DraggableTrackWaveform
                         track={track}
-                        audioBuffer={audioBuffers[track.id]}
-                        isPlaying={isPlaying}
-                        currentTime={currentTime}
                         zoom={zoom}
+                        pixelsPerSecond={pixelsPerSecond}
+                        currentTime={currentTime}
+                        isGlobalPlaying={isPlaying}
                         onPlay={(trackId) => console.log('Playing track:', trackId)}
                         onRemove={removeTrack}
                         onUpdatePosition={updateTrackPosition}
                         onSplit={splitTrack}
                         onTrackStateChange={handleTrackStateChange}
-                        onWaveSurferReady={handleWaveSurferReady}
                       />
                     </div>
                   ))}
@@ -702,9 +865,26 @@ export const MainPanel = ({
           </div>
         </div>
       )}
+
+      {/* Status Bar */}
+      <div className="bg-white border-t border-gray-200 px-4 py-2 flex items-center justify-between text-sm text-gray-600 flex-shrink-0">
+        <div className="flex items-center gap-4">
+          <span>Tracks: {tracks.length}</span>
+          <span>•</span>
+          <span>Duration: {formatTime(dynamicTotalDuration)}</span>
+        </div>
+        <div className="flex items-center gap-4">
+          {isPlaying && (
+            <>
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              <span>Playing</span>
+            </>
+          )}
+          <span>Ready</span>
+        </div>
+      </div>
     </div>
   );
 };
 
-// Also provide default export
 export default MainPanel;
