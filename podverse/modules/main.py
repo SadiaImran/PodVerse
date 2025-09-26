@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from module_posts.module_posts_route import router as posts_router
-from module_knowledgeBase.module_knowledgeBase_route import router as knowledge_base_router
+from module_knowledgeBase.routes import router as knowledge_base_router
 from module_audios.module_audios_route import router as audios_router
 from module_audio_edit.module_audio_edit import router as audio_edit_router
 
