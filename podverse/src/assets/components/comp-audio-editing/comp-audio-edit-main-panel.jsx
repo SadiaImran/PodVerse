@@ -25,6 +25,8 @@ import {
   RotateCcw
 } from 'lucide-react';
 
+import TrackEditPanel from './comp-audio-track-edit-panel';
+
 // Enhanced scrollbar styles with modern look
 const scrollbarStyles = `
   .timeline-scrollbar::-webkit-scrollbar {
@@ -63,214 +65,7 @@ const scrollbarStyles = `
   }
 `;
 
-// Enhanced Track Edit Panel Component
-const TrackEditPanel = ({ track, isVisible, onClose, onUpdate }) => {
-  const [localSettings, setLocalSettings] = useState({
-    volume: 100,
-    speed: 1.0,
-    duration: track?.duration || 0,
-    startTime: track?.startTime || 0
-  });
-
-  useEffect(() => {
-    if (track) {
-      setLocalSettings({
-        volume: track.volume || 100,
-        speed: track.speed || 1.0,
-        duration: track.duration,
-        startTime: track.startTime || 0
-      });
-    }
-  }, [track]);
-
-  if (!isVisible || !track) return null;
-
-  const handleSettingChange = (key, value) => {
-    const newSettings = { ...localSettings, [key]: value };
-    setLocalSettings(newSettings);
-    onUpdate && onUpdate(track.id, newSettings);
-  };
-
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = (seconds % 60).toFixed(1);
-    return `${mins}:${secs.padStart(4, '0')}`;
-  };
-
-  return (
-    <div className="w-80 bg-white border-r border-gray-200 shadow-lg flex-shrink-0 overflow-y-auto">
-      <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-purple-50">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
-              <Sliders className="w-4 h-4 text-white" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-900">Track Settings</h3>
-              <p className="text-sm text-gray-600">{track.name}</p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 hover:bg-white/50 rounded-lg transition-colors"
-          >
-            <ChevronRight className="w-5 h-5 text-gray-600" />
-          </button>
-        </div>
-      </div>
-
-      <div className="p-4 space-y-6">
-        {/* Track Info */}
-        <div className="space-y-3">
-          <h4 className="font-medium text-gray-900 flex items-center gap-2">
-            <Music className="w-4 h-4 text-indigo-600" />
-            Track Information
-          </h4>
-          <div className="bg-gray-50 rounded-lg p-3 space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Duration:</span>
-              <span className="font-medium">{formatTime(track.duration)}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Start Time:</span>
-              <span className="font-medium">{formatTime(localSettings.startTime)}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">End Time:</span>
-              <span className="font-medium">{formatTime(localSettings.startTime + track.duration)}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Volume Control */}
-        <div className="space-y-3">
-          <h4 className="font-medium text-gray-900 flex items-center gap-2">
-            <Volume2 className="w-4 h-4 text-indigo-600" />
-            Volume
-          </h4>
-          <div className="space-y-2">
-            <div className="flex items-center gap-3">
-              <VolumeX className="w-4 h-4 text-gray-400" />
-              <input
-                type="range"
-                min="0"
-                max="200"
-                value={localSettings.volume}
-                onChange={(e) => handleSettingChange('volume', parseInt(e.target.value))}
-                className="flex-1 accent-indigo-600"
-              />
-              <Volume2 className="w-4 h-4 text-gray-400" />
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">0%</span>
-              <span className="font-medium text-indigo-600">{localSettings.volume}%</span>
-              <span className="text-gray-600">200%</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Speed Control */}
-        <div className="space-y-3">
-          <h4 className="font-medium text-gray-900 flex items-center gap-2">
-            <Zap className="w-4 h-4 text-indigo-600" />
-            Playback Speed
-          </h4>
-          <div className="space-y-2">
-            <input
-              type="range"
-              min="0.25"
-              max="3"
-              step="0.05"
-              value={localSettings.speed}
-              onChange={(e) => handleSettingChange('speed', parseFloat(e.target.value))}
-              className="w-full accent-indigo-600"
-            />
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">0.25x</span>
-              <span className="font-medium text-indigo-600">{localSettings.speed.toFixed(2)}x</span>
-              <span className="text-gray-600">3.0x</span>
-            </div>
-            <div className="flex gap-2 mt-3">
-              <button
-                onClick={() => handleSettingChange('speed', 0.5)}
-                className="px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded transition-colors"
-              >
-                0.5x
-              </button>
-              <button
-                onClick={() => handleSettingChange('speed', 1.0)}
-                className="px-3 py-1 text-xs bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded transition-colors"
-              >
-                1.0x
-              </button>
-              <button
-                onClick={() => handleSettingChange('speed', 1.5)}
-                className="px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded transition-colors"
-              >
-                1.5x
-              </button>
-              <button
-                onClick={() => handleSettingChange('speed', 2.0)}
-                className="px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded transition-colors"
-              >
-                2.0x
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Start Time Adjustment */}
-        <div className="space-y-3">
-          <h4 className="font-medium text-gray-900 flex items-center gap-2">
-            <Clock className="w-4 h-4 text-indigo-600" />
-            Position
-          </h4>
-          <div className="space-y-2">
-            <input
-              type="range"
-              min="0"
-              max="120"
-              step="0.1"
-              value={localSettings.startTime}
-              onChange={(e) => handleSettingChange('startTime', parseFloat(e.target.value))}
-              className="w-full accent-indigo-600"
-            />
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">0:00.0</span>
-              <span className="font-medium text-indigo-600">{formatTime(localSettings.startTime)}</span>
-              <span className="text-gray-600">2:00.0</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="space-y-3 pt-4 border-t border-gray-200">
-          <h4 className="font-medium text-gray-900">Actions</h4>
-          <div className="grid grid-cols-2 gap-2">
-            <button className="flex items-center gap-2 px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-colors text-sm">
-              <Copy className="w-4 h-4" />
-              Duplicate
-            </button>
-            <button className="flex items-center gap-2 px-3 py-2 bg-green-50 hover:bg-green-100 text-green-700 rounded-lg transition-colors text-sm">
-              <Download className="w-4 h-4" />
-              Export
-            </button>
-            <button className="flex items-center gap-2 px-3 py-2 bg-yellow-50 hover:bg-yellow-100 text-yellow-700 rounded-lg transition-colors text-sm">
-              <RotateCcw className="w-4 h-4" />
-              Reset
-            </button>
-            <button className="flex items-center gap-2 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-700 rounded-lg transition-colors text-sm">
-              <Trash2 className="w-4 h-4" />
-              Delete
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// Enhanced Draggable Track Component with modern styling
+// Enhanced Draggable Track Component with functional volume and speed
 const DraggableTrackWaveform = ({
   track,
   zoom = 1,
@@ -347,6 +142,13 @@ const DraggableTrackWaveform = ({
 
     wavesurfer.on("ready", () => {
       setIsLoading(false);
+      // Apply track settings when ready
+      if (wavesurfer.backend && wavesurfer.backend.ac) {
+        wavesurfer.setVolume((track.volume || 100) / 100);
+        if (track.speed && track.speed !== 1.0) {
+          wavesurfer.setPlaybackRate(track.speed);
+        }
+      }
     });
 
     wavesurfer.on("error", (e) => {
@@ -364,6 +166,20 @@ const DraggableTrackWaveform = ({
       }
     };
   }, [track.url, track.id, zoom]);
+
+  // Apply volume and speed changes
+  useEffect(() => {
+    if (wavesurferRef.current && wavesurferRef.current.isReady) {
+      try {
+        wavesurferRef.current.setVolume((track.volume || 100) / 100);
+        if (track.speed && wavesurferRef.current.setPlaybackRate) {
+          wavesurferRef.current.setPlaybackRate(track.speed);
+        }
+      } catch (e) {
+        console.error("Error applying track settings:", e);
+      }
+    }
+  }, [track.volume, track.speed]);
 
   // Update WaveSurfer progress
   useEffect(() => {
@@ -503,6 +319,16 @@ const DraggableTrackWaveform = ({
               {formatTime(track.duration)}
             </div>
           )}
+          {track.volume !== 100 && (
+            <div className="text-xs text-blue-600 font-semibold bg-blue-50 px-1 py-0.5 rounded">
+              {track.volume}%
+            </div>
+          )}
+          {track.speed !== 1.0 && (
+            <div className="text-xs text-purple-600 font-semibold bg-purple-50 px-1 py-0.5 rounded">
+              {track.speed.toFixed(2)}x
+            </div>
+          )}
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -530,22 +356,41 @@ const DraggableTrackWaveform = ({
   );
 };
 
-// Multi-track Audio Engine (same as before)
+// Enhanced Multi-track Audio Engine with volume and speed support
 const MultiTrackAudioEngine = ({ tracks, isPlaying, currentTime, volume, onTimeUpdate, onPlaybackEnd }) => {
   const audioElementsRef = useRef({});
   const intervalRef = useRef(null);
   const startTimeRef = useRef(0);
+  const audioContextRef = useRef(null);
+
+  // Initialize Web Audio API for better control
+  useEffect(() => {
+    if (!audioContextRef.current) {
+      try {
+        audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      } catch (e) {
+        console.warn("Web Audio API not supported, using basic audio elements");
+      }
+    }
+  }, []);
 
   useEffect(() => {
     tracks.forEach(track => {
       if (!audioElementsRef.current[track.id]) {
         const audio = new Audio(track.url);
-        audio.volume = volume / 100;
+        audio.volume = (track.volume || 100) / 100 * (volume / 100);
+        audio.playbackRate = track.speed || 1.0;
         audio.preload = 'auto';
         audioElementsRef.current[track.id] = audio;
+      } else {
+        // Update existing audio properties
+        const audio = audioElementsRef.current[track.id];
+        audio.volume = (track.volume || 100) / 100 * (volume / 100);
+        audio.playbackRate = track.speed || 1.0;
       }
     });
 
+    // Clean up removed tracks
     Object.keys(audioElementsRef.current).forEach(trackId => {
       if (!tracks.find(t => t.id === trackId)) {
         const audio = audioElementsRef.current[trackId];
@@ -554,13 +399,7 @@ const MultiTrackAudioEngine = ({ tracks, isPlaying, currentTime, volume, onTimeU
         delete audioElementsRef.current[trackId];
       }
     });
-  }, [tracks]);
-
-  useEffect(() => {
-    Object.values(audioElementsRef.current).forEach(audio => {
-      audio.volume = volume / 100;
-    });
-  }, [volume]);
+  }, [tracks, volume]);
 
   useEffect(() => {
     if (isPlaying) {
@@ -610,6 +449,51 @@ const MultiTrackAudioEngine = ({ tracks, isPlaying, currentTime, volume, onTimeU
   return null;
 };
 
+// Audio export utility functions
+const exportTrackAsWAV = (track) => {
+  return new Promise((resolve, reject) => {
+    const audio = new Audio(track.url);
+    
+    audio.addEventListener('loadeddata', () => {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const source = audioContext.createMediaElementSource(audio);
+      const destination = audioContext.createMediaStreamDestination();
+      
+      source.connect(destination);
+      
+      const mediaRecorder = new MediaRecorder(destination.stream);
+      const chunks = [];
+      
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data);
+      };
+      
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(chunks, { type: 'audio/wav' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${track.name}.wav`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        resolve();
+      };
+      
+      mediaRecorder.start();
+      audio.play();
+      
+      setTimeout(() => {
+        mediaRecorder.stop();
+        audio.pause();
+      }, track.duration * 1000);
+    });
+    
+    audio.addEventListener('error', reject);
+  });
+};
+
 // Generate sample tracks
 const generateAudioTone = (frequency, duration, sampleRate = 44100) => {
   const samples = duration * sampleRate;
@@ -651,6 +535,8 @@ const generateSampleTracks = () => [
     name: 'Bass Line (80Hz)',
     duration: 18,
     startTime: 0,
+    volume: 100,
+    speed: 1.0,
     url: generateAudioTone(80, 18)
   },
   {
@@ -658,6 +544,8 @@ const generateSampleTracks = () => [
     name: 'Melody (440Hz)',
     duration: 15,
     startTime: 3,
+    volume: 100,
+    speed: 1.0,
     url: generateAudioTone(440, 15)
   },
   {
@@ -665,6 +553,8 @@ const generateSampleTracks = () => [
     name: 'Harmony (660Hz)',
     duration: 12,
     startTime: 6,
+    volume: 100,
+    speed: 1.0,
     url: generateAudioTone(660, 12)
   }
 ];
@@ -706,7 +596,9 @@ export const MainPanel = ({
   useEffect(() => {
     const newTracks = audioTracks.map((track, index) => ({
       ...track,
-      startTime: track.startTime !== undefined ? track.startTime : index * 5
+      startTime: track.startTime !== undefined ? track.startTime : index * 5,
+      volume: track.volume !== undefined ? track.volume : 100,
+      speed: track.speed !== undefined ? track.speed : 1.0
     }));
     setTracks(newTracks);
   }, [audioTracks]);
@@ -737,6 +629,7 @@ export const MainPanel = ({
     ));
   }, []);
 
+  // Enhanced splitting function
   const splitTrackAtPlayhead = useCallback(() => {
     if (!selectedTrackId) return;
 
@@ -746,17 +639,27 @@ export const MainPanel = ({
     const trackStart = selectedTrack.startTime || 0;
     const trackEnd = trackStart + selectedTrack.duration;
 
-    if (currentTime <= trackStart || currentTime >= trackEnd) return;
+    // Check if playhead is within track boundaries
+    if (currentTime <= trackStart || currentTime >= trackEnd) {
+      alert(`Playhead must be within the selected track to split. Track runs from ${trackStart.toFixed(1)}s to ${trackEnd.toFixed(1)}s, but playhead is at ${currentTime.toFixed(1)}s.`);
+      return;
+    }
 
     const splitPoint = currentTime - trackStart;
 
-    if (splitPoint <= 1 || splitPoint >= selectedTrack.duration - 1) return;
+    // Ensure we don't create tiny segments
+    if (splitPoint <= 0.5 || splitPoint >= selectedTrack.duration - 0.5) {
+      alert("Cannot split too close to the beginning or end of the track. Leave at least 0.5 seconds on each side.");
+      return;
+    }
 
+    // Create new track segments
     const firstTrack = {
       ...selectedTrack,
       id: `${selectedTrackId}_${Date.now()}_1`,
       duration: splitPoint,
-      name: `${selectedTrack.name} (1)`
+      name: `${selectedTrack.name} (Part 1)`,
+      url: selectedTrack.url // Will need proper audio splitting for real implementation
     };
 
     const secondTrack = {
@@ -764,7 +667,8 @@ export const MainPanel = ({
       id: `${selectedTrackId}_${Date.now()}_2`,
       startTime: currentTime,
       duration: selectedTrack.duration - splitPoint,
-      name: `${selectedTrack.name} (2)`
+      name: `${selectedTrack.name} (Part 2)`,
+      url: selectedTrack.url // Will need proper audio splitting for real implementation
     };
 
     setTracks(prev => {
@@ -775,6 +679,14 @@ export const MainPanel = ({
     });
 
     setSelectedTrackId(null);
+    setIsEditPanelOpen(false);
+
+    // Show success message
+    const notification = document.createElement('div');
+    notification.textContent = `Track "${selectedTrack.name}" split successfully at ${currentTime.toFixed(1)}s`;
+    notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+    document.body.appendChild(notification);
+    setTimeout(() => document.body.removeChild(notification), 3000);
   }, [selectedTrackId, tracks, currentTime]);
 
   const removeTrack = useCallback((trackId) => {
@@ -804,6 +716,68 @@ export const MainPanel = ({
     ));
   }, []);
 
+  // Track action handlers
+  const handleDuplicateTrack = useCallback((trackId) => {
+    const trackToDuplicate = tracks.find(t => t.id === trackId);
+    if (!trackToDuplicate) return;
+
+    const duplicatedTrack = {
+      ...trackToDuplicate,
+      id: `${trackId}_duplicate_${Date.now()}`,
+      name: `${trackToDuplicate.name} (Copy)`,
+      startTime: (trackToDuplicate.startTime || 0) + trackToDuplicate.duration + 1
+    };
+
+    setTracks(prev => [...prev, duplicatedTrack]);
+
+    // Show notification
+    const notification = document.createElement('div');
+    notification.textContent = `Track duplicated: ${duplicatedTrack.name}`;
+    notification.className = 'fixed top-4 right-4 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+    document.body.appendChild(notification);
+    setTimeout(() => document.body.removeChild(notification), 3000);
+  }, [tracks]);
+
+  const handleExportTrack = useCallback(async (trackId) => {
+    const trackToExport = tracks.find(t => t.id === trackId);
+    if (!trackToExport) return;
+
+    try {
+      // For demo purposes, we'll create a simple download link
+      const a = document.createElement('a');
+      a.href = trackToExport.url;
+      a.download = `${trackToExport.name}.wav`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      // Show notification
+      const notification = document.createElement('div');
+      notification.textContent = `Exporting: ${trackToExport.name}`;
+      notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+      document.body.appendChild(notification);
+      setTimeout(() => document.body.removeChild(notification), 3000);
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert('Export failed. Please try again.');
+    }
+  }, [tracks]);
+
+  const handleResetTrack = useCallback((trackId, resetSettings) => {
+    setTracks(prev => prev.map(track =>
+      track.id === trackId
+        ? { ...track, ...resetSettings }
+        : track
+    ));
+
+    // Show notification
+    const notification = document.createElement('div');
+    notification.textContent = 'Track settings reset to defaults';
+    notification.className = 'fixed top-4 right-4 bg-yellow-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+    document.body.appendChild(notification);
+    setTimeout(() => document.body.removeChild(notification), 3000);
+  }, []);
+
   const handleMasterPlayPause = () => {
     const anyTrackPlaying = Object.values(trackStates).some(isPlaying => isPlaying);
 
@@ -822,6 +796,38 @@ export const MainPanel = ({
     const x = e.clientX - rect.left - 10;
     const clickTime = Math.max(0, x / pixelsPerSecond);
     setCurrentTime(Math.min(clickTime, dynamicTotalDuration));
+  };
+
+  const handleMasterExport = () => {
+    // Create a simple export of all tracks
+    const exportData = {
+      tracks: tracks.map(track => ({
+        name: track.name,
+        startTime: track.startTime,
+        duration: track.duration,
+        volume: track.volume,
+        speed: track.speed
+      })),
+      totalDuration: dynamicTotalDuration,
+      exportedAt: new Date().toISOString()
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'audio-project.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    // Show notification
+    const notification = document.createElement('div');
+    notification.textContent = 'Project exported successfully!';
+    notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+    document.body.appendChild(notification);
+    setTimeout(() => document.body.removeChild(notification), 3000);
   };
 
   const formatTime = (seconds) => {
@@ -853,6 +859,10 @@ export const MainPanel = ({
         isVisible={isEditPanelOpen}
         onClose={handleEditPanelClose}
         onUpdate={handleTrackUpdate}
+        onDuplicate={handleDuplicateTrack}
+        onDelete={removeTrack}
+        onExport={handleExportTrack}
+        onReset={handleResetTrack}
       />
 
       {/* Main Content */}
@@ -863,6 +873,7 @@ export const MainPanel = ({
             <button
               onClick={() => setCurrentTime(0)}
               className="p-2.5 hover:bg-gray-50 rounded-xl transition-colors group"
+              title="Reset to beginning"
             >
               <SkipBack className="w-5 h-5 text-gray-600 group-hover:text-gray-800" />
             </button>
@@ -871,6 +882,7 @@ export const MainPanel = ({
               onClick={handleMasterPlayPause}
               className={`w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white rounded-2xl flex items-center justify-center transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105 ${tracks.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
               disabled={tracks.length === 0}
+              title={isPlaying ? "Pause all tracks" : "Play all tracks"}
             >
               {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 ml-0.5" />}
             </button>
@@ -882,6 +894,7 @@ export const MainPanel = ({
                 setTrackStates({});
               }}
               className="p-2.5 hover:bg-gray-50 rounded-xl transition-colors group"
+              title="Stop and reset"
             >
               <SkipForward className="w-5 h-5 text-gray-600 group-hover:text-gray-800" />
             </button>
@@ -895,9 +908,10 @@ export const MainPanel = ({
                   ? 'bg-orange-100 hover:bg-orange-200 text-orange-700 shadow-sm hover:shadow-md'
                   : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                   }`}
+                title={selectedTrackId ? "Split selected track at playhead position" : "Select a track to enable splitting"}
               >
                 <Scissors className="w-4 h-4" />
-                Split
+                Split Track
               </button>
             </div>
           </div>
@@ -923,6 +937,7 @@ export const MainPanel = ({
                 value={volume}
                 onChange={(e) => setVolume && setVolume(parseInt(e.target.value))}
                 className="w-20 accent-indigo-600"
+                title="Master volume"
               />
               <span className="text-sm font-medium w-10">{volume}%</span>
             </div>
@@ -932,6 +947,7 @@ export const MainPanel = ({
                 onClick={() => setZoom && setZoom(Math.max(0.1, zoom - 0.2))}
                 className="p-2 hover:bg-gray-50 rounded-lg transition-colors"
                 disabled={zoom <= 0.1}
+                title="Zoom out"
               >
                 <ZoomOut className="w-4 h-4 text-gray-600" />
               </button>
@@ -940,6 +956,7 @@ export const MainPanel = ({
                 onClick={() => setZoom && setZoom(Math.min(3, zoom + 0.2))}
                 className="p-2 hover:bg-gray-50 rounded-lg transition-colors"
                 disabled={zoom >= 3}
+                title="Zoom in"
               >
                 <ZoomIn className="w-4 h-4 text-gray-600" />
               </button>
@@ -948,20 +965,25 @@ export const MainPanel = ({
                 onClick={() => {
                   if (tracks.length > 0 && setZoom) {
                     const totalDurationSeconds = Math.max(1, dynamicTotalDuration);
-                    const containerWidthPx = (containerRef.current?.clientWidth || 800) - 40; // account for padding
+                    const containerWidthPx = (containerRef.current?.clientWidth || 800) - 40;
                     const fitZoom = containerWidthPx / (totalDurationSeconds * 50);
                     const finalZoom = Math.max(0.1, Math.min(3, fitZoom));
                     setZoom(finalZoom);
                   }
                 }}
                 className="px-3 sm:px-4 py-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-lg transition-colors font-medium"
+                title="Fit all tracks to view"
               >
                 Fit
               </button>
             </div>
 
-            <button className="px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white rounded-lg transition-all duration-200 font-medium shadow-md hover:shadow-lg">
-              Export
+            <button 
+              onClick={handleMasterExport}
+              className="px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white rounded-lg transition-all duration-200 font-medium shadow-md hover:shadow-lg"
+              title="Export entire project"
+            >
+              Export Project
             </button>
           </div>
         </div>
@@ -972,7 +994,7 @@ export const MainPanel = ({
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
               <span className="text-sm text-gray-700">
-                {selectedTrackId ? 'Click Split to cut at playhead position' : 'Select a track to enable splitting'}
+                {selectedTrackId ? 'Click Split Track to cut at playhead position' : 'Select a track to enable splitting'}
               </span>
             </div>
             {selectedTrackId && (
@@ -1113,6 +1135,9 @@ export const MainPanel = ({
                 <span className="font-medium">Editing: {selectedTrack?.name}</span>
               </div>
             )}
+            <div className="flex items-center gap-2">
+              <span className="text-gray-500">Playhead: {formatTime(currentTime)}</span>
+            </div>
           </div>
           <div className="flex items-center gap-6 text-gray-600">
             {isPlaying && (

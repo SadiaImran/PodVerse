@@ -115,4 +115,3 @@ async def get_audio_url(
     except Exception as e:
         print(f"Error getting audio URL: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
-
