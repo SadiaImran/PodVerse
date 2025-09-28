@@ -3,7 +3,7 @@ import { supabase } from "../../../connection_supabase_client";
 import { useAuth } from "../../context/AuthContext";
 import axios from "axios";
 
-// Icons (keeping existing)
+// Enhanced Icons for Sora-like interface
 const Icon = ({ name, className }) => {
   const icons = {
     play: <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3" /></svg>,
@@ -12,8 +12,12 @@ const Icon = ({ name, className }) => {
     restart: <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M1 4v6h6" /><path d="M3.51 15a7 7 0 0 0 13.58-2h4" /></svg>,
     edit: <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z" /></svg>,
     mic: <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" x2="12" y1="19" y2="23" /><line x1="8" x2="16" y1="23" y2="23" /></svg>,
+    micOff: <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" x2="12" y1="19" y2="23" /><line x1="8" x2="16" y1="23" y2="23" /><line x1="2" x2="22" y1="2" y2="22" /></svg>,
     volume: <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><path d="M15.54 8.46a5 5 0 0 1 0 7.07" /><path d="M19.07 4.93a10 10 0 0 1 0 14.14" /></svg>,
+    volumeOff: <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><line x1="23" x2="1" y1="9" y2="15" /></svg>,
     podcast: <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6"/><path d="m21 12-6-3-6 3-6-3"/></svg>,
+    ai: <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6"/><path d="m21 12-6-3-6 3-6-3"/></svg>,
+    live: <svg className={className} fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/></svg>,
   };
   return icons[name] || null;
 };
@@ -147,6 +151,10 @@ const NewPanelsRecording = () => {
   const [showName] = useState("AI Knowledge Podcast");
   const [guestName] = useState("Expert Guest");
   
+  // Mute controls
+  const [isUserMuted, setIsUserMuted] = useState(false);
+  const [isAIMuted, setIsAIMuted] = useState(false);
+  
   // Existing refs
   const recorderRef = useRef(null);
   const gumStreamRef = useRef(null);
@@ -231,6 +239,12 @@ const NewPanelsRecording = () => {
   // Keep existing audio playback functions...
   const playBase64Audio = async (base64Audio, messageIndex) => {
     try {
+      // Check if AI is muted
+      if (isAIMuted) {
+        console.log("🔇 AI audio muted, skipping playback");
+        return;
+      }
+
       if (currentAudioRef.current) {
         currentAudioRef.current.pause();
         currentAudioRef.current = null;
@@ -281,6 +295,12 @@ const NewPanelsRecording = () => {
   };
 
   const fallbackToWebSpeech = (text, messageIndex) => {
+    // Check if AI is muted
+    if (isAIMuted) {
+      console.log("🔇 AI audio muted, skipping speech synthesis");
+      return;
+    }
+
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
       
@@ -527,6 +547,12 @@ const NewPanelsRecording = () => {
 
   const startRecording = async () => {
     try {
+      // Check if user is muted
+      if (isUserMuted) {
+        console.log("🔇 User microphone is muted, cannot start recording");
+        return;
+      }
+
       if (currentAudioRef.current) {
         currentAudioRef.current.pause();
         currentAudioRef.current = null;
@@ -612,128 +638,301 @@ const NewPanelsRecording = () => {
   };
 
   return (
-    <div className="flex h-full divide-x divide-gray-200 bg-gradient-to-br from-purple-50 to-blue-50">
-      {/* Transcript Section */}
-      <div className="w-1/3 p-6 flex flex-col overflow-y-auto bg-white/80 backdrop-blur-sm rounded-l-lg shadow-inner">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="font-bold text-xl text-gray-800">{showName}</h2>
-          <div className="flex items-center space-x-2 text-sm">
-            <Icon name="volume" className="w-4 h-4 text-gray-500" />
-            <span className="text-gray-500">{transcript.length} exchanges</span>
+    <div className="flex h-full bg-gray-50 text-gray-800">
+      {/* Left Panel - Real-time Transcription (Smaller) */}
+      <div className="w-1/3 p-4 flex flex-col bg-white border-r border-gray-200">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-2">
+            <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+            <h2 className="font-semibold text-sm text-gray-800">LIVE TRANSCRIPTION</h2>
+          </div>
+          <div className="flex items-center space-x-2 text-xs text-gray-500">
+            <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
+            <span>AI Active</span>
           </div>
         </div>
         
-        <div className="flex flex-col space-y-2 flex-1">
+        {/* Real-time Transcription Display */}
+        <div className="flex-1 bg-gray-50 rounded-lg p-3 border border-gray-200 overflow-y-auto">
+          <div className="space-y-3">
+            {/* Dummy Data */}
+            <div className="flex justify-start">
+              <div className="max-w-xs p-2 rounded-lg bg-purple-100 text-gray-800">
+                <div className="flex items-center space-x-2 mb-1">
+                  <span className="text-xs font-medium opacity-70">AI AGENT</span>
+                  <div className="flex space-x-1">
+                    <div className="w-1 h-1 bg-purple-400 rounded-full animate-pulse"></div>
+                    <div className="w-1 h-1 bg-purple-400 rounded-full animate-pulse" style={{animationDelay: '0.2s'}}></div>
+                    <div className="w-1 h-1 bg-purple-400 rounded-full animate-pulse" style={{animationDelay: '0.4s'}}></div>
+                  </div>
+                </div>
+                <p className="text-xs leading-relaxed">Welcome to PodVerse! I'm your AI assistant. How can I help you today?</p>
+              </div>
+            </div>
+            
+            <div className="flex justify-end">
+              <div className="max-w-xs p-2 rounded-lg bg-violet-100 text-gray-800">
+                <div className="flex items-center space-x-2 mb-1">
+                  <span className="text-xs font-medium opacity-70">YOU</span>
+                </div>
+                <p className="text-xs leading-relaxed">Hi! Can you help me create a podcast about AI?</p>
+              </div>
+            </div>
+
+            <div className="flex justify-start">
+              <div className="max-w-xs p-2 rounded-lg bg-purple-100 text-gray-800">
+                <div className="flex items-center space-x-2 mb-1">
+                  <span className="text-xs font-medium opacity-70">AI AGENT</span>
+                </div>
+                <p className="text-xs leading-relaxed">Absolutely! I'd love to help you create an AI podcast. What specific aspects of AI would you like to explore?</p>
+              </div>
+            </div>
+
+            {/* Real transcript data */}
           {transcript.map((entry, idx) => (
-            <TranscriptBubble 
-              key={idx} 
-              speaker={entry.speaker} 
-              text={entry.text}
-              isTyping={entry.isTyping || false}
-              isSpeaking={currentSpeakingIndex === idx}
-            />
+              <div key={idx} className={`flex ${entry.speaker === "You" ? "justify-end" : "justify-start"}`}>
+                <div className={`max-w-xs p-2 rounded-lg ${
+                  entry.speaker === "You" 
+                    ? "bg-violet-100 text-gray-800" 
+                    : "bg-purple-100 text-gray-800"
+                }`}>
+                  <div className="flex items-center space-x-2 mb-1">
+                    <span className="text-xs font-medium opacity-70">
+                      {entry.speaker === "You" ? "YOU" : "AI AGENT"}
+                    </span>
+                    {currentSpeakingIndex === idx && (
+                      <div className="flex space-x-1">
+                        <div className={`w-1 h-1 rounded-full animate-pulse ${
+                          entry.speaker === "You" ? "bg-violet-400" : "bg-purple-400"
+                        }`}></div>
+                        <div className={`w-1 h-1 rounded-full animate-pulse ${
+                          entry.speaker === "You" ? "bg-violet-400" : "bg-purple-400"
+                        }`} style={{animationDelay: '0.2s'}}></div>
+                        <div className={`w-1 h-1 rounded-full animate-pulse ${
+                          entry.speaker === "You" ? "bg-violet-400" : "bg-purple-400"
+                        }`} style={{animationDelay: '0.4s'}}></div>
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-xs leading-relaxed">
+                    {entry.isTyping ? (
+                      <span>
+                        {entry.text}
+                        <span className={`animate-pulse ml-1 ${
+                          entry.speaker === "You" ? "text-violet-400" : "text-purple-400"
+                        }`}>●</span>
+                      </span>
+                    ) : (
+                      entry.text
+                    )}
+                  </p>
+                </div>
+              </div>
           ))}
           <div ref={transcriptEndRef} />
         </div>
       </div>
 
-      {/* Controls Section */}
-      <div className="w-2/3 p-8 flex flex-col justify-between bg-white rounded-r-lg">
-        <div className="space-y-6">
-          <div className="text-center">
-            <h2 className="font-bold text-2xl text-gray-800 mb-2">Podcast Studio</h2>
-            <StatusIndicator 
-              isRecording={isRecording && !isPaused} 
-              isProcessing={isProcessing} 
-              isSpeaking={isSpeaking}
-              conversationStarted={conversationStarted}
-            />
+        {/* Live Status */}
+        <div className="mt-3 flex items-center justify-between text-xs">
+          <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-1">
+              <div className={`w-1.5 h-1.5 rounded-full ${isRecording ? 'bg-red-500 animate-pulse' : 'bg-gray-400'}`}></div>
+              <span className="text-gray-600">Recording</span>
+            </div>
+            <div className="flex items-center space-x-1">
+              <div className={`w-1.5 h-1.5 rounded-full ${isSpeaking ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`}></div>
+              <span className="text-gray-600">AI Speaking</span>
+            </div>
+          </div>
+          <span className="text-gray-500">{transcript.length + 3} exchanges</span>
+        </div>
           </div>
 
-          <Waveform isRecording={isRecording && !isPaused} isSpeaking={isSpeaking} />
+      {/* Right Panel - AI Agent Studio (Larger) */}
+      <div className="w-2/3 p-6 flex flex-col bg-white">
+        {/* Header with Connect/Disconnect */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="font-bold text-2xl text-gray-800 mb-1">AI Agent Studio</h1>
+            <p className="text-gray-600 text-sm">Real-time conversation with AI</p>
+          </div>
+          <div className="flex items-center space-x-3">
+            <button className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+              conversationStarted 
+                ? 'bg-red-600 text-white hover:bg-red-700' 
+                : 'bg-green-600 text-white hover:bg-green-700'
+            }`}>
+              {conversationStarted ? 'Disconnect' : 'Connect'}
+            </button>
+            <div className="flex items-center space-x-2 text-sm">
+              <div className={`w-2 h-2 rounded-full ${conversationStarted ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`}></div>
+              <span className="text-gray-600">{conversationStarted ? 'Connected' : 'Disconnected'}</span>
+            </div>
+          </div>
+        </div>
 
-          {/* Main Control Buttons */}
-          <div className="flex justify-center space-x-4">
-            {/* START PODCAST BUTTON */}
-            {!conversationStarted && !isProcessing && (
+        {/* Dual Microphone Interface - Single Row with Gap */}
+        <div className="flex-1 flex items-center justify-center space-x-24">
+          {/* User Microphone */}
+          <div className="flex flex-col items-center space-y-4">
+            <div className="relative">
+              <div className={`w-20 h-20 rounded-full border-4 flex items-center justify-center transition-all duration-300 ${
+                isRecording && !isUserMuted
+                  ? 'border-violet-500 bg-violet-50 shadow-lg shadow-violet-200' 
+                  : isUserMuted
+                  ? 'border-gray-400 bg-gray-100'
+                  : 'border-gray-300 bg-gray-50 hover:border-violet-400'
+              }`}>
+                <Icon name={isUserMuted ? "micOff" : "mic"} className={`w-6 h-6 ${
+                  isRecording && !isUserMuted ? 'text-violet-500' : 
+                  isUserMuted ? 'text-gray-400' : 'text-gray-600'
+                }`} />
+              </div>
+              {isRecording && !isUserMuted && (
+                <div className="absolute inset-0 rounded-full border-4 border-violet-500 animate-ping"></div>
+              )}
+              {isUserMuted && (
+                <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center">
+                  <span className="text-white text-xs font-bold">!</span>
+                </div>
+              )}
+            </div>
+            
+            {/* Audio Visualization for User */}
+            {isRecording && !isUserMuted && (
+              <div className="flex space-x-1 h-8 items-center">
+                {[...Array(5)].map((_, i) => (
+                  <div
+                    key={i}
+                    className="w-1 bg-violet-500 rounded-full animate-pulse"
+                    style={{
+                      animationDelay: `${i * 0.1}s`,
+                      height: `${8 + (i % 3) * 4}px`,
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+            
+            <div className="text-center">
+              <h3 className="font-semibold text-gray-800 mb-1">Your Voice</h3>
+              <p className="text-xs text-gray-600 mb-2">
+                {isUserMuted ? "Muted" : isRecording ? "Recording..." : "Click to speak"}
+              </p>
               <button 
-                onClick={startConversation} 
-                className="flex items-center space-x-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white px-8 py-4 rounded-full hover:from-purple-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105"
+                onClick={() => setIsUserMuted(!isUserMuted)}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-all duration-200 ${
+                  isUserMuted 
+                    ? 'bg-red-600 text-white hover:bg-red-700' 
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
               >
-                <Icon name="podcast" className="w-6 h-6" /> 
-                <span className="font-medium">Start Podcast</span>
+                {isUserMuted ? 'Unmute' : 'Mute'}
               </button>
-            )}
-
-            {/* RECORDING BUTTONS */}
-            {conversationStarted && !isRecording && !isProcessing && !isSpeaking && (
-              <button 
-                onClick={startRecording} 
-                className="flex items-center space-x-3 bg-gradient-to-r from-red-500 to-red-600 text-white px-8 py-4 rounded-full hover:from-red-600 hover:to-red-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105"
-              >
-                <Icon name="mic" className="w-6 h-6" /> 
-                <span className="font-medium">Record Response</span>
-              </button>
-            )}
-
-            {isRecording && !isPaused && !isProcessing && (
-              <>
-                <button 
-                  onClick={pauseRecording} 
-                  className="flex items-center space-x-2 bg-yellow-500 text-white px-6 py-3 rounded-full hover:bg-yellow-600 transition-all duration-200 shadow-lg"
-                >
-                  <Icon name="pause" className="w-5 h-5" /> <span>Pause</span>
-                </button>
-                <button 
-                  onClick={stopRecording} 
-                  className="flex items-center space-x-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white px-6 py-3 rounded-full hover:from-blue-600 hover:to-blue-700 transition-all duration-200 shadow-lg"
-                >
-                  <Icon name="stop" className="w-5 h-5" /> <span>Send</span>
-                </button>
-              </>
-            )}
-
-            {isSpeaking && (
-              <button 
-                onClick={stopSpeaking} 
-                className="flex items-center space-x-2 bg-red-500 text-white px-6 py-3 rounded-full hover:bg-red-600 transition-all duration-200 shadow-lg"
-              >
-                <Icon name="stop" className="w-5 h-5" /> <span>Stop Speaking</span>
-              </button>
-            )}
+            </div>
           </div>
 
-          {/* Secondary Controls */}
+          {/* AI Agent Microphone */}
+          <div className="flex flex-col items-center space-y-4">
+            <div className="relative">
+              <div className={`w-20 h-20 rounded-full border-4 flex items-center justify-center transition-all duration-300 ${
+                isSpeaking && !isAIMuted
+                  ? 'border-purple-500 bg-purple-50 shadow-lg shadow-purple-200' 
+                  : isAIMuted
+                  ? 'border-gray-400 bg-gray-100'
+                  : 'border-gray-300 bg-gray-50'
+              }`}>
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300 ${
+                  isAIMuted 
+                    ? 'bg-gray-400' 
+                    : 'bg-gradient-to-br from-blue-400 to-purple-500'
+                }`}>
+                  <span className="text-white font-bold text-sm">AI</span>
+                </div>
+              </div>
+              {isSpeaking && !isAIMuted && (
+                <div className="absolute inset-0 rounded-full border-4 border-purple-500 animate-ping"></div>
+              )}
+              {isAIMuted && (
+                <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center">
+                  <Icon name="volumeOff" className="w-2.5 h-2.5 text-white" />
+                </div>
+              )}
+            </div>
+            
+            {/* Sora-like Bubble Animation for AI */}
+            {isSpeaking && !isAIMuted && (
+              <div className="relative">
+                <div className="flex space-x-1 h-8 items-center">
+                  {[...Array(5)].map((_, i) => (
+                    <div
+                      key={i}
+                      className="w-1 bg-purple-500 rounded-full animate-pulse"
+                      style={{
+                        animationDelay: `${i * 0.1}s`,
+                        height: `${8 + (i % 3) * 4}px`,
+                      }}
+                    />
+                  ))}
+                </div>
+                {/* Sora-like bubble effect */}
+                <div className="absolute -top-2 -left-2 w-6 h-6 bg-purple-200 rounded-full animate-ping opacity-75"></div>
+                <div className="absolute -top-1 -left-1 w-4 h-4 bg-purple-300 rounded-full animate-ping opacity-50" style={{animationDelay: '0.5s'}}></div>
+              </div>
+            )}
+            
+            <div className="text-center">
+              <h3 className="font-semibold text-gray-800 mb-1">AI Agent</h3>
+              <p className="text-xs text-gray-600 mb-2">
+                {isAIMuted ? "AI Halted" : isSpeaking ? "Speaking..." : "Listening"}
+              </p>
+              <button
+                onClick={() => setIsAIMuted(!isAIMuted)}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-all duration-200 ${
+                  isAIMuted 
+                    ? 'bg-orange-600 text-white hover:bg-orange-700' 
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                {isAIMuted ? 'Resume AI' : 'Halt AI'}
+              </button>
+            </div>
+          </div>
+          </div>
+
+        {/* Control Buttons - Only Start New AI */}
           <div className="flex justify-center">
             <button 
               onClick={restartRecording} 
               disabled={isProcessing}
-              className={`flex items-center space-x-2 px-6 py-2 rounded-full transition-all duration-200 ${
+            className={`px-8 py-3 rounded-xl transition-all duration-200 text-sm font-semibold ${
                 isProcessing 
                   ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'
+                : 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl transform hover:scale-105'
               }`}
             >
-              <Icon name="restart" className="w-4 h-4" /> <span>New Podcast</span>
+            Start New AI
             </button>
-          </div>
         </div>
 
-        <div className="mt-8 text-center">
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-            <p className="text-sm text-blue-700 font-medium mb-2">🎙️ Podcast Conversation Mode</p>
-            <p className="text-xs text-blue-600">
-              {!conversationStarted 
-                ? SELECTED_AGENT === 'host' 
-                  ? "Click 'Start Podcast' to begin with AI host introduction!"
-                  : "Click 'Start Podcast' to begin - you'll speak first!"
-                : "Continue the podcast conversation by recording your responses!"
-              }
-            </p>
-            {/* Debug info - remove in production */}
-            <p className="text-xs text-gray-500 mt-1">
-              Current mode: {SELECTED_AGENT.toUpperCase()} (change SELECTED_AGENT variable to switch)
-            </p>
+        {/* Status Bar */}
+        <div className="mt-6 bg-gray-100 rounded-lg p-3 border border-gray-200">
+          <div className="flex items-center justify-between text-sm">
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <div className={`w-2 h-2 rounded-full ${conversationStarted ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+                <span className="text-gray-600">Connected</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className={`w-2 h-2 rounded-full ${isProcessing ? 'bg-yellow-500 animate-pulse' : 'bg-gray-400'}`}></div>
+                <span className="text-gray-600">Processing</span>
+              </div>
+            </div>
+            <span className="text-gray-500 text-xs">
+              Mode: {SELECTED_AGENT.toUpperCase()}
+            </span>
           </div>
         </div>
       </div>
