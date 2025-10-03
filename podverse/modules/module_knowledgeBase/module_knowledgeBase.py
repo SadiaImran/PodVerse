@@ -43,7 +43,7 @@ SAFE_PROMPT = PromptTemplate(
     input_variables=["context", "question"],
     template="""
 You must answer strictly using only the Context. Do NOT invent facts.
-If the answer cannot be found in the Context, reply exactly:
+If the answer cannot be found in the Context , reply exactly:
 "I don't know based on the provided documents."
 
 Tone:

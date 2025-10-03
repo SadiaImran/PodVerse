@@ -95,5 +95,6 @@ def upload_and_store_voices():
 
         print(f"🗂️  Inserted metadata for {voice['name']} into 'sample_voices'")
 
+
 if __name__ == "__main__":
     upload_and_store_voices()

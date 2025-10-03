@@ -428,15 +428,6 @@ const VoiceCloneControls = ({ uploadedFiles, onClone, canClone, onSaveVoice }) =
     setIsCloning(true);
     
     try {
-      // Check system status first
-      const healthCheck = await fetch("http://localhost:5000/health");
-      const status = await healthCheck.json();
-      
-      if (!status.status === "ready") {
-        alert("System is still initializing. Please wait a moment and try again.");
-        return;
-      }
-
       // Continue with cloning
       const formDataToSend = new FormData();
 
@@ -447,7 +438,7 @@ const VoiceCloneControls = ({ uploadedFiles, onClone, canClone, onSaveVoice }) =
       formDataToSend.append("text", cloneText);
 
       try {
-        const endpoint = "http://localhost:8000/api/voice-clone/";
+        const endpoint = "http://localhost:8000/voice-clone/";
         const response = await fetch(endpoint, {
           method: "POST",
           body: formDataToSend,
@@ -458,23 +449,30 @@ const VoiceCloneControls = ({ uploadedFiles, onClone, canClone, onSaveVoice }) =
           console.log("Clone successful:", result);
           const audioURL = "http://localhost:8000" + result.output_audio;
 
-          setClonedAudios(prev => [...prev, { text: cloneText, url: audioURL }]);
+          setClonedAudios(prev => [...prev, { 
+            id: Date.now(), 
+            text: cloneText, 
+            url: audioURL 
+          }]);
+          
+          alert("🎉 Voice cloned successfully!");
 
         } else {
           const errText = await response.text();
           console.error("Clone error response:", errText);
+          alert(`❌ Voice cloning failed: ${response.status} - ${errText}`);
         }
         
       } catch (error) {
         console.error("Error in cloning:", error);
-        alert(error.response?.data?.detail || "Error connecting to server");
+        alert(`❌ Network Error: ${error.message}. Please check if backend is running on port 8000.`);
       } finally {
         setIsCloning(false);
       }
 
     } catch (error) {
       console.error("Error in cloning:", error);
-      alert(error.response?.data?.detail || "Error connecting to server");
+      alert(`❌ Unexpected Error: ${error.message}`);
       setIsCloning(false);
     }
   };
@@ -622,15 +620,24 @@ const VoiceCloneControls = ({ uploadedFiles, onClone, canClone, onSaveVoice }) =
 
         <button
           onClick={handleClone}
-          disabled={uploadedFiles.length === 0}
+          disabled={uploadedFiles.length === 0 || isCloning}
           className={`flex items-center gap-2 px-6 py-3 rounded-lg transition-colors ${
-            uploadedFiles.length > 0
+            uploadedFiles.length > 0 && !isCloning
               ? "bg-light-purple text-white hover:bg-light-secondary"
               : "bg-gray-300 text-gray-500 cursor-not-allowed"
           }`}
         >
-          <Save size={16} />
-          Clone Voice
+          {isCloning ? (
+            <>
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+              Cloning...
+            </>
+          ) : (
+            <>
+              <Save size={16} />
+              Clone Voice
+            </>
+          )}
         </button>
       </div>
 
