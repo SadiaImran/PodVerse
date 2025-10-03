@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { FaChevronDown } from "react-icons/fa";
-import { FiSearch, FiLogOut } from "react-icons/fi";
+import { FiSearch, FiLogOut, FiMenu } from "react-icons/fi";
 import { HiOutlineBell } from "react-icons/hi2";
 import ProfileMarry from "../../images/icon-profile-marry.png";
 import Logo from "../../images/logo.png";
@@ -8,7 +8,7 @@ import { supabase } from "../../../connection_supabase_client";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext"; // adjust path if needed
 
-export default function TopBar({ open }) {
+export default function TopBar({ open, onMenuClick }) {
   const navigate = useNavigate();
   const [userData, setUserData] = useState(null);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -78,6 +78,14 @@ export default function TopBar({ open }) {
 
   return (
     <nav className="bg-white sticky top-0 flex items-center justify-between p-4 shadow-md font-subheadingDMSans w-full z-50">
+      {/* Mobile Menu Button */}
+      <button
+        onClick={onMenuClick}
+        className="lg:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
+      >
+        <FiMenu size={20} />
+      </button>
+
       {open && (
         <div className="hidden md:flex items-center gap-2 mr-6">
           <img src={Logo} alt="Logo" className="w-10 md:w-12" />

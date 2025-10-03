@@ -3,7 +3,7 @@ import BaseLayout from "../components/layouts/BaseLayout"
 import NewPanelsRecording from "../components/comp-recording/new-panel-recording"
 function ScreenRecording () {
   return (
-    <BaseLayout>
+    <BaseLayout homeScreen={false} autoCollapse={true}>
       <div className="w-full h-full p-4">
         <div className="mb-4">
           <h1 className="text-2xl font-bold  font-headingPoppins text-light-purple tracking-wide">

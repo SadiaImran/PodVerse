@@ -29,7 +29,7 @@ const AgentSetupFlow = () => {
   const goBack = () => setCurrentStep((prev) => Math.max(prev - 1, 0));
 
   return (
-    <BaseLayout>
+    <BaseLayout homeScreen={false} autoCollapse={true}>
       <main className="p-6 bg-gray-50 min-h-screen flex flex-col">
         {/* Header */}
         <div className="text-3xl font-headingPoppins font-bold text-light-purple mb-6">Personalize your AI Host or Guest</div>

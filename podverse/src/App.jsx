@@ -40,6 +40,14 @@ function App() {
             }
           />
           <Route
+            path="/library"
+            element={
+              <PrivateRoute>
+                <CreatePodcastPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
             path="/agent-setup"
             element={
               <PrivateRoute>

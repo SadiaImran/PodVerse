@@ -306,7 +306,7 @@ const AudioEditor = () => {
   };
 
   return (
-    <BaseLayout homeScreen={true}>
+    <BaseLayout homeScreen={false} autoCollapse={true}>
       <div className="min-h-screen bg-gray-50">
         <div className="flex h-screen">
           {/* Pass props to Sidebar */}
