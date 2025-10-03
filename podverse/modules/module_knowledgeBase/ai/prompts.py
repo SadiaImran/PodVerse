@@ -215,17 +215,33 @@ class PodcastManager:
             # Try semantic search first
             candidate_rows = []
             try:
+                # Try simple function first
                 rpc_result = supabase_client.rpc(
-                    "match_documents_v2",
+                    "match_documents_simple",
                     {
                         "query_embedding": query_vector, 
                         "match_count": max_docs, 
-                        "metadata_filter": {"user_id": user_id}
+                        "filter_user_id": user_id
                     }
                 ).execute()
                 candidate_rows = rpc_result.data or []
+                if candidate_rows:
+                    print(f"RPC search successful: {len(candidate_rows)} results")
             except Exception as e:
                 print(f"RPC search failed: {e}")
+                # Try original function as fallback
+                try:
+                    rpc_result = supabase_client.rpc(
+                        "match_documents_v2",
+                        {
+                            "query_embedding": query_vector, 
+                            "match_count": max_docs, 
+                            "metadata_filter": {"user_id": user_id}
+                        }
+                    ).execute()
+                    candidate_rows = rpc_result.data or []
+                except Exception as e2:
+                    print(f"Fallback RPC also failed: {e2}")
             
             # Fallback to recent documents
             if not candidate_rows:

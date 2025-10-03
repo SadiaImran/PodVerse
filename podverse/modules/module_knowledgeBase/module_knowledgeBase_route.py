@@ -479,18 +479,35 @@ async def generate_response(
 
         candidate_rows = []
         try:
+            # Try the simple RPC function first
             rpc_result = supabase_authenticated.rpc(
-                "match_documents_v2",
+                "match_documents_simple",
                 {
                     "query_embedding": query_vector, 
                     "match_count": 5, 
-                    "metadata_filter": {"user_id": user_id}
+                    "filter_user_id": user_id
                 },
             ).execute()
             if rpc_result.data:
                 candidate_rows = rpc_result.data
+                print(f"[respond] RPC search successful: {len(candidate_rows)} results")
         except Exception as e:
             print(f"[respond] RPC search failed: {e}")
+            # Try the original function as fallback
+            try:
+                rpc_result = supabase_authenticated.rpc(
+                    "match_documents_v2",
+                    {
+                        "query_embedding": query_vector, 
+                        "match_count": 5, 
+                        "metadata_filter": {"user_id": user_id}
+                    },
+                ).execute()
+                if rpc_result.data:
+                    candidate_rows = rpc_result.data
+                    print(f"[respond] Fallback RPC successful: {len(candidate_rows)} results")
+            except Exception as e2:
+                print(f"[respond] Fallback RPC also failed: {e2}")
 
         # Fallback search methods
         if not candidate_rows:
