@@ -143,6 +143,11 @@ def split_audio(input_path: str, start_time: float, duration: float, output_name
 
 def change_speed(input_path: str, speed: float, output_name: str):
     output_path = os.path.join(TEMP_DIR, output_name)
+    
+    # Limit speed to maximum 2.0x
+    speed = min(speed, 2.0)
+    speed = max(speed, 0.25)
+    
     try:
         stream = ffmpeg.input(input_path)
         
@@ -165,7 +170,7 @@ def change_speed(input_path: str, speed: float, output_name: str):
         
         (
             stream
-            .output(output_path)
+            .output(output_path, acodec='pcm_s16le', ar='44100')
             .overwrite_output()
             .run(capture_stdout=True, capture_stderr=True, quiet=True)
         )

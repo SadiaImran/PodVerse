@@ -54,7 +54,7 @@ const TrackEditPanel = ({ track, isVisible, onClose, onUpdate, onDuplicate, onDe
     const [isProcessing, setIsProcessing] = useState(false);
 
     // Speed options
-    const speedOptions = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0];
+    const speedOptions = [0.25, 0.5, 1.0, 1.5, 1.75, 2.0];
 
     useEffect(() => {
         if (track) {

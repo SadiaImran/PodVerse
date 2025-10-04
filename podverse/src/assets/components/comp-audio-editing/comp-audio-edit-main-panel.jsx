@@ -165,7 +165,7 @@ useEffect(() => {
       wavesurferRef.current.setVolume((track.volume || 100) / 100);
 
       if (wavesurferRef.current.setPlaybackRate) {
-        wavesurferRef.current.setPlaybackRate(1.0);
+        wavesurferRef.current.setPlaybackRate(track.speed || 1.0);
       }
     } catch (e) {
       console.error("Error applying track settings:", e);
@@ -371,14 +371,14 @@ const MultiTrackAudioEngine = ({ tracks, isPlaying, currentTime, volume, onTimeU
       if (!audioElementsRef.current[track.id]) {
         const audio = new Audio(track.url);
         audio.volume = (track.volume || 100) / 100 * (volume / 100);
-        audio.playbackRate = 1.0; // Always 1.0 - speed is in the file
+        audio.playbackRate = track.speed || 1.0;
         audio.preload = 'auto';
         audioElementsRef.current[track.id] = audio;
       } else {
         // Update existing audio properties
         const audio = audioElementsRef.current[track.id];
         audio.volume = (track.volume || 100) / 100 * (volume / 100);
-        audio.playbackRate = 1.0; // Always 1.0 - speed is in the file
+        audio.playbackRate = track.speed || 1.0;
       }
     });
 
