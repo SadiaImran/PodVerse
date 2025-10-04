@@ -10,8 +10,38 @@ import {
     Copy,
     Download,
     RotateCcw,
-    Trash2
+    Trash2,
+    Check
 } from 'lucide-react';
+
+const API_BASE_URL = 'http://localhost:8000/audio-edit';
+
+const downloadAudioAsBlob = async (url) => {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    return blob;
+};
+  
+const uploadAudioToBackend = async (blob, filename, endpoint, formData = {}) => {
+    const file = new File([blob], filename, { type: blob.type });
+    const form = new FormData();
+    form.append('file', file);
+    
+    Object.entries(formData).forEach(([key, value]) => {
+        form.append(key, value);
+    });
+    
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        method: 'POST',
+        body: form,
+    });
+    
+    if (!response.ok) {
+        throw new Error(`Backend error: ${response.statusText}`);
+    }
+    
+    return response.blob();
+};
 
 const TrackEditPanel = ({ track, isVisible, onClose, onUpdate, onDuplicate, onDelete, onExport, onReset }) => {
     const [localSettings, setLocalSettings] = useState({
@@ -20,6 +50,11 @@ const TrackEditPanel = ({ track, isVisible, onClose, onUpdate, onDuplicate, onDe
         duration: track?.duration || 0,
         startTime: track?.startTime || 0
     });
+    const [pendingChanges, setPendingChanges] = useState({});
+    const [isProcessing, setIsProcessing] = useState(false);
+
+    // Speed options
+    const speedOptions = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0];
 
     useEffect(() => {
         if (track) {
@@ -29,23 +64,200 @@ const TrackEditPanel = ({ track, isVisible, onClose, onUpdate, onDuplicate, onDe
                 duration: track.duration,
                 startTime: track.startTime || 0
             });
+            setPendingChanges({});
         }
     }, [track]);
 
     if (!isVisible || !track) return null;
 
-    const handleSettingChange = (key, value) => {
+    const handleSettingChange = async (key, value) => {
         const newSettings = { ...localSettings, [key]: value };
         setLocalSettings(newSettings);
-        onUpdate && onUpdate(track.id, newSettings);
+        
+        // Apply changes through backend for volume and speed
+        if (key === 'volume' || key === 'speed') {
+            setIsProcessing(true);
+            
+            try {
+                console.log(`Applying ${key} change: ${value}`);
+                
+                const audioBlob = await downloadAudioAsBlob(track.url);
+                console.log('Downloaded audio blob:', audioBlob.size, 'bytes');
+                
+                let processedBlob;
+                
+                if (key === 'volume') {
+                    const volumeFactor = value / 100;
+                    console.log('Volume factor:', volumeFactor);
+                    
+                    processedBlob = await uploadAudioToBackend(
+                        audioBlob,
+                        `${track.name}.wav`,
+                        '/volume',
+                        { volume: volumeFactor }
+                    );
+                } else if (key === 'speed') {
+                    console.log('Speed value:', value);
+                    
+                    processedBlob = await uploadAudioToBackend(
+                        audioBlob,
+                        `${track.name}.wav`,
+                        '/speed',
+                        { speed: value }
+                    );
+                    
+                    // CRITICAL: Update duration based on speed change
+                    // When speed increases, duration decreases (and vice versa)
+                    newSettings.duration = track.duration / value;
+                    console.log(`Duration changed from ${track.duration}s to ${newSettings.duration}s due to ${value}x speed`);
+                }
+                
+                console.log('Processed blob received:', processedBlob.size, 'bytes');
+                
+                // Create new URL for processed audio
+                const newUrl = URL.createObjectURL(processedBlob);
+                newSettings.url = newUrl;
+                
+                // Clean up old URL if it's a blob URL
+                if (track.url && track.url.startsWith('blob:')) {
+                    URL.revokeObjectURL(track.url);
+                }
+                
+                onUpdate && onUpdate(track.id, newSettings);
+                
+                // Show success notification
+                const notification = document.createElement('div');
+                notification.textContent = `${key.charAt(0).toUpperCase() + key.slice(1)} updated successfully!`;
+                notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+                document.body.appendChild(notification);
+                setTimeout(() => document.body.removeChild(notification), 2000);
+                
+            } catch (error) {
+                console.error(`Error applying ${key} change:`, error);
+                alert(`Failed to apply ${key} change: ${error.message}`);
+                // Revert the local setting on error
+                setLocalSettings(prev => ({ ...prev, [key]: track[key] || (key === 'volume' ? 100 : 1.0) }));
+            } finally {
+                setIsProcessing(false);
+            }
+        } else {
+            // For startTime, apply immediately (no backend processing needed)
+            onUpdate && onUpdate(track.id, newSettings);
+        }
+    };
+
+    const handleApplyChanges = async () => {
+        if (Object.keys(pendingChanges).length === 0) {
+            alert('No changes to apply');
+            return;
+        }
+
+        setIsProcessing(true);
+
+        try {
+            const loadingNotif = document.createElement('div');
+            loadingNotif.textContent = 'Applying changes...';
+            loadingNotif.className = 'fixed top-4 right-4 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+            loadingNotif.id = 'loading-notif';
+            document.body.appendChild(loadingNotif);
+
+            let processedBlob = await downloadAudioAsBlob(track.url);
+            let currentSettings = { ...localSettings };
+
+            // Apply volume change if pending
+            if (pendingChanges.volume !== undefined) {
+                const volumeFactor = pendingChanges.volume / 100;
+                processedBlob = await uploadAudioToBackend(
+                    processedBlob,
+                    track.name,
+                    '/volume',
+                    { volume: volumeFactor }
+                );
+            }
+
+            // Apply speed change if pending
+            if (pendingChanges.speed !== undefined) {
+                processedBlob = await uploadAudioToBackend(
+                    processedBlob,
+                    track.name,
+                    '/speed',
+                    { speed: pendingChanges.speed }
+                );
+            }
+
+            // Create new URL for processed audio
+            const newUrl = URL.createObjectURL(processedBlob);
+            currentSettings.url = newUrl;
+
+            // Clean up old URL if it's a blob URL
+            if (track.url && track.url.startsWith('blob:')) {
+                URL.revokeObjectURL(track.url);
+            }
+
+            onUpdate && onUpdate(track.id, currentSettings);
+            setPendingChanges({});
+
+            const loadingElement = document.getElementById('loading-notif');
+            if (loadingElement) document.body.removeChild(loadingElement);
+            
+            const notification = document.createElement('div');
+            notification.textContent = 'Changes applied successfully!';
+            notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+            document.body.appendChild(notification);
+            setTimeout(() => document.body.removeChild(notification), 3000);
+
+        } catch (error) {
+            console.error('Error applying changes:', error);
+            alert('Failed to apply changes. Please try again.');
+            const loadingElement = document.getElementById('loading-notif');
+            if (loadingElement) document.body.removeChild(loadingElement);
+        } finally {
+            setIsProcessing(false);
+        }
     };
 
     const handleDuplicate = () => {
         onDuplicate && onDuplicate(track.id);
     };
 
-    const handleExport = () => {
-        onExport && onExport(track.id);
+    const handleExport = async () => {
+        if (!track) return;
+        
+        try {
+            const loadingNotif = document.createElement('div');
+            loadingNotif.textContent = 'Exporting track...';
+            loadingNotif.className = 'fixed top-4 right-4 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+            document.body.appendChild(loadingNotif);
+        
+            const audioBlob = await downloadAudioAsBlob(track.url);
+            const exportedBlob = await uploadAudioToBackend(
+                audioBlob,
+                track.name,
+                '/export',
+                { format: 'wav' }
+            );
+        
+            const url = URL.createObjectURL(exportedBlob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${track.name}_exported.wav`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        
+            document.body.removeChild(loadingNotif);
+            const notification = document.createElement('div');
+            notification.textContent = 'Export successful!';
+            notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+            document.body.appendChild(notification);
+            setTimeout(() => document.body.removeChild(notification), 3000);
+        
+            onExport && onExport(track.id);
+        } catch (error) {
+            console.error('Export error:', error);
+            alert('Export failed. Please try again.');
+        }
     };
 
     const handleReset = () => {
@@ -55,6 +267,7 @@ const TrackEditPanel = ({ track, isVisible, onClose, onUpdate, onDuplicate, onDe
             startTime: 0
         };
         setLocalSettings(prev => ({ ...prev, ...resetSettings }));
+        setPendingChanges({});
         onReset && onReset(track.id, resetSettings);
     };
 
@@ -128,7 +341,7 @@ const TrackEditPanel = ({ track, isVisible, onClose, onUpdate, onDuplicate, onDe
                 <div className="space-y-3">
                     <h4 className="font-medium text-gray-900 flex items-center gap-2">
                         <Volume2 className="w-4 h-4 text-indigo-600" />
-                        Volume
+                        Volume {pendingChanges.volume !== undefined && <span className="text-xs text-orange-600">(pending)</span>}
                     </h4>
                     <div className="space-y-2">
                         <div className="flex items-center gap-3">
@@ -136,7 +349,7 @@ const TrackEditPanel = ({ track, isVisible, onClose, onUpdate, onDuplicate, onDe
                             <input
                                 type="range"
                                 min="0"
-                                max="200"
+                                max="100"
                                 value={localSettings.volume}
                                 onChange={(e) => handleSettingChange('volume', parseInt(e.target.value))}
                                 className="flex-1 accent-indigo-600"
@@ -146,7 +359,7 @@ const TrackEditPanel = ({ track, isVisible, onClose, onUpdate, onDuplicate, onDe
                         <div className="flex justify-between text-sm">
                             <span className="text-gray-600">0%</span>
                             <span className="font-medium text-indigo-600">{localSettings.volume}%</span>
-                            <span className="text-gray-600">200%</span>
+                            <span className="text-gray-600">100%</span>
                         </div>
                         <div className="flex gap-2 mt-2">
                             <button
@@ -171,52 +384,30 @@ const TrackEditPanel = ({ track, isVisible, onClose, onUpdate, onDuplicate, onDe
                     </div>
                 </div>
 
-                {/* Speed Control */}
+                {/* Speed Control - Button Selection */}
                 <div className="space-y-3">
                     <h4 className="font-medium text-gray-900 flex items-center gap-2">
                         <Zap className="w-4 h-4 text-indigo-600" />
-                        Playback Speed
+                        Playback Speed {pendingChanges.speed !== undefined && <span className="text-xs text-orange-600">(pending)</span>}
                     </h4>
                     <div className="space-y-2">
-                        <input
-                            type="range"
-                            min="0.25"
-                            max="3"
-                            step="0.05"
-                            value={localSettings.speed}
-                            onChange={(e) => handleSettingChange('speed', parseFloat(e.target.value))}
-                            className="w-full accent-indigo-600"
-                        />
-                        <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">0.25x</span>
-                            <span className="font-medium text-indigo-600">{localSettings.speed.toFixed(2)}x</span>
-                            <span className="text-gray-600">3.0x</span>
+                        <div className="text-center mb-3">
+                            <span className="text-2xl font-bold text-indigo-600">{localSettings.speed.toFixed(2)}x</span>
                         </div>
-                        <div className="flex gap-2 mt-3">
-                            <button
-                                onClick={() => handleSettingChange('speed', 0.5)}
-                                className="px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded transition-colors"
-                            >
-                                0.5x
-                            </button>
-                            <button
-                                onClick={() => handleSettingChange('speed', 1.0)}
-                                className="px-3 py-1 text-xs bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded transition-colors"
-                            >
-                                1.0x
-                            </button>
-                            <button
-                                onClick={() => handleSettingChange('speed', 1.5)}
-                                className="px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded transition-colors"
-                            >
-                                1.5x
-                            </button>
-                            <button
-                                onClick={() => handleSettingChange('speed', 2.0)}
-                                className="px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded transition-colors"
-                            >
-                                2.0x
-                            </button>
+                        <div className="grid grid-cols-5 gap-2">
+                            {speedOptions.map((speed) => (
+                                <button
+                                    key={speed}
+                                    onClick={() => handleSettingChange('speed', speed)}
+                                    className={`px-2 py-2 text-xs rounded transition-colors ${
+                                        localSettings.speed === speed
+                                            ? 'bg-indigo-600 text-white font-bold'
+                                            : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                                    }`}
+                                >
+                                    {speed}x
+                                </button>
+                            ))}
                         </div>
                     </div>
                 </div>
@@ -250,7 +441,7 @@ const TrackEditPanel = ({ track, isVisible, onClose, onUpdate, onDuplicate, onDe
                                 Start
                             </button>
                             <button
-                                onClick={() => handleSettingChange('startTime', localSettings.startTime - 1)}
+                                onClick={() => handleSettingChange('startTime', Math.max(0, localSettings.startTime - 1))}
                                 className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded transition-colors"
                                 disabled={localSettings.startTime <= 0}
                             >
@@ -265,6 +456,31 @@ const TrackEditPanel = ({ track, isVisible, onClose, onUpdate, onDuplicate, onDe
                         </div>
                     </div>
                 </div>
+
+                {/* Apply Changes Button */}
+                {Object.keys(pendingChanges).length > 0 && (
+                    <button 
+                        onClick={handleApplyChanges}
+                        disabled={isProcessing}
+                        className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg transition-colors font-medium ${
+                            isProcessing 
+                                ? 'bg-gray-400 cursor-not-allowed' 
+                                : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                        }`}
+                    >
+                        {isProcessing ? (
+                            <>
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                Processing...
+                            </>
+                        ) : (
+                            <>
+                                <Check className="w-4 h-4" />
+                                Apply Changes ({Object.keys(pendingChanges).length})
+                            </>
+                        )}
+                    </button>
+                )}
 
                 {/* Action Buttons */}
                 <div className="space-y-3 pt-4 border-t border-gray-200">
