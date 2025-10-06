@@ -1,7 +1,19 @@
 import React, { useState, useRef, useEffect } from "react";
+import { GrPowerCycle } from "react-icons/gr";
+import { PiMicrophoneBold , PiMicrophoneSlashBold , PiPlayCircleBold , PiPauseFill , PiPauseBold, PiPlayFill } from "react-icons/pi";
 import { supabase } from "../../../connection_supabase_client";
 import { useAuth } from "../../context/AuthContext";
 import axios from "axios";
+import {
+  ControlBar,
+  GridLayout,
+  ParticipantTile,
+  RoomAudioRenderer,
+  useTracks,
+  RoomContext,
+} from '@livekit/components-react';
+import { Room, Track } from 'livekit-client';
+import '@livekit/components-styles';
 
 // Icons (keeping existing)
 const Icon = ({ name, className }) => {
@@ -57,22 +69,25 @@ const TranscriptBubble = ({ speaker, text, isTyping = false, isSpeaking = false 
 );
 
 const Waveform = ({ isRecording, isSpeaking }) => (
-  <div className="flex space-x-1 h-16 items-center justify-center p-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl">
-    {[...Array(25)].map((_, i) => (
-      <div
-        key={i}
-        className={`w-1.5 rounded-full origin-bottom transition-all duration-300 ${
-          isRecording ? 'bg-red-500 animate-wave' : 
-          isSpeaking ? 'bg-green-500 animate-wave' : 
-          'bg-gray-300'
-        }`}
-        style={{
-          animationDelay: `${i * 0.08}s`,
-          animationDuration: `${0.5 + (i % 4) * 0.2}s`,
-          height: (isRecording || isSpeaking) ? `${8 + (i % 8) * 6}px` : "4px",
-        }}
-      />
-    ))}
+  <div className="w-full">
+    <div className="flex space-x-1 h-16 items-center justify-center">
+      {[...Array(25)].map((_, i) => (
+        <div
+          key={i}
+          className={`w-2 rounded-full origin-bottom transition-all duration-300 ${
+            isRecording ? 'bg-red-500 animate-wave' : 
+            isSpeaking ? 'bg-green-500 animate-wave' : 
+            'bg-blue-400'
+          }`}
+          style={{
+            animationDelay: `${i * 0.08}s`,
+            animationDuration: `${0.5 + (i % 4) * 0.2}s`,
+            height: (isRecording || isSpeaking) ? `${8 + (i % 8) * 6}px` : "4px",
+          }}
+        />
+      ))}
+    </div>
+    
     <style>{`
       @keyframes wave {
         0%, 100% { transform: scaleY(0.3); opacity: 0.7; }
@@ -91,40 +106,45 @@ const Waveform = ({ isRecording, isSpeaking }) => (
 const StatusIndicator = ({ isRecording, isProcessing, isSpeaking, conversationStarted }) => {
   if (!conversationStarted) {
     return (
-      <div className="flex items-center space-x-2 text-purple-600">
-        <Icon name="podcast" className="w-4 h-4" />
-        <span className="font-medium">Ready to start podcast</span>
+      <div className="flex items-center justify-center space-x-3 bg-gray-800/50 px-6 py-3 rounded-full border border-gray-600">
+        <div className="w-3 h-3 bg-purple-500 rounded-full animate-pulse"></div>
+        <Icon name="podcast" className="w-5 h-5 text-purple-400" />
+        <span className="font-medium text-purple-300">Ready to Start Live Podcast</span>
       </div>
     );
   }
   if (isRecording) {
     return (
-      <div className="flex items-center space-x-2 text-red-600">
-        <div className="w-3 h-3 bg-red-600 rounded-full animate-pulse"></div>
-        <span className="font-medium">Recording...</span>
+      <div className="flex items-center justify-center space-x-3 bg-red-900/30 px-6 py-3 rounded-full border border-red-500">
+        <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse shadow-red-500/50"></div>
+        <Icon name="mic" className="w-5 h-5 text-red-400" />
+        <span className="font-medium text-red-300">LIVE RECORDING</span>
       </div>
     );
   }
   if (isProcessing) {
     return (
-      <div className="flex items-center space-x-2 text-blue-600">
-        <div className="w-3 h-3 bg-blue-600 rounded-full animate-pulse"></div>
-        <span className="font-medium">Processing...</span>
+      <div className="flex items-center justify-center space-x-3 bg-blue-900/30 px-6 py-3 rounded-full border border-blue-500">
+        <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse shadow-blue-500/50"></div>
+        <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+        <span className="font-medium text-blue-300">Processing Audio...</span>
       </div>
     );
   }
   if (isSpeaking) {
     return (
-      <div className="flex items-center space-x-2 text-green-600">
-        <div className="w-3 h-3 bg-green-600 rounded-full animate-pulse"></div>
-        <span className="font-medium">AI Speaking...</span>
+      <div className="flex items-center justify-center space-x-3 bg-green-900/30 px-6 py-3 rounded-full border border-green-500">
+        <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse shadow-green-500/50"></div>
+        <Icon name="volume" className="w-5 h-5 text-green-400" />
+        <span className="font-medium text-green-300">AI Speaking</span>
       </div>
     );
   }
   return (
-    <div className="flex items-center space-x-2 text-gray-500">
+    <div className="flex items-center justify-center space-x-3 bg-gray-800/50 px-6 py-3 rounded-full border border-gray-600">
       <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
-      <span className="font-medium">Your turn to speak</span>
+      <Icon name="mic" className="w-5 h-5 text-gray-400" />
+      <span className="font-medium text-gray-300">Your Turn to Speak</span>
     </div>
   );
 };
@@ -132,6 +152,10 @@ const StatusIndicator = ({ isRecording, isProcessing, isSpeaking, conversationSt
 const NewPanelsRecording = () => {
   // **HARDCODED AGENT SELECTION** - Change this to switch modes:
   const SELECTED_AGENT = 'guest'; // Change to 'guest' for different behavior
+  
+  // LiveKit Configuration
+  const serverUrl = 'wss://podverse-0nuzilmi.livekit.cloud';
+  const token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NTk2ODIwMjIsImlkZW50aXR5IjoicXVpY2tzdGFydCB1c2VyIHRjZzU5MiIsImlzcyI6IkFQSW9XQnE5dHFnb3hMZSIsIm5iZiI6MTc1OTY3NDgyMiwic3ViIjoicXVpY2tzdGFydCB1c2VyIHRjZzU5MiIsInZpZGVvIjp7ImNhblB1Ymxpc2giOnRydWUsImNhblB1Ymxpc2hEYXRhIjp0cnVlLCJjYW5TdWJzY3JpYmUiOnRydWUsInJvb20iOiJxdWlja3N0YXJ0IHJvb20iLCJyb29tSm9pbiI6dHJ1ZX19.XAJGCMkcpZlv2dBBxU4ClQEgji_MS4pVa1GJPv40ToQ';
   
   // Existing state
   const [isRecording, setIsRecording] = useState(false);
@@ -146,6 +170,20 @@ const NewPanelsRecording = () => {
   const [conversationId] = useState(() => `conv_${Date.now()}`);
   const [showName] = useState("AI Knowledge Podcast");
   const [guestName] = useState("Expert Guest");
+  
+  // Microphone state
+  const [isMicOn, setIsMicOn] = useState(true);
+  
+  // Play/Pause state
+  const [isPlaying, setIsPlaying] = useState(false);
+  
+  // LiveKit state
+  const [liveKitConnected, setLiveKitConnected] = useState(false);
+  const [liveKitParticipants, setLiveKitParticipants] = useState([]);
+  const [room] = useState(() => new Room({
+    adaptiveStream: true,
+    dynacast: true,
+  }));
   
   // Existing refs
   const recorderRef = useRef(null);
@@ -176,44 +214,17 @@ const NewPanelsRecording = () => {
       setIsProcessing(true);
       console.log("🎙️ Starting podcast conversation (HOST mode)...");
 
-      const sessionData = await supabase.auth.getSession();
-      const token = sessionData?.data?.session?.access_token;
-
-      const formData = new FormData();
-      formData.append("show_name", showName);
-      formData.append("guest_name", guestName);
-      formData.append("conversation_id", conversationId);
-
-      const response = await fetch("http://localhost:8000/podcast/start/", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`
-        },
-        body: formData
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        console.log("✅ Podcast started:", result);
-
-        const hostMessageIndex = 0;
-        setTranscript([
-          { speaker: "AI", text: result.answer_text }
-        ]);
-
-        setConversationStarted(true);
-
-        if (result.audio_data) {
-          await playBase64Audio(result.audio_data, hostMessageIndex);
-        } else {
-          setTimeout(() => {
-            fallbackToWebSpeech(result.answer_text, hostMessageIndex);
-          }, 500);
-        }
-
-      } else {
-        throw new Error(`Failed to start podcast: ${response.status}`);
-      }
+      // Simple welcome message since podcast endpoints don't exist
+      const welcomeMessage = "Welcome to the AI Knowledge Podcast! I'm your host, and I'm excited to explore topics with you today. What would you like to discuss?";
+      
+      setTranscript([
+        { speaker: "AI", text: welcomeMessage }
+      ]);
+      setConversationStarted(true);
+      
+      setTimeout(() => {
+        fallbackToWebSpeech(welcomeMessage, 0);
+      }, 500);
 
     } catch (error) {
       console.error("❌ Failed to start podcast:", error);
@@ -397,7 +408,7 @@ const NewPanelsRecording = () => {
     }
   };
 
-  // HOST MODE: Use podcast endpoints
+  // HOST MODE: Use regular respond endpoint (podcast endpoints don't exist)
   const handleHostMode = async (query, token) => {
     console.log("🤖 Getting HOST response for:", query);
     
@@ -407,27 +418,23 @@ const NewPanelsRecording = () => {
       { speaker: "AI", text: "Let me think about that...", isTyping: true },
     ]);
 
-    const podcastFormData = new FormData();
-    podcastFormData.append("message", query);
-    podcastFormData.append("persona", "host");
-    podcastFormData.append("show_name", showName);
-    podcastFormData.append("conversation_id", conversationId);
-    podcastFormData.append("guest_name", guestName);
-    podcastFormData.append("auto_duet", "false");
+    const responseFormData = new FormData();
+    responseFormData.append("user_id", user?.id || "unknown");
+    responseFormData.append("query", query);
 
-    const hostResponse = await fetch("http://localhost:8000/podcast/turn/", {
+    const response = await fetch("http://localhost:8000/respond/", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`
       },
-      body: podcastFormData
+      body: responseFormData
     });
 
-    if (hostResponse.ok) {
-      const hostResult = await hostResponse.json();
-      console.log("✅ Host response received:", hostResult);
+    if (response.ok) {
+      const result = await response.json();
+      console.log("✅ Host response received:", result);
 
-      const responseText = hostResult.answer_text || "[No response generated]";
+      const responseText = result.answer_text || "[No response generated]";
       
       // Replace the "thinking" message with the actual response
       setTranscript((prev) => {
@@ -443,9 +450,9 @@ const NewPanelsRecording = () => {
       });
 
       // Play the audio
-      if (hostResult.audio_data) {
+      if (result.audio_data) {
         console.log("🔊 Playing host TTS audio...");
-        await playBase64Audio(hostResult.audio_data, thinkingIndex);
+        await playBase64Audio(result.audio_data, thinkingIndex);
       } else {
         setTimeout(() => {
           fallbackToWebSpeech(responseText, thinkingIndex);
@@ -453,7 +460,7 @@ const NewPanelsRecording = () => {
       }
 
     } else {
-      throw new Error(`Host response failed: ${hostResponse.status}`);
+      throw new Error(`Host response failed: ${response.status}`);
     }
   };
 
@@ -611,133 +618,445 @@ const NewPanelsRecording = () => {
     setCurrentSpeakingIndex(-1);
   };
 
+  // Microphone toggle function
+  const toggleMicrophone = () => {
+    setIsMicOn(!isMicOn);
+  };
+
+  // Play/Pause toggle function
+  const togglePlayPause = () => {
+    setIsPlaying(!isPlaying);
+  };
+
+  // Connect to LiveKit room
+  const connectToLiveKit = async () => {
+    try {
+      console.log('🔄 Attempting to connect to LiveKit...');
+      console.log('Server URL:', serverUrl);
+      console.log('Token (first 50 chars):', token.substring(0, 50) + '...');
+      console.log('Current room state:', room.state);
+      
+      await room.connect(serverUrl, token);
+      console.log('✅ Connection successful!');
+      console.log('Room name:', room.name);
+      console.log('Local participant identity:', room.localParticipant?.identity);
+      console.log('Current participants:', room.participants?.size || 0);
+    } catch (error) {
+      console.error('❌ Failed to connect to LiveKit:', error);
+      console.error('Error details:', {
+        name: error.name,
+        message: error.message,
+        code: error.code
+      });
+    }
+  };
+
+  // Disconnect from LiveKit room
+  const disconnectFromLiveKit = () => {
+    console.log('🔄 Disconnecting from LiveKit room...');
+    console.log('Current participants before disconnect:', room.participants?.size || 0);
+    room.disconnect();
+    setLiveKitConnected(false);
+    console.log('❌ Disconnected from LiveKit room');
+  };
+
+  // Set up room event listeners
+  useEffect(() => {
+    console.log('🔧 Setting up LiveKit event listeners...');
+    
+    const handleConnected = () => {
+      setLiveKitConnected(true);
+      console.log('✅ Connected to LiveKit room');
+      console.log('Room name:', room.name);
+      console.log('Local participant:', room.localParticipant.identity);
+    };
+
+    const handleDisconnected = (reason) => {
+      setLiveKitConnected(false);
+      console.log('❌ Disconnected from LiveKit room, reason:', reason);
+    };
+
+    const handleParticipantConnected = (participant) => {
+      console.log('👤 Participant connected:', participant.identity);
+      console.log('Total participants:', (room.participants?.size || 0) + 1);
+      setLiveKitParticipants(prev => [...prev, participant]);
+    };
+
+    const handleParticipantDisconnected = (participant) => {
+      console.log('👤 Participant disconnected:', participant.identity);
+      console.log('Remaining participants:', room.participants?.size || 0);
+      setLiveKitParticipants(prev => prev.filter(p => p.identity !== participant.identity));
+    };
+
+    const handleTrackSubscribed = (track, publication, participant) => {
+      console.log('🎵 Track subscribed:', track.kind, 'from', participant.identity);
+    };
+
+    const handleTrackUnsubscribed = (track, publication, participant) => {
+      console.log('🎵 Track unsubscribed:', track.kind, 'from', participant.identity);
+    };
+
+    // Add event listeners
+    room.on('connected', handleConnected);
+    room.on('disconnected', handleDisconnected);
+    room.on('participantConnected', handleParticipantConnected);
+    room.on('participantDisconnected', handleParticipantDisconnected);
+    room.on('trackSubscribed', handleTrackSubscribed);
+    room.on('trackUnsubscribed', handleTrackUnsubscribed);
+
+    // Check current connection status
+    console.log('🔍 Current room state:', room.state);
+    if (room.state === 'connected') {
+      console.log('🟢 Room already connected');
+      setLiveKitConnected(true);
+    } else {
+      console.log('🔴 Room not connected, state:', room.state);
+    }
+
+    return () => {
+      console.log('🧹 Cleaning up LiveKit event listeners');
+      room.off('connected', handleConnected);
+      room.off('disconnected', handleDisconnected);
+      room.off('participantConnected', handleParticipantConnected);
+      room.off('participantDisconnected', handleParticipantDisconnected);
+      room.off('trackSubscribed', handleTrackSubscribed);
+      room.off('trackUnsubscribed', handleTrackUnsubscribed);
+    };
+  }, [room]);
+
   return (
-    <div className="flex h-full divide-x divide-gray-200 bg-gradient-to-br from-purple-50 to-blue-50">
-      {/* Transcript Section */}
-      <div className="w-1/3 p-6 flex flex-col overflow-y-auto bg-white/80 backdrop-blur-sm rounded-l-lg shadow-inner">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="font-bold text-xl text-gray-800">{showName}</h2>
-          <div className="flex items-center space-x-2 text-sm">
-            <Icon name="volume" className="w-4 h-4 text-gray-500" />
-            <span className="text-gray-500">{transcript.length} exchanges</span>
-          </div>
-        </div>
+    <RoomContext.Provider value={room}>
+      <div className="h-full rounded-3xl border-[3px] border-light-accent overflow-hidden flex">
+      {/* Left Panel - Recording Studio (More Space) */}
+      <div className="w-3/5 bg-gradient-to-b from-light-accent to-purple-200 flex">
         
-        <div className="flex flex-col space-y-2 flex-1">
-          {transcript.map((entry, idx) => (
-            <TranscriptBubble 
-              key={idx} 
-              speaker={entry.speaker} 
-              text={entry.text}
-              isTyping={entry.isTyping || false}
-              isSpeaking={currentSpeakingIndex === idx}
-            />
-          ))}
-          <div ref={transcriptEndRef} />
+        {/* Left Section - Participants +Session Management */}
+        <section className="flex flex-col justify-center items-center my-auto mx-8 font-headingPoppins">
+          {/* Participants Section */}
+          <div className="py-6 px-8 bg-white/20 backdrop-blur-md rounded-3xl border border-white/30 shadow-2xl">
+            <h3 className="text-lg font-semibold text-gray-800 mb-6 text-center">Participants</h3>
+            <div className="space-y-4">
+
+              {/* Human User */}
+              <div className="flex items-center space-x-4 p-3 bg-white/30 rounded-2xl backdrop-blur-sm border border-white/40 hover:bg-white/40 transition-all duration-300">
+                <div className="w-12 h-12 bg-gradient-to-br from-orange-400 to-orange-500 rounded-full flex items-center justify-center text-white font-bold shadow-lg">
+                  HU
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium text-gray-800">Human User</span>
+                  <span className="text-xs text-gray-600">Active</span>
+                </div>
+                <div className="ml-auto">
+                  <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                </div>
+              </div>
+              
+              {/* AI Host */}
+              <div className="flex items-center space-x-4 p-3 bg-white/30 rounded-2xl backdrop-blur-sm border border-white/40 hover:bg-white/40 transition-all duration-300">
+                <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-full flex items-center justify-center text-white shadow-lg">
+                  <Icon name="podcast" className="w-6 h-6" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium text-gray-800">AI Host</span>
+                  <span className="text-xs text-gray-600">{liveKitConnected ? 'Connected' : 'Ready'}</span>
+                </div>
+                <div className="ml-auto">
+                  <div className={`w-3 h-3 rounded-full ${liveKitConnected ? 'bg-green-500 animate-pulse' : 'bg-blue-500'}`}></div>
+                </div>
+              </div>
+
+              {/* LiveKit Participants */}
+              <LiveKitParticipants />
+            </div>
         </div>
+          {/* LiveKit Connection */}
+          <div className="mt-6">
+            {!liveKitConnected ? (
+              <button 
+                onClick={connectToLiveKit}
+                className="flex items-center space-x-3 bg-green-500/20 backdrop-blur-md text-green-800 px-6 py-3 rounded-2xl text-sm font-medium hover:bg-green-500/30 transition-all duration-300 border border-green-500/30 shadow-lg"
+              >
+                <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                <span>Connect LiveKit</span>
+              </button>
+            ) : (
+              <button 
+                onClick={disconnectFromLiveKit}
+                className="flex items-center space-x-3 bg-red-500/20 backdrop-blur-md text-red-800 px-6 py-3 rounded-2xl text-sm font-medium hover:bg-red-500/30 transition-all duration-300 border border-red-500/30 shadow-lg"
+              >
+                <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+                <span>Disconnect LiveKit</span>
+              </button>
+            )}
+            
+            {/* Connection Status */}
+            <div className="mt-2 text-xs text-center">
+              <span className={`px-2 py-1 rounded-full ${
+                liveKitConnected 
+                  ? 'bg-green-100 text-green-800' 
+                  : 'bg-gray-100 text-gray-600'
+              }`}>
+                {liveKitConnected ? 'Connected' : 'Disconnected'}
+              </span>
+            </div>
+          </div>
+
+          {/* Restart Session */}
+          <div className="mt-4">
+            <button 
+              onClick={restartRecording}
+              disabled={isProcessing}
+              className="flex items-center space-x-3 bg-white/20 backdrop-blur-md text-gray-800 px-6 py-3 rounded-2xl text-sm font-medium hover:bg-white/30 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed border border-white/30 shadow-lg"
+            >
+              <GrPowerCycle className="w-5 h-5" /> 
+              <span>Restart Session</span>
+            </button>
+          </div>
+        </section>
+
+        {/* Separator */}
+        <div className="w-px bg-light-grey "></div>
+
+        {/* Right Section - Main Controls */}
+        <section className="w-2/3 flex flex-col my-auto mx-8">
+
+          {/* Header */}
+          <div className="bg-light-charcoal text-white px-6 py-3 mx-auto rounded-3xl mt-28 text-2xl font-semibold font-headingPoppins">
+            <h1 className="text-lg font-semibold">THE DAILY CONVERSATION</h1>
+          </div>
+          
+          {/* Time & Status - Centered */}
+          <div className="px-6 py-4 font-bodyRoboto text-center text-xl">
+            <div className="text-gray-700 mb-1">
+              <span className="font-bold">On Record:</span> 00:05:32
+            </div>
+            <div className="text-gray-700">
+              <span className="font-bold">Active:</span> AI Host
+            </div>
+          </div>
+
+            {/* Waveform Section */}
+            <div className="flex justify-center items-center py-8">
+              <div className="bg-purple-50/30 border border-purple-200/50 rounded-lg p-6 w-8/12 h-72 flex items-center justify-center">
+                <Waveform isRecording={isRecording && !isPaused} isSpeaking={isSpeaking} />
+              </div>
+            </div>
+
+          {/* Controls - Two Parallel Columns */}
+          <div className="flex justify-center items-center py-6">
+            <div className="flex space-x-6">
+
+              {/* Left Column - Mic & Playback */}
+              <div className="w-1/2 flex  justify-center items-center gap-3">
+              {/* Microphone Toggle Button */}
+              <div className="flex justify-center items-center">
+                <button 
+                  onClick={toggleMicrophone}
+                  className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 shadow-lg ${
+                    isMicOn 
+                      ? 'bg-white text-light-lightPurple border-2 border-light-lightPurple' 
+                      : 'bg-light-lightPurple text-white border-2 border-light-lightPurple'
+                  }`}
+                >
+                  {isMicOn ? (
+                    <PiMicrophoneBold className="w-8 h-8" />
+                  ) : (
+                    <PiMicrophoneSlashBold className="w-8 h-8" />
+                  )}
+                </button>
+              </div>
+
+              {/* Play/Pause Toggle Button */}
+              <div className="flex justify-center items-center">
+                <button 
+                  onClick={togglePlayPause}
+                  className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 shadow-lg ${
+                    isPlaying 
+                      ? 'bg-white text-light-lightPurple border-2 border-light-lightPurple' 
+                      : 'bg-light-lightPurple text-white border-2 border-light-lightPurple'
+                  }`}
+                >
+                  {isPlaying ? (
+                    <PiPauseBold className="w-8 h-8" />
+                  ) : (
+                    <PiPlayFill className="w-8 h-8" />
+                  )}
+                </button>
+              </div>
+                {/* Recording Button */}
+                {!conversationStarted && !isProcessing && (
+                  <button 
+                    onClick={startConversation}
+                    className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center text-white hover:bg-red-600 transition-colors shadow-lg"
+                  >
+                    <Icon name="podcast" className="w-8 h-8" />
+                  </button>
+                )}
+
+                {conversationStarted && !isRecording && !isProcessing && !isSpeaking && (
+                  <button 
+                    onClick={startRecording}
+                    className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center text-white hover:bg-red-600 transition-colors shadow-lg"
+                  >
+                    <Icon name="mic" className="w-8 h-8" />
+                  </button>
+                )}
+
+                {isRecording && !isPaused && !isProcessing && (
+                  <button 
+                    onClick={stopRecording}
+                    className="w-16 h-16 bg-blue-500 rounded-full flex items-center justify-center text-white hover:bg-blue-600 transition-colors shadow-lg"
+                  >
+                    <Icon name="stop" className="w-8 h-8" />
+                  </button>
+                )}
+
+                {isSpeaking && (
+                  <button 
+                    onClick={stopSpeaking}
+                    className="w-16 h-16 bg-yellow-500 rounded-full flex items-center justify-center text-white hover:bg-yellow-600 transition-colors shadow-lg"
+                  >
+                    <Icon name="pause" className="w-8 h-8" />
+                  </button>
+                )}
+              </div>
+
+              {/* Right Column - Mute & Halt */}
+              <div className="w-1/2 space-y-2">
+                <button className=" bg-light-purple text-white px-6 py-2 rounded-3xl text-xl font-medium hover:bg-white hover:text-light-purple hover:border hover:border-light-purple transition-colors">
+                  Mute AI
+                </button>
+                <button className="bg-red-500 text-white px-6 py-2 rounded-3xl text-xl font-medium hover:bg-white hover:border hover:border-red-500  hover:text-red-500 transition-colors">
+                  Halt AI
+                </button>
+              </div>
+            
+            </div>
+
+          </div>
+        </section>
       </div>
 
-      {/* Controls Section */}
-      <div className="w-2/3 p-8 flex flex-col justify-between bg-white rounded-r-lg">
-        <div className="space-y-6">
-          <div className="text-center">
-            <h2 className="font-bold text-2xl text-gray-800 mb-2">Podcast Studio</h2>
-            <StatusIndicator 
-              isRecording={isRecording && !isPaused} 
-              isProcessing={isProcessing} 
-              isSpeaking={isSpeaking}
-              conversationStarted={conversationStarted}
-            />
-          </div>
-
-          <Waveform isRecording={isRecording && !isPaused} isSpeaking={isSpeaking} />
-
-          {/* Main Control Buttons */}
-          <div className="flex justify-center space-x-4">
-            {/* START PODCAST BUTTON */}
-            {!conversationStarted && !isProcessing && (
-              <button 
-                onClick={startConversation} 
-                className="flex items-center space-x-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white px-8 py-4 rounded-full hover:from-purple-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105"
-              >
-                <Icon name="podcast" className="w-6 h-6" /> 
-                <span className="font-medium">Start Podcast</span>
+      {/* Right Panel - Transcript (Less Space) */}
+      <div className="w-2/5 bg-white flex flex-col">
+        {/* Header with Search */}
+        <div className="border-b border-gray-200 px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex space-x-4">
+              <button className="text-blue-600 border-b-2 border-blue-600 pb-2 text-sm font-medium">
+                Transcript
               </button>
-            )}
-
-            {/* RECORDING BUTTONS */}
-            {conversationStarted && !isRecording && !isProcessing && !isSpeaking && (
-              <button 
-                onClick={startRecording} 
-                className="flex items-center space-x-3 bg-gradient-to-r from-red-500 to-red-600 text-white px-8 py-4 rounded-full hover:from-red-600 hover:to-red-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105"
-              >
-                <Icon name="mic" className="w-6 h-6" /> 
-                <span className="font-medium">Record Response</span>
+              <button className="text-gray-500 pb-2 text-sm font-medium hover:text-gray-700">
+                Mal Popelat
               </button>
-            )}
-
-            {isRecording && !isPaused && !isProcessing && (
-              <>
-                <button 
-                  onClick={pauseRecording} 
-                  className="flex items-center space-x-2 bg-yellow-500 text-white px-6 py-3 rounded-full hover:bg-yellow-600 transition-all duration-200 shadow-lg"
-                >
-                  <Icon name="pause" className="w-5 h-5" /> <span>Pause</span>
-                </button>
-                <button 
-                  onClick={stopRecording} 
-                  className="flex items-center space-x-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white px-6 py-3 rounded-full hover:from-blue-600 hover:to-blue-700 transition-all duration-200 shadow-lg"
-                >
-                  <Icon name="stop" className="w-5 h-5" /> <span>Send</span>
-                </button>
-              </>
-            )}
-
-            {isSpeaking && (
-              <button 
-                onClick={stopSpeaking} 
-                className="flex items-center space-x-2 bg-red-500 text-white px-6 py-3 rounded-full hover:bg-red-600 transition-all duration-200 shadow-lg"
-              >
-                <Icon name="stop" className="w-5 h-5" /> <span>Stop Speaking</span>
-              </button>
-            )}
-          </div>
-
-          {/* Secondary Controls */}
-          <div className="flex justify-center">
-            <button 
-              onClick={restartRecording} 
-              disabled={isProcessing}
-              className={`flex items-center space-x-2 px-6 py-2 rounded-full transition-all duration-200 ${
-                isProcessing 
-                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'
-              }`}
-            >
-              <Icon name="restart" className="w-4 h-4" /> <span>New Podcast</span>
+            </div>
+            <button className="text-blue-600 text-sm font-medium hover:text-blue-800 flex items-center space-x-1">
+              <span>Search</span>
+              <Icon name="play" className="w-3 h-3 rotate-90" />
             </button>
           </div>
         </div>
 
-        <div className="mt-8 text-center">
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-            <p className="text-sm text-blue-700 font-medium mb-2">🎙️ Podcast Conversation Mode</p>
-            <p className="text-xs text-blue-600">
-              {!conversationStarted 
-                ? SELECTED_AGENT === 'host' 
-                  ? "Click 'Start Podcast' to begin with AI host introduction!"
-                  : "Click 'Start Podcast' to begin - you'll speak first!"
-                : "Continue the podcast conversation by recording your responses!"
-              }
-            </p>
-            {/* Debug info - remove in production */}
-            <p className="text-xs text-gray-500 mt-1">
-              Current mode: {SELECTED_AGENT.toUpperCase()} (change SELECTED_AGENT variable to switch)
-            </p>
+        {/* Transcript Area */}
+        <div className="flex-1 overflow-y-auto p-4">
+          {transcript.length === 0 ? (
+            <div className="text-center text-gray-500 mt-16">
+              <Icon name="podcast" className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+              <p className="text-sm">Ready to start conversation</p>
+              <p className="text-xs">Your transcript will appear here</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {transcript.map((entry, idx) => (
+                <div key={idx} className="flex items-start space-x-2">
+                  <div className="flex-shrink-0">
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold ${
+                      entry.speaker === "You" ? "bg-blue-500" : "bg-green-500"
+                    }`}>
+                      {entry.speaker === "You" ? "U" : "AI"}
+                    </div>
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center space-x-1 mb-1">
+                      <span className="text-xs font-medium text-gray-700">
+                        {entry.speaker === "You" ? "User" : "User. AI Agent"}
+                      </span>
+                      <div className="w-3 h-3 bg-blue-500 rounded-full flex items-center justify-center">
+                        <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
+                      </div>
+                      <span className="text-xs text-gray-500">
+                        {new Date().toLocaleTimeString()}
+                      </span>
+                    </div>
+                    <div className="bg-gray-50 rounded p-2">
+                      <p className="text-gray-800 text-xs leading-relaxed">
+                        {entry.isTyping ? (
+                          <span>
+                            {entry.text}
+                            <span className="animate-pulse ml-1 text-blue-500">●</span>
+                          </span>
+                        ) : (
+                          entry.text
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <div ref={transcriptEndRef} />
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="border-t border-gray-200 px-4 py-3">
+          <div className="flex items-center justify-between">
+            <label className="flex items-center space-x-1 text-xs text-gray-600">
+              <input type="checkbox" className="rounded" />
+              <span>Export Transcript</span>
+            </label>
+            <button className="bg-blue-500 text-white px-3 py-1.5 rounded text-xs font-medium hover:bg-blue-600 transition-colors flex items-center space-x-1">
+              <Icon name="podcast" className="w-3 h-3" />
+              <span>CarmSpeoids</span>
+            </button>
           </div>
         </div>
       </div>
-    </div>
+      </div>
+      
+      {/* LiveKit Audio Renderer */}
+      <RoomAudioRenderer />
+    </RoomContext.Provider>
+  );
+};
+
+// LiveKit Participants Component
+const LiveKitParticipants = () => {
+  const tracks = useTracks(
+    [
+      { source: Track.Source.Camera, withPlaceholder: true },
+      { source: Track.Source.Microphone, withPlaceholder: false },
+    ],
+    { onlySubscribed: false },
+  );
+
+  return (
+    <>
+      {tracks.map((track) => (
+        <div key={track.participant.identity} className="flex items-center space-x-4 p-3 bg-white/30 rounded-2xl backdrop-blur-sm border border-white/40 hover:bg-white/40 transition-all duration-300">
+          <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white shadow-lg">
+            <span className="text-xs font-bold">{track.participant.identity?.charAt(0).toUpperCase() || 'U'}</span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-sm font-medium text-gray-800">{track.participant.identity || 'Participant'}</span>
+            <span className="text-xs text-gray-600">LiveKit</span>
+          </div>
+          <div className="ml-auto">
+            <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+          </div>
+        </div>
+      ))}
+    </>
   );
 };
 

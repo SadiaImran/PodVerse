@@ -15,6 +15,8 @@ import time
 import tempfile
 import re
 from typing import Dict, Optional, List
+from dotenv import load_dotenv
+from gradio_client import Client
 
 from connection_supabase_client import (
     get_authenticated_supabase_client,
@@ -24,9 +26,13 @@ from connection_supabase_client import (
 router = APIRouter()
 
 # ========= CONFIGURATION =========
+load_dotenv()
+
 os.environ["TOGETHER_API_KEY"] = os.environ.get(
     "TOGETHER_API_KEY", "f98103d1acc08e8528e75028deee01807c69312f742eaddbd877d1b87123dffb"
 )
+HF_TOKEN_1075 = os.environ.get("HF_TOKEN_1075")
+LLM_URL = os.environ.get("LLM_URL")
 
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 CHUNK_SIZE = 500
@@ -39,16 +45,61 @@ SMALL_TALK_PATTERNS: Dict[str, str] = {
     r"\b(bye|goodbye|see ya|see you)\b": "Thank you for having me! This was absolutely wonderful, take care!",
 }
 
+from gradio_client import Client
+
+client = Client(
+    "sadiaimran1075/deepseek-ai-DeepSeek-V3.2-Exp",
+    hf_token=HF_TOKEN_1075
+)
+
+@router.get("/test-llm/")
+def call_llm(query: str):
+    print(f"🎉 Test LLM endpoint called with query: {query}")
+    try:
+        result = client.predict(
+            message=query,
+            api_name="/chat"
+        )
+        print(f"✅ LLM Response: {result}")
+        return {
+            "message": "LLM test successful!",
+            "query": query,
+            "response": result,
+            "status": "success"
+        }
+    except Exception as e:
+        print(f"❌ LLM Error: {e}")
+        return {
+            "message": "LLM test failed!",
+            "query": query,
+            "error": str(e),
+            "status": "error"
+        }
+
 # ========= LLM SETUP =========
-def make_llm(temperature=0.1, max_tokens=512):
-    """Standard LLM for document Q&A"""
-    return ChatOpenAI(
-        openai_api_base="https://api.together.xyz/v1",
-        openai_api_key=os.environ.get("TOGETHER_API_KEY"),
-        model_name="mistralai/Mistral-7B-Instruct-v0.1",
-        temperature=temperature,
-        max_tokens=max_tokens,
-    )
+# COMMENTED OUT: Together API - using Hugging Face instead
+# def make_llm(temperature=0.1, max_tokens=512):
+#     """Standard LLM for document Q&A"""
+#     return ChatOpenAI(
+#         openai_api_base="https://api.together.xyz/v1",
+#         openai_api_key=os.environ.get("TOGETHER_API_KEY"),
+#         model_name="mistralai/Mistral-7B-Instruct-v0.1",
+#         temperature=temperature,
+#         max_tokens=max_tokens,
+#     )
+
+# NEW: Hugging Face LLM function
+def make_llm_hf(query: str, temperature=0.1, max_tokens=512):
+    """Use Hugging Face LLM for document Q&A"""
+    try:
+        result = client.predict(
+            message=query,
+            api_name="/chat"
+        )
+        return result
+    except Exception as e:
+        print(f"❌ Hugging Face LLM Error: {e}")
+        return "I'm sorry, I couldn't process your request right now."
 
 # Standard Q&A prompt
 SAFE_PROMPT = PromptTemplate(
@@ -558,17 +609,12 @@ async def generate_response(
             for row in candidate_rows
         ]
 
-        llm = make_llm(temperature=0.1, max_tokens=512)
-        qa = RetrievalQA.from_chain_type(
-            llm=llm,
-            retriever=StaticRetriever(retrieved_documents),
-            chain_type="stuff",
-            chain_type_kwargs={"prompt": SAFE_PROMPT},
-            return_source_documents=True,
-        )
-
-        result = qa.invoke({"query": q})
-        answer = polish_answer(result.get("result", ""))
+        # Use Hugging Face LLM instead of Together API
+        context_text = "\n\n".join([doc.page_content for doc in retrieved_documents])
+        full_query = f"Context: {context_text}\n\nQuestion: {q}\n\nAnswer based on the context:"
+        
+        answer = make_llm_hf(full_query, temperature=0.1, max_tokens=512)
+        answer = polish_answer(answer)
 
         sources = [
             {
