@@ -160,55 +160,63 @@ const KnowledgeBaseSetup = ({ goNext }) => {
     setSelectedExistingFile(null);
   };
 
-  const handleUploadAndNext = async () => {
-    if (!uploadedFile && !selectedExistingFile) {
-      alert("Please upload a PDF file or select an existing one.");
-      return;
-    }
+  // KnowledgeBaseSetup.js
+const handleUploadAndNext = async () => {
+  if (!uploadedFile && !selectedExistingFile) {
+    alert("Please upload a PDF file or select an existing one.");
+    return;
+  }
 
-    // Case 1: User uploaded a NEW file
-    if (uploadedFile) {
-      setIsUploading(true);
-      alert("Uploading document... This may take a few minutes depending on the file size.");
+  // Store the selected knowledge base information in localStorage or context
+  const knowledgeBaseInfo = uploadedFile 
+    ? { type: 'new', fileName: uploadedFile.name }
+    : { type: 'existing', id: selectedExistingFile.id, fileName: selectedExistingFile.file_name };
+  
+  localStorage.setItem('selectedKnowledgeBase', JSON.stringify(knowledgeBaseInfo));
 
-      try {
-        const token = await getSupabaseAuthorizedtoken();
-        if (!token) {
-          alert("You must be signed in to upload documents.");
-          setIsUploading(false);
-          return;
-        }
+  // Case 1: User uploaded a NEW file
+  if (uploadedFile) {
+    setIsUploading(true);
+    alert("Uploading document... This may take a few minutes depending on the file size.");
 
-        const formData = new FormData();
-        formData.append("file", uploadedFile);
-
-        const res = await axios.post(API_URL +"/upload-knowledge-base/", formData, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "multipart/form-data"
-          }
-        });
-
-        alert("Document uploaded successfully!");
-        console.log("Response from server:", res.data);
-        if (goNext) goNext();
-
-      } catch (error) {
-        const serverMessage = error.response?.data?.message || error.message;
-        console.error("Upload failed:", serverMessage);
-        alert(`Upload failed: ${serverMessage}`);
-      } finally {
+    try {
+      const token = await getSupabaseAuthorizedtoken();
+      if (!token) {
+        alert("You must be signed in to upload documents.");
         setIsUploading(false);
+        return;
       }
-    }
 
-    // Case 2: User selected an EXISTING file
-    else if (selectedExistingFile) {
-      alert(`Using existing file: ${selectedExistingFile.file_name}.`);
-      console.log(`Proceeding with existing file. Storage path: ${selectedExistingFile.storage_path}`);
+      const formData = new FormData();
+      formData.append("file", uploadedFile);
+
+      const res = await axios.post(API_URL +"/upload-knowledge-base/", formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "multipart/form-data"
+        }
+      });
+
+      alert("Document uploaded successfully!");
+      console.log("Response from server:", res.data);
       if (goNext) goNext();
+
+    } catch (error) {
+      const serverMessage = error.response?.data?.message || error.message;
+      console.error("Upload failed:", serverMessage);
+      alert(`Upload failed: ${serverMessage}`);
+    } finally {
+      setIsUploading(false);
     }
-  };
+  }
+
+  // Case 2: User selected an EXISTING file
+  else if (selectedExistingFile) {
+    alert(`Using existing file: ${selectedExistingFile.file_name}.`);
+    console.log(`Proceeding with existing file. Storage path: ${selectedExistingFile.storage_path}`);
+    if (goNext) goNext();
+  }
+};
 
   const canProceed = uploadedFile || selectedExistingFile;
 

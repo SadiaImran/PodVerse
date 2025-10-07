@@ -251,6 +251,7 @@ async def upload_knowledge_base(
     storage_name = f"{timestamp}_{clean_filename}"
 
     print(f"[upload] Processing {file.filename} as {storage_name} (size: {len(file_data)} bytes)")
+    print(f"[upload] User ID from auth: {user_id} (type: {type(user_id)})")
 
     # Store file in Supabase storage
     try:
@@ -265,7 +266,7 @@ async def upload_knowledge_base(
     # Store metadata
     try:
         supabase_authenticated.table("knowledge_base").insert({
-            "user_id": user_id,
+            "user_id": user_id,  # Make sure this is UUID, not email!
             "file_name": file.filename,
             "public_url": public_url,
             "storage_path": storage_name,
@@ -309,7 +310,8 @@ async def upload_knowledge_base(
                     chunk.metadata.update({
                         "title": file.filename, 
                         "file_path": storage_name, 
-                        "user_id": user_id
+                        "user_id": user_id,
+                        "user_email": user_id  # Store both UUID and email for lookup
                     })
 
                 # Generate embeddings and store
@@ -327,7 +329,7 @@ async def upload_knowledge_base(
                 ]
 
                 service_client.table("documents").insert(rows).execute()
-                print(f"[upload] Successfully inserted {len(rows)} document chunks")
+                print(f"[upload] Successfully inserted {len(rows)} document chunks with user_id: {user_id}")
                 chunks_created = True
 
     except Exception as e:
@@ -531,7 +533,7 @@ async def generate_response(
         candidate_rows = []
         try:
             # Try the simple RPC function first
-            rpc_result = supabase_authenticated.rpc(
+            rpc_result = service_client.rpc(
                 "match_documents_simple",
                 {
                     "query_embedding": query_vector, 
@@ -546,7 +548,7 @@ async def generate_response(
             print(f"[respond] RPC search failed: {e}")
             # Try the original function as fallback
             try:
-                rpc_result = supabase_authenticated.rpc(
+                rpc_result = service_client.rpc(
                     "match_documents_v2",
                     {
                         "query_embedding": query_vector, 
@@ -564,7 +566,7 @@ async def generate_response(
         if not candidate_rows:
             try:
                 fallback = (
-                    supabase_authenticated.table("documents")
+                    service_client.table("documents")
                     .select("content, metadata, embedding")
                     .eq("user_id", user_id)
                     .limit(20)
@@ -584,7 +586,7 @@ async def generate_response(
                 # Final fallback
                 try:
                     simple = (
-                        supabase_authenticated.table("documents")
+                        service_client.table("documents")
                         .select("content, metadata")
                         .eq("user_id", user_id)
                         .limit(5)
@@ -623,7 +625,7 @@ async def generate_response(
                 "page": doc.metadata.get("page"),
                 "snippet": doc.page_content[:300],
             }
-            for doc in result.get("source_documents", [])
+            for doc in retrieved_documents
         ]
 
         return {
@@ -636,3 +638,183 @@ async def generate_response(
     except Exception as e:
         print(f"[respond] Error: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
+    
+
+
+# module_knowledgeBase_route.py
+@router.post("/internal/respond")
+async def internal_respond(query: str = Form(...), user_id: str = Form(...)):
+    """Internal endpoint for agent to query knowledge base - returns only answer text"""
+    try:
+        # Use service role client (no auth needed)
+        service_client = get_service_role_client()
+        q = (query or "").strip()
+        
+        print(f"[internal respond] Query: {q}, User ID: {user_id} (type: {type(user_id)})")
+
+        # Check if user has documents (try both user_id and email)
+        actual_user_id = user_id
+        try:
+            # If user_id looks like an email, try to find the actual UUID
+            if "@" in user_id:
+                print(f"[internal respond] User ID looks like email, trying to find UUID for: {user_id}")
+                # Try to find user by email in auth.users table
+                try:
+                    user_resp = (
+                        service_client.table("auth.users")
+                        .select("id")
+                        .eq("email", user_id)
+                        .limit(1)
+                        .execute()
+                    )
+                    if user_resp.data:
+                        actual_user_id = user_resp.data[0]["id"]
+                        print(f"[internal respond] Found UUID for email {user_id}: {actual_user_id}")
+                    else:
+                        print(f"[internal respond] No user found for email: {user_id}")
+                        return {"answer_text": f"I don't have any documents for {user_id} yet. Please upload a file first through the agent setup."}
+                except Exception as user_error:
+                    print(f"[internal respond] Error looking up user by email: {user_error}")
+                    return {"answer_text": f"I don't have any documents for {user_id} yet. Please upload a file first through the agent setup."}
+            
+            # Now check for documents with the actual user_id
+            print(f"[internal respond] Checking documents for actual_user_id: {actual_user_id}")
+            docs_resp = (
+                service_client.table("documents")
+                .select("id")
+                .eq("user_id", actual_user_id)
+                .limit(1)
+                .execute()
+            )
+            
+            print(f"[internal respond] Documents found: {len(docs_resp.data) if docs_resp.data else 0}")
+            if not docs_resp.data:
+                return {"answer_text": f"I don't have any documents for you yet. Please upload a file first through the agent setup."}
+        except Exception as e:
+            print(f"[internal respond] Error checking documents: {e}")
+
+        # Retrieve relevant documents
+        embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+        query_vector = embeddings.embed_query(q)
+
+        candidate_rows = []
+        try:
+            # Try the simple RPC function first
+            rpc_result = service_client.rpc(
+                "match_documents_simple",
+                {
+                    "query_embedding": query_vector, 
+                    "match_count": 5, 
+                    "filter_user_id": actual_user_id
+                },
+            ).execute()
+            if rpc_result.data:
+                candidate_rows = rpc_result.data
+                print(f"[internal respond] RPC search successful: {len(candidate_rows)} results")
+        except Exception as e:
+            print(f"[internal respond] RPC search failed: {e}")
+            # Try the original function as fallback
+            try:
+                rpc_result = service_client.rpc(
+                    "match_documents_v2",
+                    {
+                        "query_embedding": query_vector, 
+                        "match_count": 5, 
+                        "metadata_filter": {"user_id": actual_user_id}
+                    },
+                ).execute()
+                if rpc_result.data:
+                    candidate_rows = rpc_result.data
+                    print(f"[internal respond] Fallback RPC successful: {len(candidate_rows)} results")
+            except Exception as e2:
+                print(f"[internal respond] Fallback RPC also failed: {e2}")
+
+        # Fallback search methods
+        if not candidate_rows:
+            try:
+                fallback = (
+                    service_client.table("documents")
+                    .select("content, metadata, embedding")
+                    .eq("user_id", actual_user_id)
+                    .limit(20)
+                    .execute()
+                )
+                if fallback.data:
+                    import numpy as np
+                    qv = np.array(query_vector)
+                    scored = []
+                    for row in fallback.data:
+                        dv = np.array(row["embedding"])
+                        sim = float(np.dot(qv, dv) / (np.linalg.norm(qv) * np.linalg.norm(dv)))
+                        scored.append((sim, row))
+                    scored.sort(key=lambda x: x[0], reverse=True)
+                    candidate_rows = [r for _, r in scored[:5]]
+            except Exception:
+                # Final fallback
+                try:
+                    simple = (
+                        service_client.table("documents")
+                        .select("content, metadata")
+                        .eq("user_id", actual_user_id)
+                        .limit(5)
+                        .execute()
+                    )
+                    candidate_rows = simple.data or []
+                except Exception as sfe:
+                    print(f"[internal respond] Simple fallback failed: {sfe}")
+
+        if not candidate_rows:
+            return {"answer_text": "I don't know based on the provided documents."}
+
+        # Create QA chain
+        retrieved_documents = [
+            Document(page_content=row.get("content", ""), metadata=row.get("metadata", {}))
+            for row in candidate_rows
+        ]
+
+        # Return only the relevant chunks - let LiveKit Gemini agent handle the response generation
+        context_text = "\n\n".join([doc.page_content for doc in retrieved_documents])
+        
+        return {"answer_text": context_text}
+
+    except Exception as e:
+        print(f"[internal respond] Error: {e}")
+        return {"answer_text": "I'm sorry, I couldn't process your request right now."}
+ 
+
+
+
+@router.post("/internal/fetch-chunks")
+def fetch_chunks(user_id: str = Form(...)):
+    """
+    Return a list of uploaded chunk/document metadata for the given user.
+    """
+    try:
+        result = supabase.table("knowledge_base").select("file_name, title").eq("user_id", user_id).execute()
+        chunks = result.data or []
+        return {"chunks": chunks}
+    except Exception as e:
+        print("⚠️ Error fetching chunks:", e)
+        return {"chunks": []}
+
+@router.get("/debug/documents/{user_id}")
+def debug_documents(user_id: str):
+    """Debug endpoint to check documents table for a user_id"""
+    try:
+        service_client = get_service_role_client()
+        
+        # Check documents table
+        docs_result = service_client.table("documents").select("id, user_id, metadata").eq("user_id", user_id).limit(5).execute()
+        
+        # Check knowledge_base table
+        kb_result = service_client.table("knowledge_base").select("id, user_id, file_name").eq("user_id", user_id).limit(5).execute()
+        
+        return {
+            "user_id": user_id,
+            "documents_count": len(docs_result.data) if docs_result.data else 0,
+            "documents": docs_result.data or [],
+            "knowledge_base_count": len(kb_result.data) if kb_result.data else 0,
+            "knowledge_base": kb_result.data or []
+        }
+    except Exception as e:
+        return {"error": str(e)}
