@@ -818,3 +818,175 @@ def debug_documents(user_id: str):
         }
     except Exception as e:
         return {"error": str(e)}
+
+# Add this to your module_knowledgeBase_route.py
+
+@router.post("/generate-podcast-script/")
+async def generate_podcast_script(
+    role: str = Form(...),  # "host" or "guest"
+    topic: Optional[str] = Form(None),
+    length: str = Form("medium"),  # "short", "medium", "long"
+    auth_data: dict = Depends(get_authenticated_supabase_client)
+):
+    """Generate a podcast script based on user's knowledge base"""
+    try:
+        supabase_authenticated = auth_data["client"]
+        user_id = auth_data["user_id"]
+        service_client = get_service_role_client()
+        
+        print(f"[script-gen] Generating {role} script for user: {user_id}")
+        
+        # 1. Fetch all user's document chunks
+        try:
+            docs_result = (
+                service_client.table("documents")
+                .select("content, metadata")
+                .eq("user_id", user_id)
+                .limit(50)  # Get more chunks for comprehensive script
+                .execute()
+            )
+            
+            if not docs_result.data:
+                return {
+                    "error": "No documents found",
+                    "message": "Please upload documents to your knowledge base first."
+                }
+            
+            print(f"[script-gen] Found {len(docs_result.data)} document chunks")
+            
+        except Exception as e:
+            print(f"[script-gen] Error fetching documents: {e}")
+            return {"error": "Failed to fetch documents", "message": str(e)}
+        
+        # 2. Combine and summarize content
+        all_content = "\n\n".join([doc["content"] for doc in docs_result.data])
+        
+        # Truncate if too long (keep first 4000 chars for context)
+        if len(all_content) > 4000:
+            context_summary = all_content[:4000] + "..."
+        else:
+            context_summary = all_content
+        
+        # 3. Determine script length
+        length_config = {
+            "short": {"segments": 3, "max_tokens": 800},
+            "medium": {"segments": 5, "max_tokens": 1500},
+            "long": {"segments": 7, "max_tokens": 2500}
+        }
+        config = length_config.get(length, length_config["medium"])
+        
+        # 4. Create role-specific prompt
+        if role == "host":
+            prompt = f"""You are creating a podcast script where you are the HOST interviewing an expert guest.
+
+Based on this knowledge base content:
+{context_summary}
+
+Create a conversational podcast script with exactly {config['segments']} segments:
+1. Opening/Introduction (warm welcome, set the stage)
+2-{config['segments']-1}. Question segments (each with a thoughtful question for the guest)
+{config['segments']}. Closing (thank the guest, summarize key points, call-to-action)
+
+Topic focus: {topic if topic else "General discussion based on the knowledge base"}
+
+Format each segment as:
+[HOST]: Your dialogue here
+[GUEST]: <awaiting response>
+
+Make it conversational, engaging, and natural. Use the knowledge base to inform your questions but don't read it verbatim.
+Keep the tone professional yet friendly."""
+
+        else:  # guest
+            prompt = f"""You are creating a podcast script where you are the GUEST expert being interviewed.
+
+Based on this knowledge base content:
+{context_summary}
+
+Create a conversational podcast script with exactly {config['segments']} segments:
+1. Self-introduction and context
+2-{config['segments']-1}. Response segments (answer anticipated questions with insights from the knowledge base)
+{config['segments']}. Closing remarks and key takeaways
+
+Topic focus: {topic if topic else "General discussion based on the knowledge base"}
+
+Format each segment as:
+[HOST]: <anticipated question>
+[GUEST]: Your detailed, insightful response here
+
+Make it conversational and engaging. Use examples and anecdotes from the knowledge base.
+Keep the tone professional yet approachable."""
+
+        # 5. Generate script with LLM
+        try:
+            print(f"[script-gen] Calling LLM with {config['max_tokens']} max tokens")
+            script_text = make_llm_hf(prompt, temperature=0.7, max_tokens=config['max_tokens'])
+            
+            if not script_text or len(script_text) < 50:
+                return {
+                    "error": "Script generation failed",
+                    "message": "The AI couldn't generate a proper script. Please try again."
+                }
+            
+        except Exception as e:
+            print(f"[script-gen] LLM error: {e}")
+            return {"error": "Script generation failed", "message": str(e)}
+        
+        # 6. Parse script into sections
+        sections = []
+        lines = script_text.split('\n')
+
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            
+            # More flexible parsing - handles variations
+            if line.upper().startswith('[HOST]') or line.upper().startswith('HOST:') or line.startswith('[HOST:'):
+                # Extract content after the tag
+                content = line.split(':', 1)[-1].strip()
+                if '[GUEST]' in content.upper():
+                    # Split if both speakers in one line
+                    parts = content.split('[GUEST]')
+                    if parts[0].strip():
+                        sections.append({"speaker": "HOST", "content": parts[0].strip()})
+                else:
+                    if content and content != '<awaiting response>' and content != '<question>':
+                        sections.append({"speaker": "HOST", "content": content})
+            
+            elif line.upper().startswith('[GUEST]') or line.upper().startswith('GUEST:') or line.startswith('[GUEST:'):
+                # Extract content after the tag
+                content = line.split(':', 1)[-1].strip()
+                if content and content != '<awaiting response>' and content != '<question>':
+                    sections.append({"speaker": "GUEST", "content": content})
+            
+            elif sections:
+                # Continue current section if we have content
+                if line and not line.startswith('[') and not line.startswith('---'):
+                    sections[-1]["content"] += " " + line
+
+        # If parsing failed to find sections, create a single section with all content
+        if not sections and script_text:
+            sections.append({
+                "speaker": "HOST" if role == "host" else "GUEST",
+                "content": script_text
+            })
+
+        print(f"[script-gen] Successfully parsed {len(sections)} sections from script")
+
+        # 7. Return structured data
+        word_count = len(script_text.split())
+        return {
+            "success": True,
+            "script_text": script_text,
+            "sections": sections,
+            "metadata": {
+                "role": role,
+                "word_count": word_count,
+                "estimated_duration": f"{word_count // 150}-{word_count // 130} minutes",
+                "segment_count": len(sections),
+                "generated_at": time.time()
+            }
+        }
+    except Exception as e:
+        print(f"[script-gen] Unexpected error: {e}")
+        raise HTTPException(status_code=500, detail=f"Script generation failed: {str(e)}")

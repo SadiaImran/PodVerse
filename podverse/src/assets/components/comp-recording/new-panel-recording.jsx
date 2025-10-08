@@ -33,6 +33,7 @@ const Icon = ({ name, className }) => {
   return icons[name] || null;
 };
 
+
 // Toast Notification Component
 const Toast = ({ message, type = 'info', onClose }) => {
   useEffect(() => {
@@ -258,6 +259,10 @@ const NewPanelsRecording = () => {
   const transcriptRef = useRef(transcript);
   // Buffer assistant segments while the user is streaming to enforce turn-ordering
   const assistantBufferRef = useRef(null); // { type: 'stream' | 'final', text: string }
+
+  const [activeTab, setActiveTab] = useState('transcript'); // 'transcript' or 'script'
+  const [podcastScript, setPodcastScript] = useState(null);
+
   useEffect(() => {
     transcriptRef.current = transcript;
   }, [transcript]);
@@ -293,6 +298,19 @@ const NewPanelsRecording = () => {
       }
     };
   }, [isPlaying, isPaused, pausedTime, elapsedTime]);
+
+  useEffect(() => {
+    const savedScript = sessionStorage.getItem('podcastScript');
+    if (savedScript) {
+      try {
+        const scriptData = JSON.parse(savedScript);
+        setPodcastScript(scriptData);
+        console.log('✅ Loaded podcast script:', scriptData);
+      } catch (error) {
+        console.error('❌ Error loading script:', error);
+      }
+    }
+  }, []);
 
   // Toast notification helper
   const showToast = (message, type = 'info') => {
@@ -822,6 +840,110 @@ const fetchLiveKitToken = async () => {
     };
   }, [room, handleTranscriptionReceived]); // Include handleTranscriptionReceived as a dependency
 
+  const ScriptDisplay = ({ scriptData, showToast }) => {
+    if (!scriptData) {
+      return (
+        <div className="text-center text-gray-500 mt-16 p-8">
+          <Icon name="podcast" className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+          <p className="text-sm font-medium mb-2">No Script Generated</p>
+          <p className="text-xs">Generate a script from the review page before starting your recording.</p>
+        </div>
+      );
+    }
+  
+    // Handle case where sections might be empty
+    const sections = scriptData.sections || [];
+    const scriptText = scriptData.script_text || '';
+  
+    return (
+      <div className="p-6 space-y-6">
+        {/* Script Metadata */}
+        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold text-gray-800">Generated Script</h3>
+              <p className="text-xs text-gray-600 mt-1">
+                Role: {scriptData.metadata?.role?.toUpperCase() || 'GUEST'} • 
+                {scriptData.metadata?.word_count || 0} words • 
+                {scriptData.metadata?.estimated_duration || 'N/A'}
+              </p>
+            </div>
+            <div className="flex items-center space-x-2">
+              <button 
+                onClick={() => {
+                  navigator.clipboard.writeText(scriptText);
+                  showToast('Script copied to clipboard!', 'success');
+                }}
+                className="text-xs bg-purple-500 text-white px-3 py-1 rounded hover:bg-purple-600 transition-colors"
+              >
+                Copy
+              </button>
+              <button 
+                onClick={() => {
+                  const blob = new Blob([scriptText], { type: 'text/plain' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = 'podcast-script.txt';
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(url);
+                  showToast('Script downloaded!', 'success');
+                }}
+                className="text-xs bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 transition-colors"
+              >
+                Download
+              </button>
+            </div>
+          </div>
+        </div>
+  
+        {/* Script Content */}
+        <div className="space-y-4">
+          {sections.length > 0 ? (
+            // If sections are parsed, show them formatted
+            sections.map((section, idx) => (
+              <div 
+                key={idx} 
+                className={`p-4 rounded-lg border-l-4 ${
+                  section.speaker === 'HOST' 
+                    ? 'bg-blue-50 border-blue-500' 
+                    : 'bg-purple-50 border-purple-500'
+                }`}
+              >
+                <div className="flex items-center space-x-2 mb-2">
+                  <span className={`text-xs font-bold px-2 py-1 rounded ${
+                    section.speaker === 'HOST'
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-purple-500 text-white'
+                  }`}>
+                    {section.speaker}
+                  </span>
+                  <span className="text-xs text-gray-500">Segment {idx + 1}</span>
+                </div>
+                <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+                  {section.content}
+                </p>
+              </div>
+            ))
+          ) : (
+            // If sections are empty, show raw script text
+            <div className="p-4 rounded-lg bg-gray-50 border border-gray-200">
+              <div className="flex items-center space-x-2 mb-3">
+                <Icon name="podcast" className="w-5 h-5 text-purple-500" />
+                <span className="text-sm font-semibold text-gray-800">Full Script</span>
+              </div>
+              <div className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap max-h-[600px] overflow-y-auto">
+                {scriptText}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <RoomContext.Provider value={room}>
       {/* Toast Notifications */}
@@ -1021,9 +1143,30 @@ const fetchLiveKitToken = async () => {
         {/* Header with Search */}
         <div className="border-b border-gray-200 px-4 py-3">
           <div className="flex items-center justify-between">
+            {/* Tab Buttons */}
             <div className="flex space-x-4">
-              <button className="text-blue-600 border-b-2 border-blue-600 pb-2 text-sm font-medium">
+              <button 
+                onClick={() => setActiveTab('transcript')}
+                className={`pb-2 text-sm font-medium transition-colors ${
+                  activeTab === 'transcript'
+                    ? 'text-blue-600 border-b-2 border-blue-600'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
                 Transcript
+              </button>
+              <button 
+                onClick={() => setActiveTab('script')}
+                className={`pb-2 text-sm font-medium transition-colors relative ${
+                  activeTab === 'script'
+                    ? 'text-purple-600 border-b-2 border-purple-600'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Script
+                {podcastScript && (
+                  <span className="absolute -top-1 -right-2 w-2 h-2 bg-purple-500 rounded-full"></span>
+                )}
               </button>
             </div>
             <div className="flex items-center space-x-3">
@@ -1034,109 +1177,125 @@ const fetchLiveKitToken = async () => {
             </div>
           </div>
           
-          {/* RAG Status Banner */}
-          <div className="mt-2 p-2 bg-purple-50 border border-purple-200 rounded-lg">
-            <div className="flex items-center space-x-2">
-              <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-              <span className="text-xs text-purple-700 font-medium">
-                Knowledge Base Active - AI can access your selected documents
-              </span>
+          {/* Status Banner - Only show on transcript tab */}
+          {activeTab === 'transcript' && (
+            <div className="mt-2 p-2 bg-purple-50 border border-purple-200 rounded-lg">
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                <span className="text-xs text-purple-700 font-medium">
+                  Knowledge Base Active - AI can access your selected documents
+                </span>
+              </div>
             </div>
-          </div>
+          )}
+          
+          {/* Script Info Banner - Only show on script tab */}
+          {activeTab === 'script' && podcastScript && (
+            <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-lg">
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                <span className="text-xs text-green-700 font-medium">
+                  Script loaded: {podcastScript.metadata?.segment_count || 0} segments • 
+                  {podcastScript.metadata?.word_count || 0} words
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Transcript Area - Streaming Style */}
         <div className="flex-1 overflow-y-auto p-4">
-          {transcript.length === 0 && !streamingText ? (
-            <div className="text-center text-gray-500 mt-16">
-              <Icon name="podcast" className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-              <p className="text-sm">Ready to start conversation</p>
-              <p className="text-xs">Your transcript will appear here</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {transcript.map((entry, idx) => (
-                <div 
-                  key={`${idx}-${entry.speaker}`} 
-                  className={`flex items-start space-x-2 ${
-                    entry.isSystem ? 'bg-yellow-50 p-3 rounded-lg border-l-4 border-yellow-400' : 
-                    entry.isWelcomeBack ? 'bg-blue-50 p-3 rounded-lg border-l-4 border-blue-400' : ''
-                  }`}
-                >
-                  <div className="flex-shrink-0">
-                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold ${
-                      entry.speaker === "You" ? "bg-blue-500" : 
-                      entry.speaker === "System" ? "bg-yellow-500" :
-                      entry.speaker === "AI Assistant" ? "bg-purple-500" : "bg-gray-500"
-                    }`}>
-                      {entry.speaker === "You" ? "U" : 
-                       entry.speaker === "System" ? "S" :
-                       entry.speaker === "AI Assistant" ? "AI" : "?"}
-                    </div>
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-1 mb-1">
-                      <span className="text-xs font-medium text-gray-700">
-                        {entry.speaker}
-                      </span>
-                      <div className={`w-3 h-3 rounded-full flex items-center justify-center ${
-                        entry.speaker === "You" ? "bg-blue-500" : 
-                        entry.speaker === "System" ? "bg-yellow-500" :
-                        "bg-purple-500"
-                      }`}>
-                        <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
-                      </div>
-                      {/* **FIXED: Use entry.timestamp which is a valid Date string** */}
-                      <span className="text-xs text-gray-500">
-                        {new Date(entry.timestamp).toLocaleTimeString()}
-                      </span>
-                    </div>
-                    <div className={`rounded p-2 ${
-                      entry.isSystem ? 'bg-yellow-100' : 
-                      entry.isWelcomeBack ? 'bg-blue-100' : 'bg-gray-50'
-                    }`}>
-                      <p className="text-gray-800 text-xs leading-relaxed">
-                            {entry.text}
-                      </p>
-                    </div>
-                  </div>
+          {activeTab === 'transcript' ? (
+            // Existing Transcript View
+            <>
+              {transcript.length === 0 && !streamingText ? (
+                <div className="text-center text-gray-500 mt-16">
+                  <Icon name="podcast" className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                  <p className="text-sm">Ready to start conversation</p>
+                  <p className="text-xs">Your transcript will appear here</p>
                 </div>
-              ))}
-              
-              {/* Streaming message - only show separate row for User; AI streams inline */}
-              {streamingText && currentStreamingSpeaker === 'You' && (
-                <div className="flex items-start space-x-2">
-                  <div className="flex-shrink-0">
-                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold ${
-                      'bg-blue-500'
-                    }`}>
-                      U
-                    </div>
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-1 mb-1">
-                      <span className="text-xs font-medium text-gray-700">
-                        You
-                      </span>
-                      <div className="w-3 h-3 bg-blue-500 rounded-full flex items-center justify-center animate-pulse">
-                        <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
+              ) : (
+                <div className="space-y-3">
+                  {transcript.map((entry, idx) => (
+                    <div 
+                      key={`${idx}-${entry.speaker}`} 
+                      className={`flex items-start space-x-2 ${
+                        entry.isSystem ? 'bg-yellow-50 p-3 rounded-lg border-l-4 border-yellow-400' : 
+                        entry.isWelcomeBack ? 'bg-blue-50 p-3 rounded-lg border-l-4 border-blue-400' : ''
+                      }`}
+                    >
+                      <div className="flex-shrink-0">
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold ${
+                          entry.speaker === "You" ? "bg-blue-500" : 
+                          entry.speaker === "System" ? "bg-yellow-500" :
+                          entry.speaker === "AI Assistant" ? "bg-purple-500" : "bg-gray-500"
+                        }`}>
+                          {entry.speaker === "You" ? "U" : 
+                          entry.speaker === "System" ? "S" :
+                          entry.speaker === "AI Assistant" ? "AI" : "?"}
+                        </div>
                       </div>
-                      <span className="text-xs text-gray-500">
-                        Now
-                      </span>
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-1 mb-1">
+                          <span className="text-xs font-medium text-gray-700">
+                            {entry.speaker}
+                          </span>
+                          <div className={`w-3 h-3 rounded-full flex items-center justify-center ${
+                            entry.speaker === "You" ? "bg-blue-500" : 
+                            entry.speaker === "System" ? "bg-yellow-500" :
+                            "bg-purple-500"
+                          }`}>
+                            <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
+                          </div>
+                          <span className="text-xs text-gray-500">
+                            {new Date(entry.timestamp).toLocaleTimeString()}
+                          </span>
+                        </div>
+                        <div className={`rounded p-2 ${
+                          entry.isSystem ? 'bg-yellow-100' : 
+                          entry.isWelcomeBack ? 'bg-blue-100' : 'bg-gray-50'
+                        }`}>
+                          <p className="text-gray-800 text-xs leading-relaxed">
+                            {entry.text}
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                    <div className="bg-gray-50 rounded p-2">
-                      <p className="text-gray-800 text-xs leading-relaxed">
-                        {streamingText}
-                        <span className="animate-pulse ml-1 text-purple-500">●</span>
-                      </p>
+                  ))}
+                  
+                  {/* Streaming message - only show for User */}
+                  {streamingText && currentStreamingSpeaker === 'You' && (
+                    <div className="flex items-start space-x-2">
+                      <div className="flex-shrink-0">
+                        <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold bg-blue-500">
+                          U
+                        </div>
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-1 mb-1">
+                          <span className="text-xs font-medium text-gray-700">You</span>
+                          <div className="w-3 h-3 bg-blue-500 rounded-full flex items-center justify-center animate-pulse">
+                            <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
+                          </div>
+                          <span className="text-xs text-gray-500">Now</span>
+                        </div>
+                        <div className="bg-gray-50 rounded p-2">
+                          <p className="text-gray-800 text-xs leading-relaxed">
+                            {streamingText}
+                            <span className="animate-pulse ml-1 text-purple-500">●</span>
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  )}
+                  
+                  <div ref={transcriptEndRef} />
                 </div>
               )}
-              
-              <div ref={transcriptEndRef} />
-            </div>
+            </>
+          ) : (
+            // New Script View
+            <ScriptDisplay scriptData={podcastScript} />
           )}
         </div>
 
