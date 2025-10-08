@@ -494,6 +494,27 @@ const uploadAudioToBackend = async (blob, filename, endpoint, formData = {}) => 
   return response.blob();
 };
 
+const mergeAudioTracks = async (audioBlobs, filenames) => {
+  const form = new FormData();
+  
+  audioBlobs.forEach((blob, index) => {
+    const filename = filenames[index] || `track_${index}.wav`;
+    const file = new File([blob], filename, { type: blob.type });
+    form.append('files', file);
+  });
+  
+  const response = await fetch(`${API_BASE_URL}/merge_audio`, {
+    method: 'POST',
+    body: form,
+  });
+  
+  if (!response.ok) {
+    throw new Error(`Backend error: ${response.statusText}`);
+  }
+  
+  return response.blob();
+};
+
 const generateSampleTracks = () => [
   {
     id: 'track1',
@@ -647,22 +668,25 @@ export const MainPanel = ({
   
       // Create new track segments
       const firstTrack = {
-        ...selectedTrack,
         id: `${selectedTrackId}_${Date.now()}_1`,
-        duration: splitPoint,
         name: `${selectedTrack.name} (Part 1)`,
-        url: firstPartUrl
+        duration: splitPoint,
+        startTime: selectedTrack.startTime,
+        volume: selectedTrack.volume,
+        speed: selectedTrack.speed,
+        url: firstPartUrl  // New URL for first part
       };
-  
+
       const secondTrack = {
-        ...selectedTrack,
         id: `${selectedTrackId}_${Date.now()}_2`,
+        name: `${selectedTrack.name} (Part 2)`,
         startTime: currentTime,
         duration: selectedTrack.duration - splitPoint,
-        name: `${selectedTrack.name} (Part 2)`,
-        url: secondPartUrl
+        volume: selectedTrack.volume,
+        speed: selectedTrack.speed,
+        url: secondPartUrl  // New URL for second part
       };
-  
+    
       setTracks(prev => {
         const trackIndex = prev.findIndex(t => t.id === selectedTrackId);
         const newTracks = [...prev];
@@ -779,6 +803,68 @@ export const MainPanel = ({
       alert('Export failed. Please try again.');
     }
   }, [tracks]);
+
+  const handleMergeTracks = useCallback(async () => {
+    if (!selectedTrackId) {
+      alert('Please select at least 2 tracks to merge');
+      return;
+    }
+  
+    // For now, merge all tracks (you can modify this to work with multi-select)
+    if (tracks.length < 2) {
+      alert('Need at least 2 tracks to merge');
+      return;
+    }
+  
+    try {
+      const loadingNotif = document.createElement('div');
+      loadingNotif.textContent = 'Merging tracks...';
+      loadingNotif.className = 'fixed top-4 right-4 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+      document.body.appendChild(loadingNotif);
+  
+      // Sort tracks by start time
+      const sortedTracks = [...tracks].sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
+  
+      // Download all audio blobs
+      const audioBlobs = await Promise.all(
+        sortedTracks.map(track => downloadAudioAsBlob(track.url))
+      );
+  
+      const filenames = sortedTracks.map(track => `${track.name}.wav`);
+  
+      // Merge using backend
+      const mergedBlob = await mergeAudioTracks(audioBlobs, filenames);
+  
+      // Calculate merged track properties
+      const totalDuration = sortedTracks.reduce((sum, t) => sum + t.duration, 0);
+  
+      const mergedTrack = {
+        id: `merged_${Date.now()}`,
+        name: `Merged (${sortedTracks.length} tracks)`,
+        duration: totalDuration,
+        startTime: sortedTracks[0].startTime || 0,
+        volume: 100,
+        speed: 1.0,
+        url: URL.createObjectURL(mergedBlob)
+      };
+  
+      // Replace all tracks with merged track
+      setTracks([mergedTrack]);
+      setSelectedTrackId(null);
+      setIsEditPanelOpen(false);
+  
+      document.body.removeChild(loadingNotif);
+      const notification = document.createElement('div');
+      notification.textContent = `Successfully merged ${sortedTracks.length} tracks!`;
+      notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+      document.body.appendChild(notification);
+      setTimeout(() => document.body.removeChild(notification), 3000);
+  
+    } catch (error) {
+      console.error('Merge failed:', error);
+      alert('Merge failed. Please try again.');
+    }
+  }, [tracks, selectedTrackId]);
 
   const handleResetTrack = useCallback((trackId, resetSettings) => {
     setTracks(prev => prev.map(track =>
@@ -937,9 +1023,8 @@ export const MainPanel = ({
             >
               <SkipForward className="w-5 h-5 text-gray-600 group-hover:text-gray-800" />
             </button>
-
-            {/* Split Button */}
-            <div className="ml-4 pl-4 border-l border-gray-200">
+            {/* Split and Merge Buttons - Horizontal Layout */}
+            <div className="ml-4 pl-4 border-l border-gray-200 flex items-center gap-2">
               <button
                 onClick={splitTrackAtPlayhead}
                 disabled={!selectedTrackId}
@@ -951,6 +1036,19 @@ export const MainPanel = ({
               >
                 <Scissors className="w-4 h-4" />
                 Split Track
+              </button>
+              
+              <button
+                onClick={handleMergeTracks}
+                disabled={tracks.length < 2}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all duration-200 ${tracks.length >= 2
+                  ? 'bg-purple-100 hover:bg-purple-200 text-purple-700 shadow-sm hover:shadow-md'
+                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  }`}
+                title={tracks.length >= 2 ? "Merge all tracks into one" : "Need at least 2 tracks to merge"}
+              >
+                <Music className="w-4 h-4" />
+                Merge Tracks
               </button>
             </div>
           </div>
