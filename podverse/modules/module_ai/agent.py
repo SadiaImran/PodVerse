@@ -1,8 +1,11 @@
+# agent.py (FULL updated - Host mode, transcription listeners, proactive loop)
 from dotenv import load_dotenv
 import aiohttp
 import json
 import os
 import asyncio
+import time
+import traceback
 
 from livekit import agents
 from livekit.agents import AgentSession, Agent, RoomInputOptions
@@ -14,262 +17,269 @@ from prompts import AGENT_INSTRUCTION, SESSION_INSTRUCTION
 load_dotenv()
 
 
-# ---------------------------------------------------------------------
-# 🧠 Assistant Class
-# ---------------------------------------------------------------------
 class Assistant(Agent):
     def __init__(self) -> None:
-        # Create the Google Realtime model
-        realtime_model = google.beta.realtime.RealtimeModel(
-                voice="Aoede",
-            temperature=0.8
+        # LLM for realtime reasoning (do NOT pass as tts unless you have a separate TTS model)
+        llm_model = google.beta.realtime.RealtimeModel(
+            model="models/gemini-2.0-flash-exp",
+            temperature=0.8,
         )
-        
+
         super().__init__(
-            instructions=AGENT_INSTRUCTION
-            + "\n\nIMPORTANT: Always respond in English only. Never use Urdu or Hindi.",
-            llm=realtime_model,
-            tts=realtime_model,  # Use the same model for TTS
-            tools=[],  # Tools will be added via @function_tool decorator
+            instructions=AGENT_INSTRUCTION + "\n\nIMPORTANT: Always respond in English only.",
+            llm=llm_model,
+            tools=[],  # function_tool methods will register tools
         )
+
         self.user_id = "default-user"
         self._room = None
+        self.session_memory = []
+        self._paused = False
 
-    # -----------------------------------------------------------------
-    # 🔎 Query the user's knowledge base (RAG)
-    # -----------------------------------------------------------------
+    # memory helpers
+    def remember(self, role: str, text: str):
+        try:
+            if not text:
+                return
+            entry = {"role": role, "text": text, "ts": time.time()}
+            self.session_memory.append(entry)
+            # keep memory bounded
+            if len(self.session_memory) > 60:
+                self.session_memory = self.session_memory[-60:]
+        except Exception as e:
+            print(f"⚠️ remember() error: {e}")
+
+    def summarize_memory(self, max_chars=1200):
+        try:
+            texts = [f"{m['role']}: {m['text']}" for m in self.session_memory if m.get("text")]
+            summary = "\n".join(texts[-12:])
+            return summary[:max_chars]
+        except Exception as e:
+            print(f"⚠️ summarize_memory() error: {e}")
+            return ""
+
     @function_tool()
     async def query_knowledge_base(self, query: str) -> str:
-        """Retrieve relevant information from the user's knowledge base."""
+        """Call backend internal/respond to get RAG context for current user_id."""
         try:
-            # Use the agent's user_id - could be email or UUID
-            user_id = self.user_id
-            print(f"🔍 RAG Query - Using user_id: {user_id} (type: {type(user_id)})")
-            base_url = "http://localhost:8000"
-
+            user_id = self.user_id or "default-user"
+            print(f"🔍 RAG Query - user_id: {user_id} | query: {query[:120]}")
             async with aiohttp.ClientSession() as session:
-                form_data = aiohttp.FormData()
-                form_data.add_field("query", query)
-                form_data.add_field("user_id", user_id)
-
+                form = aiohttp.FormData()
+                form.add_field("query", query)
+                form.add_field("user_id", user_id)
                 async with session.post(
-                    f"{base_url}/internal/respond",
-                    data=form_data,
+                    "http://localhost:8000/internal/respond",
+                    data=form,
                     timeout=aiohttp.ClientTimeout(total=40),
                 ) as resp:
                     if resp.status == 200:
-                        result = await resp.json()
-                        answer = result.get("answer_text", "No answer found.")
-                        print(f"🧠 RAG response: {answer[:150]}...")
-                        return answer
+                        j = await resp.json()
+                        ans = j.get("answer_text", "")
+                        print(f"🧠 RAG returned {len(ans)} chars")
+                        return ans
                     else:
-                        text = await resp.text()
-                        print(f"⚠️ RAG Error: {text}")
+                        txt = await resp.text()
+                        print(f"⚠️ RAG backend error: {txt}")
                         return "I couldn't find relevant information in your documents."
         except Exception as e:
-            print(f"❌ RAG query error: {e}")
-            return "I encountered an error while searching your knowledge base."
+            print(f"❌ RAG exception: {e}")
+            traceback.print_exc()
+            return "Error querying knowledge base."
 
 
-# ---------------------------------------------------------------------
-# 🚀 Main Entrypoint
-# ---------------------------------------------------------------------
+# ------------------------- Entrypoint -------------------------
 async def entrypoint(ctx: agents.JobContext):
-    print("🚀 Starting AI Host Agent...")
-
-    # Initialize session and agent
+    print("🚀 Starting AI Host Agent (host-mode enabled)...")
     session = AgentSession()
     agent = Assistant()
 
-    # Connect to LiveKit
+    # connect to LiveKit (worker context)
     await ctx.connect()
     room = ctx.room
-    
-    print(f"🏠 Connected to room: {room.name}")
-    # Fix the async issue with room.sid
-    try:
-        room_sid = await room.sid
-        print(f"🏠 Room SID: {room_sid}")
-    except:
-        print(f"🏠 Room SID: Not available")
-    print(f"🏠 Room metadata: {getattr(room, 'metadata', 'No metadata')}")
-    
-    # -----------------------------------------------------------------
-    # 🧩 Set up participant event listeners FIRST
-    # -----------------------------------------------------------------
-    agent.user_id = "default-user"
-    print(f"🔍 DEBUG: Setting up participant event listeners...")
-    
-    # Set up event listener for when participants join
+    agent._room = room
+
+    print(f"🏠 Connected to room: {getattr(room, 'name', 'unknown')}")
+    await asyncio.sleep(0.8)
+
+    # safe event register helper
+    def safe_on(event_name, handler):
+        try:
+            room.on(event_name, handler)
+            print(f"🔔 Registered event: {event_name}")
+        except Exception as e:
+            print(f"⚠️ Could not register event {event_name}: {e}")
+
+    # ---------- participant connected handler ----------
     def on_participant_connected(participant):
-        print(f"🎉 PARTICIPANT JOINED: {participant.identity}")
-        print(f"🔍 DEBUG: Participant type: {type(participant)}")
-        print(f"🔍 DEBUG: Participant attributes: {dir(participant)}")
-        
-        if participant.identity and not participant.identity.startswith("agent"):
-            # Check participant metadata first
-            if hasattr(participant, 'metadata') and participant.metadata:
-                metadata_str = participant.metadata
-                print(f"🔍 DEBUG: New participant metadata: {metadata_str}")
-                try:
-                    # Parse JSON metadata
-                    metadata = json.loads(metadata_str)
-                    if 'userId' in metadata:
-                        agent.user_id = metadata['userId']
-                        print(f"✅ Found user_id in new participant metadata: {agent.user_id}")
-                    elif 'user_id' in metadata:
-                        agent.user_id = metadata['user_id']
-                        print(f"✅ Found user_id in new participant metadata: {agent.user_id}")
-                except json.JSONDecodeError as e:
-                    print(f"⚠️ Could not parse new participant metadata JSON: {e}")
-                    print(f"🔍 Raw metadata: {metadata_str}")
-            
-            # Fallback: use participant identity (email)
-            if agent.user_id == "default-user":
-                agent.user_id = participant.identity
-                print(f"✅ Using new participant identity as user_id: {agent.user_id}")
-            
-            # Now fetch chunks for this user
-            print(f"🔄 Fetching chunks for newly joined user: {agent.user_id}")
-            # We'll fetch chunks in the main flow, but this ensures we have the right user_id
-    
-    # Register the event listener
-    room.on("participant_connected", on_participant_connected)
-    
-    # Also add other event listeners for debugging
+        try:
+            print(f"🎉 participantConnected: {getattr(participant, 'identity', None)}")
+            if getattr(participant, "identity", None) and not participant.identity.startswith("agent"):
+                meta = getattr(participant, "metadata", None)
+                if meta:
+                    print(f"🔍 new participant metadata raw: {meta}")
+                    try:
+                        parsed = json.loads(meta)
+                        if "userId" in parsed:
+                            agent.user_id = parsed["userId"]
+                        elif "user_id" in parsed:
+                            agent.user_id = parsed["user_id"]
+                        print(f"✅ Set agent.user_id from metadata: {agent.user_id}")
+                    except Exception as e:
+                        print(f"⚠️ participant metadata parse error: {e}")
+                # fallback to identity string (email)
+                if agent.user_id == "default-user":
+                    agent.user_id = participant.identity
+                    print(f"ℹ️ Fallback set user_id to participant.identity: {agent.user_id}")
+        except Exception as e:
+            print(f"⚠️ on_participant_connected error: {e}")
+
     def on_participant_disconnected(participant):
-        print(f"👋 PARTICIPANT LEFT: {participant.identity}")
-    
+        try:
+            print(f"👋 participantDisconnected: {getattr(participant, 'identity', None)}")
+        except Exception:
+            pass
+
     def on_room_metadata_changed(metadata):
-        print(f"📝 ROOM METADATA CHANGED: {metadata}")
-    
-    room.on("participant_disconnected", on_participant_disconnected)
-    room.on("room_metadata_changed", on_room_metadata_changed)
-    
-    print(f"🎧 Event listeners registered for room: {room.name}")
-    
-    # -----------------------------------------------------------------
-    # 🧩 Check for existing participants
-    # -----------------------------------------------------------------
-    print(f"🔍 DEBUG: Checking for existing participants...")
-    
+        print(f"📝 roomMetadataChanged: {metadata}")
+
+    # ---------- data received (control) ----------
+    def on_data_received(payload, participant):
+        try:
+            # payload may be bytes or str
+            if isinstance(payload, (bytes, bytearray)):
+                payload = payload.decode("utf-8", errors="replace")
+            if isinstance(payload, str):
+                try:
+                    msg = json.loads(payload)
+                except Exception:
+                    msg = payload
+            else:
+                msg = payload
+            if isinstance(msg, dict) and msg.get("type") == "control":
+                cmd = msg.get("cmd")
+                print(f"📡 Received control '{cmd}' from {getattr(participant, 'identity', 'unknown')}")
+                if cmd == "pause":
+                    agent._paused = True
+                elif cmd in ("resume", "play"):
+                    agent._paused = False
+        except Exception as e:
+            print(f"⚠️ on_data_received error: {e}")
+
+    # Register likely event names (use camelCase names used by LiveKit logs)
+    safe_on("participantConnected", on_participant_connected)
+    safe_on("participantDisconnected", on_participant_disconnected)
+    safe_on("roomMetadataChanged", on_room_metadata_changed)
+    safe_on("dataReceived", on_data_received)
+
+    # ---------- try to discover existing participants and extract user_id ----------
     try:
-        # Check if room has metadata with user_id
-        if hasattr(room, 'metadata') and room.metadata:
-            metadata_str = room.metadata
-            print(f"🔍 DEBUG: Room metadata: {metadata_str}")
-            try:
-                # Parse JSON metadata
-                metadata = json.loads(metadata_str)
-                if 'userId' in metadata:
-                    agent.user_id = metadata['userId']
-                    print(f"✅ Found user_id in room metadata: {agent.user_id}")
-                elif 'user_id' in metadata:
-                    agent.user_id = metadata['user_id']
-                    print(f"✅ Found user_id in room metadata: {agent.user_id}")
-            except json.JSONDecodeError as e:
-                print(f"⚠️ Could not parse room metadata JSON: {e}")
-                print(f"🔍 Raw room metadata: {metadata_str}")
-        
-        # Check existing participants - use correct LiveKit API
         participants = []
         try:
-            # Use the correct LiveKit room API
-            participants = list(room.remote_participants.values())
-            print(f"🔍 DEBUG: Found {len(participants)} remote participants")
-            
-            # Also check local participants
-            if room.local_participant:
+            participants = list(getattr(room, "remote_participants", {}).values())
+            if getattr(room, "local_participant", None):
                 participants.append(room.local_participant)
-                print(f"🔍 DEBUG: Found 1 local participant")
-        except Exception as e:
-            print(f"⚠️ Error getting participants: {e}")
-            # Fallback to old method
+        except Exception:
             if hasattr(room, "get_participants"):
                 participants = room.get_participants()
             elif hasattr(room, "participants"):
-                participants = room.participants.values()
+                participants = list(room.participants.values())
 
-        print(f"🔍 DEBUG: Total participants found: {len(participants)}")
-        
-        for participant in participants:
-            print(f"🔍 DEBUG: Existing participant identity: {participant.identity}")
-            if participant.identity and not participant.identity.startswith("agent"):
-                # Check participant metadata
-                if hasattr(participant, 'metadata') and participant.metadata:
-                    metadata_str = participant.metadata
-                    print(f"🔍 DEBUG: Existing participant metadata: {metadata_str}")
-                    try:
-                        # Parse JSON metadata
-                        metadata = json.loads(metadata_str)
-                        if 'userId' in metadata:
-                            agent.user_id = metadata['userId']
-                            print(f"✅ Found user_id in existing participant metadata: {agent.user_id}")
-                            break
-                        elif 'user_id' in metadata:
-                            agent.user_id = metadata['user_id']
-                            print(f"✅ Found user_id in existing participant metadata: {agent.user_id}")
-                            break
-                    except json.JSONDecodeError as e:
-                        print(f"⚠️ Could not parse participant metadata JSON: {e}")
-                        print(f"🔍 Raw metadata: {metadata_str}")
-                
-                # Fallback: use participant identity (email) as user_id for RAG lookup
-                if agent.user_id == "default-user":
-                    agent.user_id = participant.identity
-                    print(f"✅ Using existing participant identity as user_id: {agent.user_id}")
-                    break
-        
-        # If still not found, wait for participant to join
-        if agent.user_id == "default-user":
-            print(f"⏳ No user found yet, waiting for participant to join...")
-            # Don't wait here - let the event listener handle it
-    
+        print(f"🔍 Found {len(participants)} participants at startup")
+        for p in participants:
+            try:
+                if getattr(p, "identity", None) and not p.identity.startswith("agent"):
+                    meta = getattr(p, "metadata", None)
+                    if meta:
+                        try:
+                            parsed = json.loads(meta)
+                            if "userId" in parsed:
+                                agent.user_id = parsed["userId"]
+                                print(f"✅ Found userId in participant metadata: {agent.user_id}")
+                                break
+                        except Exception:
+                            pass
+                    if agent.user_id == "default-user":
+                        agent.user_id = p.identity
+                        print(f"ℹ️ Using participant.identity as user_id: {agent.user_id}")
+                        break
+            except Exception:
+                continue
     except Exception as e:
-        print(f"⚠️ Error checking existing participants: {e}")
-        # Keep default-user as fallback
-    
-    print(f"🔍 DEBUG: Current agent.user_id: {agent.user_id}")
+        print(f"⚠️ participant discovery error: {e}")
 
-    # Wait a moment for room to be fully connected
-    print(f"⏳ Waiting for room to be fully connected...")
-    await asyncio.sleep(2)
-    
-    # Check participants again after waiting - use correct LiveKit API
-    participants_after_wait = []
-    try:
-        participants_after_wait = list(room.remote_participants.values())
-        if room.local_participant:
-            participants_after_wait.append(room.local_participant)
-    except Exception as e:
-        print(f"⚠️ Error getting participants after wait: {e}")
-        # Fallback
-        if hasattr(room, "get_participants"):
-            participants_after_wait = room.get_participants()
-        elif hasattr(room, "participants"):
-            participants_after_wait = room.participants.values()
-    
-    print(f"🔍 DEBUG: Participants after waiting: {len(participants_after_wait)}")
-    for p in participants_after_wait:
-        print(f"🔍 DEBUG: Participant after wait: {p.identity}")
-    
-    agent._room = room
+    print(f"🧩 Final user_id for session: {agent.user_id}")
 
-    # -----------------------------------------------------------------
-    # 🗂️ Fetch actual chunks (context text) for greeting
-    # -----------------------------------------------------------------
+    # small settle
+    await asyncio.sleep(1)
+
+    # ---------- transcription listener (many possible event names) ----------
+    def make_transcript_handler():
+        def handler(*args, **kwargs):
+            """
+            Generic handler to accept various signatures:
+            - (participant, text)
+            - (identity, text)
+            - (data) where data contains speaker/text
+            We try to extract speaker and text robustly.
+            """
+            try:
+                speaker = None
+                text = None
+                # args variants
+                if len(args) >= 2:
+                    # common: (participant, text)
+                    a0, a1 = args[0], args[1]
+                    if hasattr(a0, "identity") and isinstance(a1, str):
+                        speaker = getattr(a0, "identity", None)
+                        text = a1
+                    elif isinstance(a0, str) and isinstance(a1, str):
+                        speaker = a0
+                        text = a1
+                elif len(args) == 1:
+                    a0 = args[0]
+                    if isinstance(a0, dict):
+                        speaker = a0.get("speaker") or a0.get("identity")
+                        text = a0.get("text") or a0.get("transcript") or a0.get("utterance")
+                    elif isinstance(a0, str):
+                        # single text message
+                        text = a0
+                # fallback kwargs
+                if not text:
+                    text = kwargs.get("text") or kwargs.get("transcript") or kwargs.get("utterance")
+                if not speaker:
+                    speaker = kwargs.get("speaker") or kwargs.get("identity")
+
+                if text and speaker:
+                    # only treat non-agent participants as guest
+                    if isinstance(speaker, str) and not str(speaker).startswith("agent"):
+                        print(f"📝 Transcription from {speaker}: {text[:120]}")
+                        agent.remember("guest", text)
+                elif text:
+                    # unknown speaker — still remember as guest fallback
+                    print(f"📝 Transcription (unknown speaker): {text[:120]}")
+                    agent.remember("guest", text)
+            except Exception as e:
+                print(f"⚠️ transcript handler error: {e}")
+        return handler
+
+    transcript_handler = make_transcript_handler()
+    # try many event names commonly used by integrations
+    possible_transcript_events = [
+        "transcriptionReceived", "transcriptReceived", "transcription", "transcript",
+        "transcriptionEvent", "transcriptEvent", "speechDetected"
+    ]
+    for ev in possible_transcript_events:
+        safe_on(ev, transcript_handler)
+
+    # ---------- fetch initial context (RAG) ----------
     initial_context = await fetch_initial_chunks(agent.user_id)
     if initial_context:
-        init_message = (
-            "Hello! I’ve loaded your knowledge base. "
-            "Here’s what I found in your documents:\n" + initial_context[:400]
-        )
+        init_message = "Hello! I’ve loaded your knowledge base. Here’s what I found:\n" + initial_context[:400]
     else:
         init_message = "Hello! I couldn’t find any uploaded documents for you yet."
 
-    # -----------------------------------------------------------------
-    # 🎧 Start Real-time Gemini Voice Session
-    # -----------------------------------------------------------------
+    # ---------- start session (LLM) ----------
     await session.start(
         room=room,
         agent=agent,
@@ -280,43 +290,78 @@ async def entrypoint(ctx: agents.JobContext):
     )
 
     print("🎤 AI Host Session Started Successfully!")
-    # await session.say(init_message)
-    print(f"💬 Initial Greeting Sent: {init_message}")
 
-    # continue standard behavior
-    await session.generate_reply(instructions=SESSION_INSTRUCTION)
+    # Use generate_reply with instructions (don't use text=)
+    try:
+        await session.generate_reply(instructions=SESSION_INSTRUCTION)
+        agent.remember("host", init_message)
+        print(f"💬 Initial host instructions sent (SESSION_INSTRUCTION).")
+    except Exception as e:
+        print(f"⚠️ generate_reply error: {e}")
+
+    # ---------- Proactive Host Loop (asks follow-ups automatically) ----------
+    async def host_loop():
+        # wait a bit before first proactive question
+        await asyncio.sleep(5)
+        while True:
+            try:
+                if agent._paused:
+                    # if paused, skip asking
+                    await asyncio.sleep(3)
+                    continue
+
+                # Build a prompt for a follow-up question using recent memory
+                recent = agent.summarize_memory(max_chars=1000)
+                prompt = (
+                    "You are the podcast Host. Based on the recent short summary of the conversation below, "
+                    "ask one concise, engaging follow-up question to the guest that moves the discussion forward. "
+                    "Keep it natural and friendly.\n\n"
+                    f"Recent conversation:\n{recent}\n\nFollow-up question:"
+                )
+
+                print("🔁 Host loop: generating follow-up question...")
+                # Use generate_reply with instructions so Gemini produces spoken reply (via Realtime)
+                await session.generate_reply(instructions=prompt)
+                # wait a configurable delay before next proactive question
+                await asyncio.sleep(12)  # you can tweak this interval
+            except Exception as e:
+                print(f"⚠️ Host loop exception: {e}")
+                traceback.print_exc()
+                await asyncio.sleep(5)
+
+    # start host loop in background
+    asyncio.create_task(host_loop())
+
+    # Nothing more here; agent session will run until worker is stopped or room disconnects.
 
 
 # ---------------------------------------------------------------------
-# 📦 Fetch initial chunks from internal respond
+# helper: fetch initial chunks from backend internal/respond
 # ---------------------------------------------------------------------
 async def fetch_initial_chunks(user_id: str) -> str:
-    """Ask the backend to return context text directly from chunks."""
     try:
-        # Use the provided user_id - could be email or UUID
-        print(f"📄 Fetching initial chunks for user_id: {user_id}")
+        print(f"📄 Fetch initial chunks for: {user_id}")
         async with aiohttp.ClientSession() as session:
-            form_data = aiohttp.FormData()
-            form_data.add_field("query", "Tell me about the document I uploaded")
-            form_data.add_field("user_id", user_id)
-
+            form = aiohttp.FormData()
+            form.add_field("query", "Tell me about the document I uploaded")
+            form.add_field("user_id", user_id)
             async with session.post(
                 "http://localhost:8000/internal/respond",
-                data=form_data,
+                data=form,
                 timeout=aiohttp.ClientTimeout(total=25),
             ) as resp:
                 if resp.status == 200:
-                    data = await resp.json()
-                    context = data.get("answer_text", "")
-                    print(f"📄 Initial chunks context fetched ({len(context)} chars).")
-                    return context
+                    j = await resp.json()
+                    ctx = j.get("answer_text", "")
+                    print(f"📄 Initial chunks context fetched ({len(ctx)} chars).")
+                    return ctx
+                else:
+                    txt = await resp.text()
+                    print(f"⚠️ fetch_initial_chunks failed: {txt}")
     except Exception as e:
-        print(f"⚠️ Could not fetch initial chunks: {e}")
+        print(f"⚠️ fetch_initial_chunks exception: {e}")
     return ""
 
 
-# ---------------------------------------------------------------------
-# 🧩 CLI Run
-# ---------------------------------------------------------------------
 if __name__ == "__main__":
     agents.cli.run_app(agents.WorkerOptions(entrypoint_fnc=entrypoint))
