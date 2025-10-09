@@ -336,6 +336,19 @@ const fetchLiveKitToken = async () => {
     formData.append("room_name", roomName);
     formData.append("user_id", user.id); 
 
+    // Get selected knowledge base ID from localStorage
+    const selectedKB = localStorage.getItem('selectedKnowledgeBase');
+    if (selectedKB) {
+      try {
+        const kbInfo = JSON.parse(selectedKB);
+        if (kbInfo.type === 'existing' && kbInfo.id) {
+          formData.append("selected_kb_id", kbInfo.id);
+          console.log("🎯 Using selected KB ID:", kbInfo.id);
+        }
+      } catch (e) {
+        console.warn("Failed to parse selected KB info:", e);
+      }
+    }
 
     console.log("🎟️ Fetching LiveKit token for:", user);
 
@@ -423,6 +436,24 @@ const fetchLiveKitToken = async () => {
       // Mute microphone on connection by default
       await room.localParticipant.setMicrophoneEnabled(false);
       setIsMicOn(false);
+      
+      // Send selected KB ID through data channel
+      const selectedKB = localStorage.getItem('selectedKnowledgeBase');
+      if (selectedKB) {
+        try {
+          const kbInfo = JSON.parse(selectedKB);
+          if (kbInfo.type === 'existing' && kbInfo.id) {
+            const data = JSON.stringify({
+              type: 'kb_selection',
+              kb_id: kbInfo.id
+            });
+            await room.localParticipant.publishData(data, { reliable: true });
+            console.log('📤 Sent KB ID through data channel:', kbInfo.id);
+          }
+        } catch (e) {
+          console.warn('Failed to send KB ID:', e);
+        }
+      }
       
       showToast('✅ Connected to LiveKit successfully!', 'success');
     } catch (error) {
