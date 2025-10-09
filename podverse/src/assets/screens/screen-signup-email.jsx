@@ -20,24 +20,44 @@ function SignUpScreenEmail() {
   const navigate = useNavigate();
 
   const handleContinue = async () => {
-    if (!email || !password || !fullName) return alert('Full name, email and password required');
+    if (!email || !password || !fullName) {
+      alert('Full name, email and password are required.');
+      return;
+    }
 
+    if (!isValidEmail(email)) {
+      alert('Please enter a valid email address.');
+      return;
+    }
+  
+    if (!isStrongPassword(password)) {
+      alert('Please use a strong password (min 8 chars, letters, numbers, symbols).');
+      return;
+    }
+  
     setIsLoading(true);
+  
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { full_name: fullName } }
+      options: {
+        data: { full_name: fullName },
+        emailRedirectTo: `${window.location.origin}/create-podcast`, 
+      },
     });
-
+  
     setIsLoading(false);
-
+  
     if (error) {
       alert(error.message);
+    } else if (data.user && !data.user.confirmed_at) {
+      alert('Almost there! Please check your email to confirm your account.');
     } else {
-      alert('Check your email for a confirmation link to complete signup.');
-      navigate('/home');
+      alert('Your account has been created successfully!');
+      navigate('/create-podcast');
     }
   };
+  
 
   const handleFullNameChange = (e) => setFullName(e.target.value);
   const handleEmailChange = (e) => setEmail(e.target.value);
@@ -46,6 +66,11 @@ function SignUpScreenEmail() {
   const isStrongPassword = (pwd) => {
     return /^(?=.*[a-zA-Z])(?=.*\d)(?=.*[\W_]).{8,}$/.test(pwd);
   };
+
+  const isValidEmail = (email) => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  };
+  
 
 
   return (

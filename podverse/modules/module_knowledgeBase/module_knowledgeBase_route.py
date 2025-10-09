@@ -819,161 +819,118 @@ def debug_documents(user_id: str):
     except Exception as e:
         return {"error": str(e)}
 
-# Add this to your module_knowledgeBase_route.py
-
+# ========= PODCAST SCRIPT GENERATION =========
 @router.post("/generate-podcast-script/")
 async def generate_podcast_script(
     role: str = Form(...),  # "host" or "guest"
     topic: Optional[str] = Form(None),
-    length: str = Form("medium"),  # "short", "medium", "long"
     auth_data: dict = Depends(get_authenticated_supabase_client)
 ):
-    """Generate a podcast script based on user's knowledge base"""
+    """Generate a conversational 15-minute podcast script based on user's knowledge base"""
     try:
         supabase_authenticated = auth_data["client"]
         user_id = auth_data["user_id"]
         service_client = get_service_role_client()
         
         print(f"[script-gen] Generating {role} script for user: {user_id}")
-        
-        # 1. Fetch all user's document chunks
-        try:
-            docs_result = (
-                service_client.table("documents")
-                .select("content, metadata")
-                .eq("user_id", user_id)
-                .limit(50)  # Get more chunks for comprehensive script
-                .execute()
-            )
-            
-            if not docs_result.data:
-                return {
-                    "error": "No documents found",
-                    "message": "Please upload documents to your knowledge base first."
-                }
-            
-            print(f"[script-gen] Found {len(docs_result.data)} document chunks")
-            
-        except Exception as e:
-            print(f"[script-gen] Error fetching documents: {e}")
-            return {"error": "Failed to fetch documents", "message": str(e)}
-        
-        # 2. Combine and summarize content
+
+        # Fetch user's document chunks
+        docs_result = (
+            service_client.table("documents")
+            .select("content, metadata")
+            .eq("user_id", user_id)
+            .limit(50)
+            .execute()
+        )
+
+        if not docs_result.data:
+            return {
+                "error": "No documents found",
+                "message": "Please upload documents to your knowledge base first."
+            }
+
         all_content = "\n\n".join([doc["content"] for doc in docs_result.data])
-        
-        # Truncate if too long (keep first 4000 chars for context)
-        if len(all_content) > 4000:
-            context_summary = all_content[:4000] + "..."
-        else:
-            context_summary = all_content
-        
-        # 3. Determine script length
-        length_config = {
-            "short": {"segments": 3, "max_tokens": 800},
-            "medium": {"segments": 5, "max_tokens": 1500},
-            "long": {"segments": 7, "max_tokens": 2500}
-        }
-        config = length_config.get(length, length_config["medium"])
-        
-        # 4. Create role-specific prompt
+        context_summary = all_content[:4000] + "..." if len(all_content) > 4000 else all_content
+
+        # For ~15 minutes, set longer token limit
+        config = {"segments": 10, "max_tokens": 4000}
+
+        # --------------- UPDATED PROMPTS --------------- #
         if role == "host":
-            prompt = f"""You are creating a podcast script where you are the HOST interviewing an expert guest.
+            prompt = f"""
+You are the HOST in a podcast conversation with an expert guest.
+Use the knowledge base below as background context (don't quote it directly):
 
-Based on this knowledge base content:
 {context_summary}
 
-Create a conversational podcast script with exactly {config['segments']} segments:
-1. Opening/Introduction (warm welcome, set the stage)
-2-{config['segments']-1}. Question segments (each with a thoughtful question for the guest)
-{config['segments']}. Closing (thank the guest, summarize key points, call-to-action)
+Generate a continuous 15-minute conversational script (~2000–2500 words) between the HOST and the GUEST.
+Include only the dialogues — no headings, descriptions, or scene explanations.
 
-Topic focus: {topic if topic else "General discussion based on the knowledge base"}
+Make it sound natural, insightful, and flowing, with smooth transitions between topics.
+Change topics every few exchanges to keep it engaging — start from an introduction, move through insights, stories, and end with a natural closing.
 
-Format each segment as:
-[HOST]: Your dialogue here
-[GUEST]: <awaiting response>
+Example format:
+[HOST]: Welcome! I'm excited to have you here today.
+[GUEST]: Thanks for having me, it’s a pleasure.
+[HOST]: Let's start with how you began your journey...
+[GUEST]: It all started when...
 
-Make it conversational, engaging, and natural. Use the knowledge base to inform your questions but don't read it verbatim.
-Keep the tone professional yet friendly."""
+Now, create the full conversation.
+Topic: {topic if topic else "general insights based on the knowledge base"}
+Keep tone professional yet friendly, with realistic pacing and topic changes."""
+        else:
+            prompt = f"""
+You are the GUEST expert in a podcast conversation.
+Use the knowledge base below as your background knowledge (don’t quote it directly):
 
-        else:  # guest
-            prompt = f"""You are creating a podcast script where you are the GUEST expert being interviewed.
-
-Based on this knowledge base content:
 {context_summary}
 
-Create a conversational podcast script with exactly {config['segments']} segments:
-1. Self-introduction and context
-2-{config['segments']-1}. Response segments (answer anticipated questions with insights from the knowledge base)
-{config['segments']}. Closing remarks and key takeaways
+Generate a continuous 15-minute dialogue (~2000–2500 words) between the HOST and the GUEST.
+Include only the dialogues — no descriptions, segment labels, or outlines.
 
-Topic focus: {topic if topic else "General discussion based on the knowledge base"}
+Make it natural, informative, and smooth. Change topics naturally — start with your introduction, move through key ideas, examples, and stories, and end with a thoughtful closing.
 
-Format each segment as:
-[HOST]: <anticipated question>
-[GUEST]: Your detailed, insightful response here
+Example format:
+[HOST]: It’s great to have you on the show. Could you tell us a bit about your work?
+[GUEST]: Absolutely! My work focuses on helping small businesses grow through...
+[HOST]: That’s fascinating. How do you see this evolving?
 
-Make it conversational and engaging. Use examples and anecdotes from the knowledge base.
-Keep the tone professional yet approachable."""
+Topic: {topic if topic else "general insights based on the knowledge base"}
+Keep the tone conversational and authentic, with back-and-forth rhythm between host and guest."""
 
-        # 5. Generate script with LLM
-        try:
-            print(f"[script-gen] Calling LLM with {config['max_tokens']} max tokens")
-            script_text = make_llm_hf(prompt, temperature=0.7, max_tokens=config['max_tokens'])
-            
-            if not script_text or len(script_text) < 50:
-                return {
-                    "error": "Script generation failed",
-                    "message": "The AI couldn't generate a proper script. Please try again."
-                }
-            
-        except Exception as e:
-            print(f"[script-gen] LLM error: {e}")
-            return {"error": "Script generation failed", "message": str(e)}
+        # ------------------------------------------------ #
+
+        print(f"[script-gen] Calling LLM with {config['max_tokens']} max tokens")
+        script_text = make_llm_hf(prompt, temperature=0.7, max_tokens=config['max_tokens'])
         
-        # 6. Parse script into sections
+        if not script_text or len(script_text) < 50:
+            return {
+                "error": "Script generation failed",
+                "message": "The AI couldn't generate a proper script. Please try again."
+            }
+
+        # Parse script
         sections = []
         lines = script_text.split('\n')
-
         for line in lines:
             line = line.strip()
             if not line:
                 continue
-            
-            # More flexible parsing - handles variations
-            if line.upper().startswith('[HOST]') or line.upper().startswith('HOST:') or line.startswith('[HOST:'):
-                # Extract content after the tag
+            if line.upper().startswith('[HOST]') or line.upper().startswith('HOST:'):
                 content = line.split(':', 1)[-1].strip()
-                if '[GUEST]' in content.upper():
-                    # Split if both speakers in one line
-                    parts = content.split('[GUEST]')
-                    if parts[0].strip():
-                        sections.append({"speaker": "HOST", "content": parts[0].strip()})
-                else:
-                    if content and content != '<awaiting response>' and content != '<question>':
-                        sections.append({"speaker": "HOST", "content": content})
-            
-            elif line.upper().startswith('[GUEST]') or line.upper().startswith('GUEST:') or line.startswith('[GUEST:'):
-                # Extract content after the tag
+                sections.append({"speaker": "HOST", "content": content})
+            elif line.upper().startswith('[GUEST]') or line.upper().startswith('GUEST:'):
                 content = line.split(':', 1)[-1].strip()
-                if content and content != '<awaiting response>' and content != '<question>':
-                    sections.append({"speaker": "GUEST", "content": content})
-            
+                sections.append({"speaker": "GUEST", "content": content})
             elif sections:
-                # Continue current section if we have content
-                if line and not line.startswith('[') and not line.startswith('---'):
-                    sections[-1]["content"] += " " + line
+                sections[-1]["content"] += " " + line
 
-        # If parsing failed to find sections, create a single section with all content
         if not sections and script_text:
             sections.append({
                 "speaker": "HOST" if role == "host" else "GUEST",
                 "content": script_text
             })
 
-        print(f"[script-gen] Successfully parsed {len(sections)} sections from script")
-
-        # 7. Return structured data
         word_count = len(script_text.split())
         return {
             "success": True,
@@ -982,7 +939,7 @@ Keep the tone professional yet approachable."""
             "metadata": {
                 "role": role,
                 "word_count": word_count,
-                "estimated_duration": f"{word_count // 150}-{word_count // 130} minutes",
+                "estimated_duration": "≈15 minutes",
                 "segment_count": len(sections),
                 "generated_at": time.time()
             }

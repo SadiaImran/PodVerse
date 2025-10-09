@@ -203,13 +203,12 @@ const ReviewAndStart = ({ formData, goBack }) => {
         <div className="flex justify-between items-center pt-6 border-t border-gray-200">
           <button
             onClick={goBack}
-            className="text-purple-600 hover:text-purple-700 font-medium text-lg hover:underline transition-all flex items-center gap-2"
+            className="text-light-purple font-medium text-3xl hover:underline"
           >
-            <IoMdArrowRoundBack className="text-3xl" />
-            <span className="text-sm">Back</span>
+            <IoMdArrowRoundBack />
           </button>
           <button
-            className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-8 py-3 rounded-xl shadow-md hover:shadow-lg hover:from-purple-700 hover:to-purple-800 transition-all duration-300 font-semibold flex items-center gap-2"
+            className="bg-light-purple text-white px-8 py-3 rounded-xl shadow-md font-semibold flex items-center gap-2"
             onClick={handleStartWithoutScript}
           >
             <span>Start Recording</span>
