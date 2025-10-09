@@ -17,9 +17,10 @@ def get_token(
     identity: str = Form(...),
     room_name: str = Form(...),
     user_id: str = Form(...),
+    selected_kb_id: str = Form(None),  # Add selected knowledge base ID
     auth_data: dict = Depends(get_authenticated_supabase_client)
 ):
-    """Generate LiveKit token and embed user_id as metadata."""
+    """Generate LiveKit token and embed user_id and selected KB as metadata."""
 
     supabase_authenticated = auth_data["client"]
     current_user_id = auth_data["user_id"]  # verified via Bearer token
@@ -27,11 +28,16 @@ def get_token(
     # 🧩 Decide final user_id (prefer frontend one if provided)
     user_id_final = user_id or current_user_id
 
-    print(f"🎟️ Token request: identity={identity}, room={room_name}, user_id={user_id_final}")
+    print(f"🎟️ Token request: identity={identity}, room={room_name}, user_id={user_id_final}, kb_id={selected_kb_id}")
 
-    # ✅ Add metadata
-    metadata = json.dumps({"userId": user_id_final})
-    print("🧩 Token metadata:", metadata)
+    # ✅ Add metadata with selected KB info
+    metadata_dict = {
+        "userId": user_id_final,
+        "selectedKbId": selected_kb_id
+    }
+    metadata = json.dumps(metadata_dict)
+    print("🧩 Token metadata dict:", metadata_dict)
+    print("🧩 Token metadata JSON:", metadata)
 
     token = (
         api.AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET)
