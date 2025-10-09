@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Upload, FileText, Check, XCircle, ArrowRight, Ban, Loader2 } from 'lucide-react';
+import { IoMdArrowRoundBack } from "react-icons/io";
 import { supabase , getSupabaseAuthorizedtoken } from '../../supabaseClient'
 
 // You can reuse your FileUpload component or a simplified version
@@ -97,7 +98,7 @@ const ExistingFilesSelector = ({ files, selectedFile, onFileSelect, disabled, on
   );
 };
 
-const KnowledgeBaseSetup = ({ goNext }) => {
+const KnowledgeBaseSetup = ({ goNext, goBack }) => {
   const [uploadedFile, setUploadedFile] = useState(null);
   const [selectedExistingFile, setSelectedExistingFile] = useState(null);
   const [existingFiles, setExistingFiles] = useState([]);
@@ -160,55 +161,63 @@ const KnowledgeBaseSetup = ({ goNext }) => {
     setSelectedExistingFile(null);
   };
 
-  const handleUploadAndNext = async () => {
-    if (!uploadedFile && !selectedExistingFile) {
-      alert("Please upload a PDF file or select an existing one.");
-      return;
-    }
+  // KnowledgeBaseSetup.js
+const handleUploadAndNext = async () => {
+  if (!uploadedFile && !selectedExistingFile) {
+    alert("Please upload a PDF file or select an existing one.");
+    return;
+  }
 
-    // Case 1: User uploaded a NEW file
-    if (uploadedFile) {
-      setIsUploading(true);
-      alert("Uploading document... This may take a few minutes depending on the file size.");
+  // Store the selected knowledge base information in localStorage or context
+  const knowledgeBaseInfo = uploadedFile 
+    ? { type: 'new', fileName: uploadedFile.name }
+    : { type: 'existing', id: selectedExistingFile.id, fileName: selectedExistingFile.file_name };
+  
+  localStorage.setItem('selectedKnowledgeBase', JSON.stringify(knowledgeBaseInfo));
 
-      try {
-        const token = await getSupabaseAuthorizedtoken();
-        if (!token) {
-          alert("You must be signed in to upload documents.");
-          setIsUploading(false);
-          return;
-        }
+  // Case 1: User uploaded a NEW file
+  if (uploadedFile) {
+    setIsUploading(true);
+    alert("Uploading document... This may take a few minutes depending on the file size.");
 
-        const formData = new FormData();
-        formData.append("file", uploadedFile);
-
-        const res = await axios.post(API_URL +"/upload-knowledge-base/", formData, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "multipart/form-data"
-          }
-        });
-
-        alert("Document uploaded successfully!");
-        console.log("Response from server:", res.data);
-        if (goNext) goNext();
-
-      } catch (error) {
-        const serverMessage = error.response?.data?.message || error.message;
-        console.error("Upload failed:", serverMessage);
-        alert(`Upload failed: ${serverMessage}`);
-      } finally {
+    try {
+      const token = await getSupabaseAuthorizedtoken();
+      if (!token) {
+        alert("You must be signed in to upload documents.");
         setIsUploading(false);
+        return;
       }
-    }
 
-    // Case 2: User selected an EXISTING file
-    else if (selectedExistingFile) {
-      alert(`Using existing file: ${selectedExistingFile.file_name}.`);
-      console.log(`Proceeding with existing file. Storage path: ${selectedExistingFile.storage_path}`);
+      const formData = new FormData();
+      formData.append("file", uploadedFile);
+
+      const res = await axios.post(API_URL +"/upload-knowledge-base/", formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "multipart/form-data"
+        }
+      });
+
+      alert("Document uploaded successfully!");
+      console.log("Response from server:", res.data);
       if (goNext) goNext();
+
+    } catch (error) {
+      const serverMessage = error.response?.data?.message || error.message;
+      console.error("Upload failed:", serverMessage);
+      alert(`Upload failed: ${serverMessage}`);
+    } finally {
+      setIsUploading(false);
     }
-  };
+  }
+
+  // Case 2: User selected an EXISTING file
+  else if (selectedExistingFile) {
+    alert(`Using existing file: ${selectedExistingFile.file_name}.`);
+    console.log(`Proceeding with existing file. Storage path: ${selectedExistingFile.storage_path}`);
+    if (goNext) goNext();
+  }
+};
 
   const canProceed = uploadedFile || selectedExistingFile;
 
@@ -253,26 +262,30 @@ const KnowledgeBaseSetup = ({ goNext }) => {
         )}
       </div>
 
-      <div className="flex justify-end pt-4">
+      {/* Navigation Buttons */}
+      <div className="flex justify-between pt-4">
+        <button 
+          onClick={goBack} 
+          className="text-light-purple font-medium text-3xl hover:underline"
+        >
+          <IoMdArrowRoundBack />
+        </button>
         <button
           onClick={handleUploadAndNext}
           disabled={!canProceed || isUploading}
-          className={`px-8 py-4 rounded-xl font-semibold text-lg transition-all flex items-center justify-center ${
+          className={`px-8 py-2 rounded-xl font-semibold transition-all ${
             canProceed && !isUploading
-              ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg transform hover:scale-105'
+              ? 'bg-light-purple text-white hover:text-gray-800 hover:border-2 hover:border-light-purple hover:bg-white'
               : 'bg-gray-200 text-gray-400 cursor-not-allowed'
           }`}
         >
           {isUploading ? (
             <>
-              <Loader2 className="animate-spin w-5 h-5 mr-2" />
+              <Loader2 className="animate-spin w-5 h-5 mr-2 inline" />
               Uploading...
             </>
           ) : (
-            <>
-              <ArrowRight className="w-5 h-5 mr-2" />
-              Next Step
-            </>
+            'Next'
           )}
         </button>
       </div>
