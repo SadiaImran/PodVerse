@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Form, Depends
-import os, json
+import os, json , time , requests
 from livekit import api
 from dotenv import load_dotenv
 from connection_supabase_client import get_authenticated_supabase_client
+import jwt
 
 load_dotenv()
 router = APIRouter()
@@ -10,7 +11,7 @@ router = APIRouter()
 LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY")
 LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET")
 LIVEKIT_WS_URL = os.getenv("LIVEKIT_URL", "wss://podverse-0nuzilmi.livekit.cloud")
-
+LIVEKIT_EGRESS_URL = "https://egress.livekit.cloud/v1/egress"
 
 @router.post("/get-token")
 def get_token(
@@ -48,3 +49,37 @@ def get_token(
     )
 
     return {"token": token.to_jwt(), "url": LIVEKIT_WS_URL}
+
+# @router.post("/start-recording")
+# def start_livekit_recording(room_name: str = Form(...)):
+#     jwt_token = generate_livekit_jwt(LIVEKIT_API_KEY, LIVEKIT_API_SECRET)
+#     payload = {
+#         "room_name": room_name,
+#         "audio_only": True,
+#         "output": {
+#             "file": {
+#                 "filepath": f"{room_name}_{int(time.time())}.mp3",
+#                 "output_type": "mp3"
+#             }
+#         }
+#     }
+#     headers = {"Authorization": f"Bearer {jwt_token}"}
+#     resp = requests.post(
+#         LIVEKIT_EGRESS_URL,
+#         json=payload,
+#         headers=headers
+#     )
+#     print("[Egress] Start recording response:", resp.status_code, resp.text)
+#     return resp.json() if resp.status_code == 200 else None
+
+# def generate_livekit_jwt(api_key, api_secret):
+#     payload = {
+#         "iss": api_key,
+#         "exp": int(time.time()) + 60 * 10,
+#         "nbf": int(time.time()),
+#         "video": {
+#             "egress": True
+#         }
+#     }
+#     token = jwt.encode(payload, api_secret, algorithm="HS256")
+#     return token

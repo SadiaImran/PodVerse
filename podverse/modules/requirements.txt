@@ -53,3 +53,4 @@ requests
 python-dotenv
 dotenv
 livekit-plugins
+pyjwt
