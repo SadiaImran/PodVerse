@@ -144,6 +144,12 @@ async def entrypoint(ctx: agents.JobContext):
     print(f"🏠 Connected to room: {getattr(room, 'name', 'unknown')}")
     await asyncio.sleep(0.6)
 
+    try:
+        await trigger_audio_egress(getattr(room, 'name', 'my-room'))
+    except Exception as e:
+        print(f"⚠️ Failed to trigger egress automatically: {e}")
+
+
     # safe on helper
     def safe_on(event_name, handler):
         try:
@@ -503,6 +509,20 @@ async def entrypoint(ctx: agents.JobContext):
 
     # end of entrypoint — session runs until room disconnects
 
+async def trigger_audio_egress(room_name: str):
+    """Trigger backend route to start LiveKit audio egress."""
+    try:
+        async with aiohttp.ClientSession() as session:
+            url = "http://localhost:8000/livekit/start-audio-egress"
+            data = {"room_name": room_name}
+            async with session.post(url, data=data) as resp:
+                txt = await resp.text()
+                if resp.status == 200:
+                    print(f"✅ Audio egress started successfully for room: {room_name}")
+                else:
+                    print(f"⚠️ Failed to start egress: {resp.status} — {txt}")
+    except Exception as e:
+        print(f"❌ Exception in trigger_audio_egress: {e}")
 
 
 
