@@ -77,18 +77,6 @@ def call_llm(query: str):
         }
 
 # ========= LLM SETUP =========
-# COMMENTED OUT: Together API - using Hugging Face instead
-# def make_llm(temperature=0.1, max_tokens=512):
-#     """Standard LLM for document Q&A"""
-#     return ChatOpenAI(
-#         openai_api_base="https://api.together.xyz/v1",
-#         openai_api_key=os.environ.get("TOGETHER_API_KEY"),
-#         model_name="mistralai/Mistral-7B-Instruct-v0.1",
-#         temperature=temperature,
-#         max_tokens=max_tokens,
-#     )
-
-# NEW: Hugging Face LLM function
 def make_llm_hf(query: str, temperature=0.1, max_tokens=512):
     """Use Hugging Face LLM for document Q&A"""
     try:
@@ -237,9 +225,15 @@ async def upload_knowledge_base(
     user_id = auth_data["user_id"]
 
     # Validate file type
-    allowed = {"application/pdf": ".pdf", "text/plain": ".txt"}
+    allowed = {
+        "application/pdf": ".pdf",
+        "text/plain": ".txt",
+        "text/csv": ".csv",
+        "application/json": ".json"
+    }
+
     if file.content_type not in allowed:
-        raise HTTPException(status_code=400, detail="Only PDF and TXT files are allowed.")
+        raise HTTPException(status_code=400, detail="Only PDF, TXT, URLs, CSV and json format are allowed.")
 
     file_data = await file.read()
     if not file_data:
@@ -293,6 +287,7 @@ async def upload_knowledge_base(
 
     # Create document chunks
     chunks_created = False
+    error_message = None
     try:
         docs: List[Document] = []
         ext = os.path.splitext(file.filename)[1].lower()
@@ -303,6 +298,42 @@ async def upload_knowledge_base(
             text = file_data.decode("utf-8", errors="replace")
             if text.strip():
                 docs = [Document(page_content=text, metadata={"source": file.filename})]
+        elif ext == ".csv":
+            import pandas as pd
+            from io import BytesIO
+            try:
+                # Try reading CSV with error handling for malformed data
+                df = pd.read_csv(
+                    BytesIO(file_data),
+                    on_bad_lines='skip',  # Skip bad lines
+                    engine='python',      # More flexible parser
+                    encoding='utf-8',
+                    sep=None              # Auto-detect separator
+                )
+                # Convert DataFrame to readable text format
+                text = df.to_string(index=False)
+                docs = [Document(page_content=text, metadata={"source": file.filename})]
+                print(f"[upload] CSV parsed successfully: {len(df)} rows, {len(df.columns)} columns")
+            except Exception as csv_error:
+                print(f"[upload] CSV parsing error: {csv_error}")
+                # Fallback: treat as plain text
+                try:
+                    text = file_data.decode("utf-8", errors="replace")
+                    docs = [Document(page_content=text, metadata={"source": file.filename})]
+                    print(f"[upload] CSV processed as plain text fallback")
+                except Exception:
+                    docs = []
+                    error_message = f"Failed to parse CSV: {str(csv_error)}"
+        elif ext == ".json":
+            import json
+            try:
+                json_data = json.loads(file_data.decode("utf-8"))
+                text = json.dumps(json_data, indent=2)
+                docs = [Document(page_content=text, metadata={"source": file.filename})]
+            except Exception as json_error:
+                print(f"[upload] JSON parsing error: {json_error}")
+                docs = []
+                error_message = f"Failed to parse JSON: {str(json_error)}"
 
         if docs:
             chunks = chunk_docs(docs)
@@ -334,15 +365,130 @@ async def upload_knowledge_base(
                 service_client.table("documents").insert(rows).execute()
                 print(f"[upload] Successfully inserted {len(rows)} document chunks with user_id: {user_id}")
                 chunks_created = True
+            else:
+                error_message = "No chunks could be created from the document"
+        else:
+            if not error_message:
+                error_message = "No content could be extracted from the document"
 
     except Exception as e:
         print(f"[upload] Document processing failed: {e}")
+        error_message = f"Document processing failed: {str(e)}"
 
     return {
-        "message": "Document uploaded successfully.", 
+        "message": "Document uploaded successfully." if chunks_created else "Document uploaded but processing failed.",
         "public_url": public_url, 
-        "chunks_created": chunks_created
+        "chunks_created": chunks_created,
+        "kb_id": kb_id,
+        "error": error_message if error_message else None,
+        "warning": "Some CSV rows were skipped due to formatting issues" if ext == ".csv" and chunks_created else None
     }
+
+@router.post("/add-url-knowledge-base/")
+async def add_url_knowledge_base(
+    url: str = Form(...),
+    auth_data: dict = Depends(get_authenticated_supabase_client)
+):
+    """Fetch a webpage, extract text, and save it to knowledge base."""
+    import requests
+    from bs4 import BeautifulSoup
+
+    supabase_authenticated = auth_data["client"]
+    user_id = auth_data["user_id"]
+    service_client = get_service_role_client()
+
+    try:
+        # Fetch and parse URL
+        response = requests.get(url, timeout=10)
+        soup = BeautifulSoup(response.text, "html.parser")
+        text = soup.get_text(separator="\n")
+        text = " ".join(text.split())[:100000]  # limit long text
+
+        # Generate storage name for URL
+        timestamp = int(time.time())
+        storage_name = f"{timestamp}_url_content.txt"
+        
+        # Get page title for display
+        page_title = soup.title.string if soup.title else url
+        
+        print(f"[add-url] Processing URL: {url} (title: {page_title})")
+
+        # Store metadata in knowledge_base table first
+        try:
+            insert_result = supabase_authenticated.table("knowledge_base").insert({
+                "user_id": user_id,
+                "file_name": page_title,
+                "public_url": url,  # Store original URL
+                "storage_path": storage_name,  # Use generated storage path
+            }).execute()
+
+            kb_id = insert_result.data[0]["id"]
+            print(f"[add-url] Created knowledge_base entry with kb_id: {kb_id}")
+        except Exception as e:
+            print(f"[add-url] Failed to create knowledge_base entry: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to save URL metadata: {str(e)}")
+
+        # Check if chunks already exist
+        if check_document_chunks_exist(service_client, user_id, storage_name):
+            print(f"[add-url] Chunks already exist for {storage_name}")
+            return {
+                "message": "URL added successfully. Chunks already exist in database.",
+                "url": url,
+                "chunks_created": False,
+                "kb_id": kb_id
+            }
+
+        # Process into chunks
+        docs = [Document(page_content=text, metadata={"source": url, "title": page_title})]
+        chunks = chunk_docs(docs)
+        
+        if not chunks:
+            return {
+                "message": "No content could be extracted from URL.",
+                "url": url,
+                "chunks_created": False,
+                "kb_id": kb_id
+            }
+
+        # Add metadata to chunks
+        for chunk in chunks:
+            chunk.metadata.update({
+                "title": page_title,
+                "file_path": storage_name,
+                "user_id": user_id,
+                "source": url
+            })
+
+        # Generate embeddings
+        embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+        vectors = embeddings.embed_documents([c.page_content for c in chunks])
+
+        # Store in documents table with kb_id
+        rows = [
+            {
+                "content": c.page_content,
+                "metadata": c.metadata,
+                "embedding": vectors[i],
+                "user_id": user_id,
+                "kb_id": kb_id,  # Link to knowledge_base entry
+            }
+            for i, c in enumerate(chunks)
+        ]
+
+        service_client.table("documents").insert(rows).execute()
+        print(f"[add-url] Successfully inserted {len(rows)} document chunks with kb_id: {kb_id}")
+
+        return {
+            "message": "URL added successfully to knowledge base!",
+            "url": url,
+            "chunks_created": True,
+            "chunk_count": len(rows),
+            "kb_id": kb_id
+        }
+    except Exception as e:
+        print(f"Error adding URL: {e}")
+        raise HTTPException(status_code=500, detail="Failed to process URL.")
+
 
 @router.post("/process-existing-document/")
 async def process_existing_document(
@@ -366,7 +512,7 @@ async def process_existing_document(
         if not kb_result.data:
             raise HTTPException(status_code=404, detail="Document not found or access denied.")
         document_info = kb_result.data[0]
-        kb_id = document_info["id"]   # <-- YEH LINE ADD KARO!
+        kb_id = document_info["id"]
     except Exception as e:
         print(f"Error fetching document info: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch document information.")
@@ -426,7 +572,7 @@ async def process_existing_document(
                 "metadata": c.metadata, 
                 "embedding": vectors[i], 
                 "user_id": user_id,
-                "kb_id": kb_id   # <-- YEH LINE ADD KARO!
+                "kb_id": kb_id
             }
             for i, c in enumerate(chunks)
         ]
@@ -490,7 +636,8 @@ async def query_audio(
 
 @router.post("/respond/")
 async def generate_response(
-    query: str = Form(...), 
+    query: str = Form(...),
+    kb_id: Optional[str] = Form(None),  # NEW: Filter by specific document
     auth_data: dict = Depends(get_authenticated_supabase_client)
 ):
     """Generate AI response for the given query - returns both text and audio; grounded to user's docs."""
@@ -503,6 +650,8 @@ async def generate_response(
 
         service_client = get_service_role_client()
 
+        print(f"[respond] Query: {q}, User: {user_id}, KB ID: {kb_id}")
+
         # Handle small talk
         smalltalk = detect_small_talk(q)
         if smalltalk:
@@ -513,17 +662,20 @@ async def generate_response(
                 "audio_type": "audio/wav",
             }
 
-        # Check if user has documents
+        # Check if user has documents (filtered by kb_id if provided)
         try:
-            docs_resp = (
+            docs_check = (
                 supabase_authenticated.table("documents")
                 .select("id")
                 .eq("user_id", user_id)
-                .limit(1)
-                .execute()
             )
+            if kb_id:
+                docs_check = docs_check.eq("kb_id", kb_id)
+            
+            docs_resp = docs_check.limit(1).execute()
+            
             if not docs_resp.data:
-                msg = "I don't have any documents for you yet. Please upload a file first."
+                msg = "I don't have any documents for you yet. Please upload a file first." if not kb_id else "No documents found for the selected knowledge base."
                 return {
                     "answer_text": msg,
                     "sources": [],
@@ -539,17 +691,22 @@ async def generate_response(
 
         candidate_rows = []
         try:
+            # Build RPC params with optional kb_id filter
+            rpc_params = {
+                "query_embedding": query_vector,
+                "match_count": 5,
+                "filter_user_id": user_id
+            }
+            
             # Try the simple RPC function first
-            rpc_result = service_client.rpc(
-                "match_documents_simple",
-                {
-                    "query_embedding": query_vector, 
-                    "match_count": 5, 
-                    "filter_user_id": user_id
-                },
-            ).execute()
+            rpc_result = service_client.rpc("match_documents_simple", rpc_params).execute()
+            
             if rpc_result.data:
-                candidate_rows = rpc_result.data
+                # Filter by kb_id if provided (client-side filter)
+                if kb_id:
+                    candidate_rows = [row for row in rpc_result.data if row.get("kb_id") == kb_id]
+                else:
+                    candidate_rows = rpc_result.data
                 print(f"[respond] RPC search successful: {len(candidate_rows)} results")
         except Exception as e:
             print(f"[respond] RPC search failed: {e}")
@@ -558,13 +715,17 @@ async def generate_response(
                 rpc_result = service_client.rpc(
                     "match_documents_v2",
                     {
-                        "query_embedding": query_vector, 
-                        "match_count": 5, 
+                        "query_embedding": query_vector,
+                        "match_count": 5,
                         "metadata_filter": {"user_id": user_id}
                     },
                 ).execute()
                 if rpc_result.data:
-                    candidate_rows = rpc_result.data
+                    # Filter by kb_id if provided
+                    if kb_id:
+                        candidate_rows = [row for row in rpc_result.data if row.get("kb_id") == kb_id]
+                    else:
+                        candidate_rows = rpc_result.data
                     print(f"[respond] Fallback RPC successful: {len(candidate_rows)} results")
             except Exception as e2:
                 print(f"[respond] Fallback RPC also failed: {e2}")
@@ -572,13 +733,16 @@ async def generate_response(
         # Fallback search methods
         if not candidate_rows:
             try:
-                fallback = (
+                fallback_query = (
                     service_client.table("documents")
-                    .select("content, metadata, embedding")
+                    .select("content, metadata, embedding, kb_id")
                     .eq("user_id", user_id)
-                    .limit(20)
-                    .execute()
                 )
+                if kb_id:
+                    fallback_query = fallback_query.eq("kb_id", kb_id)
+                
+                fallback = fallback_query.limit(20).execute()
+                
                 if fallback.data:
                     import numpy as np
                     qv = np.array(query_vector)
@@ -592,13 +756,15 @@ async def generate_response(
             except Exception:
                 # Final fallback
                 try:
-                    simple = (
+                    simple_query = (
                         service_client.table("documents")
                         .select("content, metadata")
                         .eq("user_id", user_id)
-                        .limit(5)
-                        .execute()
                     )
+                    if kb_id:
+                        simple_query = simple_query.eq("kb_id", kb_id)
+                    
+                    simple = simple_query.limit(5).execute()
                     candidate_rows = simple.data or []
                 except Exception as sfe:
                     print(f"[respond] Simple fallback failed: {sfe}")
@@ -645,10 +811,8 @@ async def generate_response(
     except Exception as e:
         print(f"[respond] Error: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
-    
 
 
-# module_knowledgeBase_route.py
 @router.post("/internal/respond")
 async def internal_respond(
     query: str = Form(...),
@@ -660,7 +824,7 @@ async def internal_respond(
     Uses service role client (no auth required).
     """
     try:
-        service_client = get_service_role_client()  # <-- Use service role client
+        service_client = get_service_role_client()
 
         # Filter documents by user_id and kb_id (or storage_path)
         docs_query = (
@@ -684,8 +848,6 @@ async def internal_respond(
     except Exception as e:
         print(f"[internal respond] Error: {e}")
         return {"answer_text": "I'm sorry, I couldn't process your request right now."}
- 
-
 
 
 @router.post("/internal/fetch-chunks")
@@ -695,7 +857,7 @@ def fetch_chunks(user_id: str = Form(...)):
     """
     try:
         service_client = get_service_role_client()
-        result = service_client.table("knowledge_base").select("file_name, title").eq("user_id", user_id).execute()
+        result = service_client.table("knowledge_base").select("id, file_name, storage_path").eq("user_id", user_id).execute()
         chunks = result.data or []
         return {"chunks": chunks}
     except Exception as e:
@@ -709,7 +871,7 @@ def debug_documents(user_id: str):
         service_client = get_service_role_client()
         
         # Check documents table
-        docs_result = service_client.table("documents").select("id, user_id, metadata").eq("user_id", user_id).limit(5).execute()
+        docs_result = service_client.table("documents").select("id, user_id, metadata, kb_id").eq("user_id", user_id).limit(5).execute()
         
         # Check knowledge_base table
         kb_result = service_client.table("knowledge_base").select("id, user_id, file_name").eq("user_id", user_id).limit(5).execute()
@@ -729,6 +891,7 @@ def debug_documents(user_id: str):
 async def generate_podcast_script(
     role: str = Form(...),  # "host" or "guest"
     topic: Optional[str] = Form(None),
+    kb_id: Optional[str] = Form(None),  # NEW: Filter by specific document
     auth_data: dict = Depends(get_authenticated_supabase_client)
 ):
     """Generate a conversational 15-minute podcast script based on user's knowledge base"""
@@ -737,21 +900,26 @@ async def generate_podcast_script(
         user_id = auth_data["user_id"]
         service_client = get_service_role_client()
         
-        print(f"[script-gen] Generating {role} script for user: {user_id}")
+        print(f"[script-gen] Generating {role} script for user: {user_id}, kb_id: {kb_id}")
 
-        # Fetch user's document chunks
-        docs_result = (
+        # Fetch user's document chunks - filter by kb_id if provided
+        docs_query = (
             service_client.table("documents")
             .select("content, metadata")
             .eq("user_id", user_id)
-            .limit(50)
-            .execute()
         )
+        
+        # Filter by specific document if kb_id is provided
+        if kb_id:
+            docs_query = docs_query.eq("kb_id", kb_id)
+            print(f"[script-gen] Filtering by kb_id: {kb_id}")
+        
+        docs_result = docs_query.limit(50).execute()
 
         if not docs_result.data:
             return {
                 "error": "No documents found",
-                "message": "Please upload documents to your knowledge base first."
+                "message": "Please upload documents to your knowledge base first." if not kb_id else "No documents found for the selected knowledge base."
             }
 
         all_content = "\n\n".join([doc["content"] for doc in docs_result.data])
@@ -776,7 +944,7 @@ Change topics every few exchanges to keep it engaging — start from an introduc
 
 Example format:
 [HOST]: Welcome! I'm excited to have you here today.
-[GUEST]: Thanks for having me, it’s a pleasure.
+[GUEST]: Thanks for having me, it's a pleasure.
 [HOST]: Let's start with how you began your journey...
 [GUEST]: It all started when...
 
@@ -786,7 +954,7 @@ Keep tone professional yet friendly, with realistic pacing and topic changes."""
         else:
             prompt = f"""
 You are the GUEST expert in a podcast conversation.
-Use the knowledge base below as your background knowledge (don’t quote it directly):
+Use the knowledge base below as your background knowledge (don't quote it directly):
 
 {context_summary}
 
@@ -796,9 +964,9 @@ Include only the dialogues — no descriptions, segment labels, or outlines.
 Make it natural, informative, and smooth. Change topics naturally — start with your introduction, move through key ideas, examples, and stories, and end with a thoughtful closing.
 
 Example format:
-[HOST]: It’s great to have you on the show. Could you tell us a bit about your work?
+[HOST]: It's great to have you on the show. Could you tell us a bit about your work?
 [GUEST]: Absolutely! My work focuses on helping small businesses grow through...
-[HOST]: That’s fascinating. How do you see this evolving?
+[HOST]: That's fascinating. How do you see this evolving?
 
 Topic: {topic if topic else "general insights based on the knowledge base"}
 Keep the tone conversational and authentic, with back-and-forth rhythm between host and guest."""
@@ -846,7 +1014,8 @@ Keep the tone conversational and authentic, with back-and-forth rhythm between h
                 "word_count": word_count,
                 "estimated_duration": "≈15 minutes",
                 "segment_count": len(sections),
-                "generated_at": time.time()
+                "generated_at": time.time(),
+                "kb_id": kb_id
             }
         }
     except Exception as e:
