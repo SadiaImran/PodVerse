@@ -6,26 +6,18 @@ import {
   SkipBack,
   SkipForward,
   Volume2,
-  Settings,
   ZoomIn,
   ZoomOut,
   Scissors,
   Music,
   Trash2,
-  Move,
-  ChevronRight,
-  ChevronDown,
   Sliders,
   Clock,
-  VolumeX,
-  Volume1,
-  Zap,
-  Download,
-  Copy,
-  RotateCcw
 } from 'lucide-react';
 
 import TrackEditPanel from './comp-audio-track-edit-panel';
+
+const API_BASE_URL = 'http://localhost:8000/audio-edit'; 
 
 // Enhanced scrollbar styles with modern look
 const scrollbarStyles = `
@@ -145,9 +137,8 @@ const DraggableTrackWaveform = ({
       // Apply track settings when ready
       if (wavesurfer.backend && wavesurfer.backend.ac) {
         wavesurfer.setVolume((track.volume || 100) / 100);
-        if (track.speed && track.speed !== 1.0) {
-          wavesurfer.setPlaybackRate(track.speed);
-        }
+        // Don't set playback rate - speed is in the audio file
+        wavesurfer.setPlaybackRate(1.0);
       }
     });
 
@@ -167,19 +158,20 @@ const DraggableTrackWaveform = ({
     };
   }, [track.url, track.id, zoom]);
 
-  // Apply volume and speed changes
-  useEffect(() => {
-    if (wavesurferRef.current && wavesurferRef.current.isReady) {
-      try {
-        wavesurferRef.current.setVolume((track.volume || 100) / 100);
-        if (track.speed && wavesurferRef.current.setPlaybackRate) {
-          wavesurferRef.current.setPlaybackRate(track.speed);
-        }
-      } catch (e) {
-        console.error("Error applying track settings:", e);
+// Apply volume and speed changes
+useEffect(() => {
+  if (wavesurferRef.current && wavesurferRef.current.isReady) {
+    try {
+      wavesurferRef.current.setVolume((track.volume || 100) / 100);
+
+      if (wavesurferRef.current.setPlaybackRate) {
+        wavesurferRef.current.setPlaybackRate(track.speed || 1.0);
       }
+    } catch (e) {
+      console.error("Error applying track settings:", e);
     }
-  }, [track.volume, track.speed]);
+  }
+}, [track.volume, track.speed, track.url]); // Add track.url as dependency
 
   // Update WaveSurfer progress
   useEffect(() => {
@@ -390,15 +382,6 @@ const MultiTrackAudioEngine = ({ tracks, isPlaying, currentTime, volume, onTimeU
       }
     });
 
-    // Clean up removed tracks
-    Object.keys(audioElementsRef.current).forEach(trackId => {
-      if (!tracks.find(t => t.id === trackId)) {
-        const audio = audioElementsRef.current[trackId];
-        audio.pause();
-        URL.revokeObjectURL(audio.src);
-        delete audioElementsRef.current[trackId];
-      }
-    });
   }, [tracks, volume]);
 
   useEffect(() => {
@@ -449,51 +432,6 @@ const MultiTrackAudioEngine = ({ tracks, isPlaying, currentTime, volume, onTimeU
   return null;
 };
 
-// Audio export utility functions
-const exportTrackAsWAV = (track) => {
-  return new Promise((resolve, reject) => {
-    const audio = new Audio(track.url);
-    
-    audio.addEventListener('loadeddata', () => {
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      const source = audioContext.createMediaElementSource(audio);
-      const destination = audioContext.createMediaStreamDestination();
-      
-      source.connect(destination);
-      
-      const mediaRecorder = new MediaRecorder(destination.stream);
-      const chunks = [];
-      
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data);
-      };
-      
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(chunks, { type: 'audio/wav' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${track.name}.wav`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        resolve();
-      };
-      
-      mediaRecorder.start();
-      audio.play();
-      
-      setTimeout(() => {
-        mediaRecorder.stop();
-        audio.pause();
-      }, track.duration * 1000);
-    });
-    
-    audio.addEventListener('error', reject);
-  });
-};
-
 // Generate sample tracks
 const generateAudioTone = (frequency, duration, sampleRate = 44100) => {
   const samples = duration * sampleRate;
@@ -527,6 +465,54 @@ const generateAudioTone = (frequency, duration, sampleRate = 44100) => {
 
   const blob = new Blob([buffer], { type: 'audio/wav' });
   return URL.createObjectURL(blob);
+};
+
+const downloadAudioAsBlob = async (url) => {
+  const response = await fetch(url);
+  const blob = await response.blob();
+  return blob;
+};
+
+const uploadAudioToBackend = async (blob, filename, endpoint, formData = {}) => {
+  const file = new File([blob], filename, { type: blob.type });
+  const form = new FormData();
+  form.append('file', file);
+  
+  Object.entries(formData).forEach(([key, value]) => {
+    form.append(key, value);
+  });
+  
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    method: 'POST',
+    body: form,
+  });
+  
+  if (!response.ok) {
+    throw new Error(`Backend error: ${response.statusText}`);
+  }
+  
+  return response.blob();
+};
+
+const mergeAudioTracks = async (audioBlobs, filenames) => {
+  const form = new FormData();
+  
+  audioBlobs.forEach((blob, index) => {
+    const filename = filenames[index] || `track_${index}.wav`;
+    const file = new File([blob], filename, { type: blob.type });
+    form.append('files', file);
+  });
+  
+  const response = await fetch(`${API_BASE_URL}/merge_audio`, {
+    method: 'POST',
+    body: form,
+  });
+  
+  if (!response.ok) {
+    throw new Error(`Backend error: ${response.statusText}`);
+  }
+  
+  return response.blob();
 };
 
 const generateSampleTracks = () => [
@@ -630,63 +616,99 @@ export const MainPanel = ({
   }, []);
 
   // Enhanced splitting function
-  const splitTrackAtPlayhead = useCallback(() => {
+  const splitTrackAtPlayhead = useCallback(async () => {
     if (!selectedTrackId) return;
-
+  
     const selectedTrack = tracks.find(t => t.id === selectedTrackId);
     if (!selectedTrack) return;
-
+  
     const trackStart = selectedTrack.startTime || 0;
     const trackEnd = trackStart + selectedTrack.duration;
-
-    // Check if playhead is within track boundaries
+  
     if (currentTime <= trackStart || currentTime >= trackEnd) {
       alert(`Playhead must be within the selected track to split. Track runs from ${trackStart.toFixed(1)}s to ${trackEnd.toFixed(1)}s, but playhead is at ${currentTime.toFixed(1)}s.`);
       return;
     }
-
+  
     const splitPoint = currentTime - trackStart;
-
-    // Ensure we don't create tiny segments
+  
     if (splitPoint <= 0.5 || splitPoint >= selectedTrack.duration - 0.5) {
       alert("Cannot split too close to the beginning or end of the track. Leave at least 0.5 seconds on each side.");
       return;
     }
+  
+    try {
+      // Show loading notification
+      const loadingNotif = document.createElement('div');
+      loadingNotif.textContent = 'Splitting track...';
+      loadingNotif.className = 'fixed top-4 right-4 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+      document.body.appendChild(loadingNotif);
+  
+      // Download audio blob
+      const audioBlob = await downloadAudioAsBlob(selectedTrack.url);
+      
+      // Split into two parts using backend
+      const firstPartBlob = await uploadAudioToBackend(
+        audioBlob,
+        `${selectedTrack.name}_part1.wav`,
+        '/split',
+        { start_time: 0, duration: splitPoint }
+      );
+      
+      const secondPartBlob = await uploadAudioToBackend(
+        audioBlob,
+        `${selectedTrack.name}_part2.wav`,
+        '/split',
+        { start_time: splitPoint, duration: selectedTrack.duration - splitPoint }
+      );
+  
+      // Create URLs for the split parts
+      const firstPartUrl = URL.createObjectURL(firstPartBlob);
+      const secondPartUrl = URL.createObjectURL(secondPartBlob);
+  
+      // Create new track segments
+      const firstTrack = {
+        id: `${selectedTrackId}_${Date.now()}_1`,
+        name: `${selectedTrack.name} (Part 1)`,
+        duration: splitPoint,
+        startTime: selectedTrack.startTime,
+        volume: selectedTrack.volume,
+        speed: selectedTrack.speed,
+        url: firstPartUrl  // New URL for first part
+      };
 
-    // Create new track segments
-    const firstTrack = {
-      ...selectedTrack,
-      id: `${selectedTrackId}_${Date.now()}_1`,
-      duration: splitPoint,
-      name: `${selectedTrack.name} (Part 1)`,
-      url: selectedTrack.url // Will need proper audio splitting for real implementation
-    };
-
-    const secondTrack = {
-      ...selectedTrack,
-      id: `${selectedTrackId}_${Date.now()}_2`,
-      startTime: currentTime,
-      duration: selectedTrack.duration - splitPoint,
-      name: `${selectedTrack.name} (Part 2)`,
-      url: selectedTrack.url // Will need proper audio splitting for real implementation
-    };
-
-    setTracks(prev => {
-      const trackIndex = prev.findIndex(t => t.id === selectedTrackId);
-      const newTracks = [...prev];
-      newTracks.splice(trackIndex, 1, firstTrack, secondTrack);
-      return newTracks;
-    });
-
-    setSelectedTrackId(null);
-    setIsEditPanelOpen(false);
-
-    // Show success message
-    const notification = document.createElement('div');
-    notification.textContent = `Track "${selectedTrack.name}" split successfully at ${currentTime.toFixed(1)}s`;
-    notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
-    document.body.appendChild(notification);
-    setTimeout(() => document.body.removeChild(notification), 3000);
+      const secondTrack = {
+        id: `${selectedTrackId}_${Date.now()}_2`,
+        name: `${selectedTrack.name} (Part 2)`,
+        startTime: currentTime,
+        duration: selectedTrack.duration - splitPoint,
+        volume: selectedTrack.volume,
+        speed: selectedTrack.speed,
+        url: secondPartUrl  // New URL for second part
+      };
+    
+      setTracks(prev => {
+        const trackIndex = prev.findIndex(t => t.id === selectedTrackId);
+        const newTracks = [...prev];
+        newTracks.splice(trackIndex, 1, firstTrack, secondTrack);
+        return newTracks;
+      });
+  
+      setSelectedTrackId(null);
+      setIsEditPanelOpen(false);
+  
+      // Remove loading and show success
+      document.body.removeChild(loadingNotif);
+      const notification = document.createElement('div');
+      notification.textContent = `Track "${selectedTrack.name}" split successfully at ${currentTime.toFixed(1)}s`;
+      notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+      document.body.appendChild(notification);
+      setTimeout(() => document.body.removeChild(notification), 3000);
+  
+    } catch (error) {
+      console.error('Split error:', error);
+      alert('Failed to split track. Please try again.');
+    }
   }, [selectedTrackId, tracks, currentTime]);
 
   const removeTrack = useCallback((trackId) => {
@@ -741,27 +763,108 @@ export const MainPanel = ({
   const handleExportTrack = useCallback(async (trackId) => {
     const trackToExport = tracks.find(t => t.id === trackId);
     if (!trackToExport) return;
-
+  
     try {
-      // For demo purposes, we'll create a simple download link
+      const loadingNotif = document.createElement('div');
+      loadingNotif.textContent = `Exporting: ${trackToExport.name}...`;
+      loadingNotif.className = 'fixed top-4 right-4 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+      document.body.appendChild(loadingNotif);
+  
+      // Download audio blob
+      const audioBlob = await downloadAudioAsBlob(trackToExport.url);
+      
+      // Export using backend
+      const exportedBlob = await uploadAudioToBackend(
+        audioBlob,
+        trackToExport.name,
+        '/export',
+        { format: 'wav' }
+      );
+  
+      // Create download link
+      const url = URL.createObjectURL(exportedBlob);
       const a = document.createElement('a');
-      a.href = trackToExport.url;
-      a.download = `${trackToExport.name}.wav`;
+      a.href = url;
+      a.download = `${trackToExport.name}_exported.wav`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-
-      // Show notification
+      URL.revokeObjectURL(url);
+  
+      document.body.removeChild(loadingNotif);
       const notification = document.createElement('div');
-      notification.textContent = `Exporting: ${trackToExport.name}`;
+      notification.textContent = `Exported: ${trackToExport.name}`;
       notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
       document.body.appendChild(notification);
       setTimeout(() => document.body.removeChild(notification), 3000);
+  
     } catch (error) {
       console.error('Export failed:', error);
       alert('Export failed. Please try again.');
     }
   }, [tracks]);
+
+  const handleMergeTracks = useCallback(async () => {
+    if (!selectedTrackId) {
+      alert('Please select at least 2 tracks to merge');
+      return;
+    }
+  
+    // For now, merge all tracks (you can modify this to work with multi-select)
+    if (tracks.length < 2) {
+      alert('Need at least 2 tracks to merge');
+      return;
+    }
+  
+    try {
+      const loadingNotif = document.createElement('div');
+      loadingNotif.textContent = 'Merging tracks...';
+      loadingNotif.className = 'fixed top-4 right-4 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+      document.body.appendChild(loadingNotif);
+  
+      // Sort tracks by start time
+      const sortedTracks = [...tracks].sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
+  
+      // Download all audio blobs
+      const audioBlobs = await Promise.all(
+        sortedTracks.map(track => downloadAudioAsBlob(track.url))
+      );
+  
+      const filenames = sortedTracks.map(track => `${track.name}.wav`);
+  
+      // Merge using backend
+      const mergedBlob = await mergeAudioTracks(audioBlobs, filenames);
+  
+      // Calculate merged track properties
+      const totalDuration = sortedTracks.reduce((sum, t) => sum + t.duration, 0);
+  
+      const mergedTrack = {
+        id: `merged_${Date.now()}`,
+        name: `Merged (${sortedTracks.length} tracks)`,
+        duration: totalDuration,
+        startTime: sortedTracks[0].startTime || 0,
+        volume: 100,
+        speed: 1.0,
+        url: URL.createObjectURL(mergedBlob)
+      };
+  
+      // Replace all tracks with merged track
+      setTracks([mergedTrack]);
+      setSelectedTrackId(null);
+      setIsEditPanelOpen(false);
+  
+      document.body.removeChild(loadingNotif);
+      const notification = document.createElement('div');
+      notification.textContent = `Successfully merged ${sortedTracks.length} tracks!`;
+      notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+      document.body.appendChild(notification);
+      setTimeout(() => document.body.removeChild(notification), 3000);
+  
+    } catch (error) {
+      console.error('Merge failed:', error);
+      alert('Merge failed. Please try again.');
+    }
+  }, [tracks, selectedTrackId]);
 
   const handleResetTrack = useCallback((trackId, resetSettings) => {
     setTracks(prev => prev.map(track =>
@@ -798,36 +901,58 @@ export const MainPanel = ({
     setCurrentTime(Math.min(clickTime, dynamicTotalDuration));
   };
 
-  const handleMasterExport = () => {
-    // Create a simple export of all tracks
-    const exportData = {
-      tracks: tracks.map(track => ({
-        name: track.name,
-        startTime: track.startTime,
-        duration: track.duration,
-        volume: track.volume,
-        speed: track.speed
-      })),
-      totalDuration: dynamicTotalDuration,
-      exportedAt: new Date().toISOString()
-    };
-
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'audio-project.json';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
-    // Show notification
-    const notification = document.createElement('div');
-    notification.textContent = 'Project exported successfully!';
-    notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
-    document.body.appendChild(notification);
-    setTimeout(() => document.body.removeChild(notification), 3000);
+  const handleMasterExport = async () => {
+    if (tracks.length === 0) {
+      alert('No tracks to export');
+      return;
+    }
+  
+    try {
+      const loadingNotif = document.createElement('div');
+      loadingNotif.textContent = `Exporting ${tracks.length} track(s)...`;
+      loadingNotif.className = 'fixed top-4 right-4 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+      document.body.appendChild(loadingNotif);
+  
+      // Export each track individually
+      for (let i = 0; i < tracks.length; i++) {
+        const track = tracks[i];
+        
+        // Download audio blob
+        const audioBlob = await downloadAudioAsBlob(track.url);
+        
+        // Export using backend
+        const exportedBlob = await uploadAudioToBackend(
+          audioBlob,
+          track.name,
+          '/export',
+          { format: 'wav' }
+        );
+  
+        // Create download link
+        const url = URL.createObjectURL(exportedBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${track.name}_exported.wav`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+  
+        // Small delay between downloads to prevent browser blocking
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+  
+      document.body.removeChild(loadingNotif);
+      const notification = document.createElement('div');
+      notification.textContent = `Successfully exported ${tracks.length} track(s) as WAV!`;
+      notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+      document.body.appendChild(notification);
+      setTimeout(() => document.body.removeChild(notification), 3000);
+  
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert('Export failed. Please try again.');
+    }
   };
 
   const formatTime = (seconds) => {
@@ -898,9 +1023,8 @@ export const MainPanel = ({
             >
               <SkipForward className="w-5 h-5 text-gray-600 group-hover:text-gray-800" />
             </button>
-
-            {/* Split Button */}
-            <div className="ml-4 pl-4 border-l border-gray-200">
+            {/* Split and Merge Buttons - Horizontal Layout */}
+            <div className="ml-4 pl-4 border-l border-gray-200 flex items-center gap-2">
               <button
                 onClick={splitTrackAtPlayhead}
                 disabled={!selectedTrackId}
@@ -912,6 +1036,19 @@ export const MainPanel = ({
               >
                 <Scissors className="w-4 h-4" />
                 Split Track
+              </button>
+              
+              <button
+                onClick={handleMergeTracks}
+                disabled={tracks.length < 2}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all duration-200 ${tracks.length >= 2
+                  ? 'bg-purple-100 hover:bg-purple-200 text-purple-700 shadow-sm hover:shadow-md'
+                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  }`}
+                title={tracks.length >= 2 ? "Merge all tracks into one" : "Need at least 2 tracks to merge"}
+              >
+                <Music className="w-4 h-4" />
+                Merge Tracks
               </button>
             </div>
           </div>
