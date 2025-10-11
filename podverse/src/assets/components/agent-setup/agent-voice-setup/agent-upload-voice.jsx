@@ -50,7 +50,8 @@ const VoiceRecorder = ({ onRecordingComplete }) => {
       };
       
       mediaRecorder.onstop = () => {
-        const blob = new Blob(chunks, { type: 'audio/wav' });
+        // Try different audio formats for better compatibility
+        const blob = new Blob(chunks, { type: 'audio/webm;codecs=opus' });
         setAudioBlob(blob);
         onRecordingComplete && onRecordingComplete(blob, recordingText);
         
@@ -425,54 +426,49 @@ const VoiceCloneControls = ({ uploadedFiles, onClone, canClone, onSaveVoice }) =
       return;
     }
 
+    if (uploadedFiles.length === 0) {
+      alert("Please upload at least one audio file!");
+      return;
+    }
+
     setIsCloning(true);
     
     try {
-      // Continue with cloning
       const formDataToSend = new FormData();
-
       uploadedFiles.forEach(fileObj => {
         formDataToSend.append("file_upload", fileObj.file);
       });
-
       formDataToSend.append("text", cloneText);
 
-      try {
-        const endpoint = "http://localhost:8000/voice-clone/";
-        const response = await fetch(endpoint, {
-          method: "POST",
-          body: formDataToSend,
-        });
+      const endpoint = "http://localhost:8000/voice-clone/";
+      const response = await fetch(endpoint, {
+        method: "POST",
+        body: formDataToSend,
+      });
 
-        if (response.ok) {
-          const result = await response.json();
-          console.log("Clone successful:", result);
-          const audioURL = "http://localhost:8000" + result.output_audio;
+      if (response.ok) {
+        const result = await response.json();
+        console.log("Clone successful:", result);
+        const audioURL = "http://localhost:8000" + result.output_audio;
 
-          setClonedAudios(prev => [...prev, { 
-            id: Date.now(), 
-            text: cloneText, 
-            url: audioURL 
-          }]);
-          
-          alert("🎉 Voice cloned successfully!");
-
-        } else {
-          const errText = await response.text();
-          console.error("Clone error response:", errText);
-          alert(`❌ Voice cloning failed: ${response.status} - ${errText}`);
-        }
+        setClonedAudios(prev => [...prev, { 
+          id: Date.now(), 
+          text: cloneText, 
+          url: audioURL 
+        }]);
         
-      } catch (error) {
-        console.error("Error in cloning:", error);
-        alert(`❌ Network Error: ${error.message}. Please check if backend is running on port 8000.`);
-      } finally {
-        setIsCloning(false);
-      }
+        alert("🎉 Voice cloned successfully!");
 
+      } else {
+        const errText = await response.text();
+        console.error("Clone error response:", errText);
+        alert(`❌ Voice cloning failed: ${response.status} - ${errText}`);
+      }
+        
     } catch (error) {
       console.error("Error in cloning:", error);
-      alert(`❌ Unexpected Error: ${error.message}`);
+      alert(`❌ Error: ${error.message}`);
+    } finally {
       setIsCloning(false);
     }
   };
@@ -598,32 +594,11 @@ const VoiceCloneControls = ({ uploadedFiles, onClone, canClone, onSaveVoice }) =
       {/* Action Buttons */}
       <div className="flex gap-3 mb-6">
         <button
-          // onClick={handleClone}
-          onClick={async () => {
-            try {
-    const uploadedUrls = await uploadToCloudinary(uploadedFiles, "audios_preset"); // or videos_preset, etc.
-    console.log("Uploaded:", uploadedUrls);
-  } catch (error) {
-    alert("Upload failed. See console.");
-  }
-
-          }}
-          
-          className={`flex items-center gap-2 px-6 py-3 rounded-lg transition-colors 
-            bg-purple-600 text-white hover:bg-purple-700"
-          }`}
-        >
-              <FileAudio size={16} />
-             Check Files
-          
-        </button>
-
-        <button
           onClick={handleClone}
           disabled={uploadedFiles.length === 0 || isCloning}
           className={`flex items-center gap-2 px-6 py-3 rounded-lg transition-colors ${
             uploadedFiles.length > 0 && !isCloning
-              ? "bg-light-purple text-white hover:bg-light-secondary"
+              ? "bg-purple-600 text-white hover:bg-purple-700"
               : "bg-gray-300 text-gray-500 cursor-not-allowed"
           }`}
         >
@@ -715,8 +690,8 @@ const VoiceUploadSystem = ({ formData, setFormData, handleVoiceUpload }) => {
 
   const handleRecordingComplete = (audioBlob, text) => {
     const recordingFile = {
-      file: new File([audioBlob], `recording-${Date.now()}.wav`, { 
-        type: 'audio/wav' 
+      file: new File([audioBlob], `recording-${Date.now()}.webm`, { 
+        type: 'audio/webm' 
       }),
       id: Date.now() + Math.random().toString(36).substr(2, 9),
       url: URL.createObjectURL(audioBlob),
