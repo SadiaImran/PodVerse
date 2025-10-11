@@ -53,3 +53,5 @@ requests
 python-dotenv
 dotenv
 livekit-plugins
+bs4
+pandas

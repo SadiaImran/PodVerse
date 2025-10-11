@@ -1,4 +1,4 @@
-// ReviewAndStart.jsx - Enhanced UI Design
+// ReviewAndStart.jsx - Enhanced UI Design with kb_id support
 import { CheckCircle, FileText, User, Mic, Info, Loader2, Sparkles, Zap, BookOpen } from "lucide-react";
 import { IoMdArrowRoundBack } from "react-icons/io";
 import { useNavigate } from "react-router-dom";
@@ -21,10 +21,23 @@ const ReviewAndStart = ({ formData, goBack }) => {
         throw new Error("Authentication required");
       }
 
+      // ✅ GET KB_ID FROM SESSION STORAGE
+      const kb_id = sessionStorage.getItem('current_kb_id');
+      
+      if (!kb_id) {
+        console.warn("⚠️ No kb_id found - will use all user documents");
+      } else {
+        console.log("✅ Using kb_id for script generation:", kb_id);
+      }
+
       const formDataToSend = new FormData();
       formDataToSend.append('role', formData.role || 'guest');
       formDataToSend.append('topic', formData.agentName || '');
-      formDataToSend.append('length', 'medium');
+      
+      // ✅ ADD KB_ID TO REQUEST
+      if (kb_id) {
+        formDataToSend.append('kb_id', kb_id);
+      }
 
       const response = await axios.post(
         'http://localhost:8000/generate-podcast-script/',
@@ -56,6 +69,10 @@ const ReviewAndStart = ({ formData, goBack }) => {
     sessionStorage.removeItem('podcastScript');
     navigate('/start-recording');
   };
+
+  // Get knowledge base info for display
+  const kbInfo = JSON.parse(localStorage.getItem('selectedKnowledgeBase') || '{}');
+  const documentName = kbInfo.fileName || kbInfo.url || "Not selected";
 
   return (
     <div className="flex flex-col md:flex-row gap-8">
@@ -102,9 +119,11 @@ const ReviewAndStart = ({ formData, goBack }) => {
             <div className="w-10 h-10 rounded-full bg-orange-50 flex items-center justify-center">
               <FileText className="w-5 h-5 text-orange-600" />
             </div>
-            <div>
-              <p className="text-xs text-gray-500 font-medium">Documents</p>
-              <p className="text-sm text-gray-800 font-semibold">1 uploaded</p>
+            <div className="flex-1">
+              <p className="text-xs text-gray-500 font-medium">Selected Document</p>
+              <p className="text-sm text-gray-800 font-semibold truncate" title={documentName}>
+                {documentName}
+              </p>
             </div>
           </div>
 
@@ -141,7 +160,7 @@ const ReviewAndStart = ({ formData, goBack }) => {
             <div className="flex items-start gap-2">
               <BookOpen className="w-4 h-4 text-purple-500 mt-0.5 flex-shrink-0" />
               <p className="text-sm text-gray-700">
-                Generate a professional podcast script based on your uploaded documents
+                Generate a professional podcast script based on: <strong>{documentName}</strong>
               </p>
             </div>
             <div className="flex items-start gap-2">
@@ -250,8 +269,8 @@ const ReviewAndStart = ({ formData, goBack }) => {
           <div className="flex items-start gap-3 p-3 bg-purple-50 rounded-lg border border-purple-200">
             <CheckCircle className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-semibold text-gray-800">Review Documents</p>
-              <p className="text-xs text-gray-600 mt-1">Confirm all uploaded documents are correct and relevant</p>
+              <p className="text-sm font-semibold text-gray-800">Review Document</p>
+              <p className="text-xs text-gray-600 mt-1">The script will be generated from: {documentName}</p>
             </div>
           </div>
           
