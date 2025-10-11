@@ -7,6 +7,8 @@ import asyncio
 import time
 import traceback
 import re
+import signal
+import sys
 
 from livekit import agents
 from livekit.agents import AgentSession, Agent, RoomInputOptions
@@ -145,9 +147,11 @@ async def entrypoint(ctx: agents.JobContext):
     await asyncio.sleep(0.6)
 
     try:
-        await trigger_audio_egress(getattr(room, 'name', 'my-room'))
+        room_name_str = getattr(room, 'name', 'my-room')
+        print(f"🎬 Auto-starting recording for room: {room_name_str}")
+        await trigger_audio_egress(room_name_str)
     except Exception as e:
-        print(f"⚠️ Failed to trigger egress automatically: {e}")
+        print(f"⚠️ Recording auto-start failed: {e}")
 
 
     # safe on helper
@@ -186,8 +190,14 @@ async def entrypoint(ctx: agents.JobContext):
     def on_participant_disconnected(participant):
         try:
             print(f"👋 participantDisconnected: {getattr(participant, 'identity', None)}")
-        except Exception:
-            pass
+            # If this was the last user participant, stop egress
+            remaining_participants = [p for p in room.remote_participants.values() 
+                                    if not getattr(p, 'identity', '').startswith('agent')]
+            if len(remaining_participants) == 0:
+                print("🛑 Last user disconnected, stopping egress...")
+                asyncio.create_task(stop_audio_egress(room_name_str))
+        except Exception as e:
+            print(f"⚠️ on_participant_disconnected error: {e}")
 
     def on_room_metadata_changed(metadata):
         print(f"📝 roomMetadataChanged: {metadata}")
@@ -216,6 +226,8 @@ async def entrypoint(ctx: agents.JobContext):
                     if kb_id:
                         agent.selected_kb_id = kb_id
                         print(f"✅ Received KB ID from data channel: {kb_id}")
+                        # Also try to fetch initial context with this KB ID
+                        asyncio.create_task(fetch_initial_context_with_kb(agent, kb_id))
         except Exception as e:
             print(f"⚠️ on_data_received: {e}")
 
@@ -510,19 +522,78 @@ async def entrypoint(ctx: agents.JobContext):
     # end of entrypoint — session runs until room disconnects
 
 async def trigger_audio_egress(room_name: str):
-    """Trigger backend route to start LiveKit audio egress."""
+    """Trigger backend route to start LiveKit audio egress with improved error handling."""
     try:
         async with aiohttp.ClientSession() as session:
             url = "http://localhost:8000/livekit/start-audio-egress"
             data = {"room_name": room_name}
-            async with session.post(url, data=data) as resp:
+            
+            print(f"🎬 Triggering audio egress for room: {room_name}")
+            print(f"🔗 Egress URL: {url}")
+            
+            async with session.post(url, data=data, timeout=aiohttp.ClientTimeout(total=30)) as resp:
                 txt = await resp.text()
+                
                 if resp.status == 200:
-                    print(f"✅ Audio egress started successfully for room: {room_name}")
+                    try:
+                        response_data = json.loads(txt) if txt else {}
+                        if response_data.get("success"):
+                            print(f"✅ Audio egress started successfully for room: {room_name}")
+                            print(f"   Egress ID: {response_data.get('egress_id', 'unknown')}")
+                            print(f"   Status: {response_data.get('status', 'unknown')}")
+                        else:
+                            error_msg = response_data.get("error", "Unknown error")
+                            print(f"⚠️ Egress failed: {error_msg}")
+                    except json.JSONDecodeError:
+                        print(f"✅ Audio egress started successfully for room: {room_name}")
+                        print(f"   Response: {txt}")
                 else:
-                    print(f"⚠️ Failed to start egress: {resp.status} — {txt}")
+                    print(f"⚠️ Failed to start egress: HTTP {resp.status}")
+                    print(f"   Response: {txt}")
+                    
+    except asyncio.TimeoutError:
+        print(f"⏰ Timeout while starting egress for room: {room_name}")
     except Exception as e:
         print(f"❌ Exception in trigger_audio_egress: {e}")
+        import traceback
+        traceback.print_exc()
+
+async def stop_audio_egress(room_name: str):
+    """Stop LiveKit audio egress and trigger file processing."""
+    try:
+        async with aiohttp.ClientSession() as session:
+            url = "http://localhost:8000/livekit/stop-audio-egress"
+            data = {"room_name": room_name}
+            
+            print(f"🛑 Stopping audio egress for room: {room_name}")
+            print(f"🔗 Stop Egress URL: {url}")
+            
+            async with session.post(url, data=data, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                txt = await resp.text()
+                
+                if resp.status == 200:
+                    try:
+                        response_data = json.loads(txt) if txt else {}
+                        if response_data.get("success"):
+                            print(f"✅ Audio egress stopped successfully for room: {room_name}")
+                            print(f"   Egress ID: {response_data.get('egress_id', 'unknown')}")
+                            print(f"   Status: {response_data.get('status', 'unknown')}")
+                        else:
+                            error_msg = response_data.get("error", "Unknown error")
+                            print(f"⚠️ Stop egress failed: {error_msg}")
+                    except json.JSONDecodeError:
+                        print(f"✅ Audio egress stopped successfully for room: {room_name}")
+                        print(f"   Response: {txt}")
+                else:
+                    print(f"⚠️ Failed to stop egress: HTTP {resp.status}")
+                    print(f"   Response: {txt}")
+                    
+    except asyncio.TimeoutError:
+        print(f"⏰ Timeout while stopping egress for room: {room_name}")
+    except Exception as e:
+        print(f"❌ Exception in stop_audio_egress: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 
@@ -539,6 +610,27 @@ async def fetch_initial_chunks(user_id: str) -> str:
                     return j.get("answer_text", "")
     except Exception as e:
         print(f"⚠️ fetch_initial_chunks error: {e}")
+    return ""
+
+async def fetch_initial_context_with_kb(agent, kb_id: str):
+    """Fetch initial context when KB ID is received via data channel."""
+    try:
+        print(f"🔍 Fetching initial context with KB ID: {kb_id}")
+        async with aiohttp.ClientSession() as s:
+            form = aiohttp.FormData()
+            form.add_field("query", "Tell me about the document I uploaded")
+            form.add_field("user_id", agent.user_id)
+            form.add_field("kb_id", kb_id)
+            async with s.post("http://localhost:8000/internal/respond", data=form, timeout=aiohttp.ClientTimeout(total=25)) as resp:
+                if resp.status == 200:
+                    j = await resp.json()
+                    context = j.get("answer_text", "")
+                    print(f"📄 Initial context with KB ID fetched ({len(context)} chars)")
+                    return context
+                else:
+                    print(f"⚠️ Failed to fetch context with KB ID: {resp.status}")
+    except Exception as e:
+        print(f"⚠️ fetch_initial_context_with_kb error: {e}")
     return ""
 
 

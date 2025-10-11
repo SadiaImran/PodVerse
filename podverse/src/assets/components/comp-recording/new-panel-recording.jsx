@@ -122,7 +122,7 @@ const WhatsAppWaveform = ({ audioLevel = 0, isActive = false }) => {
 };
 
 // Enhanced Status indicator with time display
-const StatusIndicator = ({ isRecording, isProcessing, isSpeaking, conversationStarted, isPaused, elapsedTime }) => {
+const StatusIndicator = ({ isRecording, isProcessing, isSpeaking, conversationStarted, isPaused, elapsedTime, recordingStatus, recordingUrl }) => {
   // **FIXED: Ensure time is formatted correctly**
   const formatTime = (seconds) => {
     const totalSeconds = Math.floor(seconds);
@@ -137,6 +137,47 @@ const StatusIndicator = ({ isRecording, isProcessing, isSpeaking, conversationSt
         <div className="w-3 h-3 bg-purple-500 rounded-full animate-pulse"></div>
         <Icon name="podcast" className="w-5 h-5 text-purple-400" />
         <span className="font-medium text-purple-300">Ready to Start Live Podcast</span>
+      </div>
+    );
+  }
+  
+  // Show recording save status
+  if (recordingStatus === 'saving') {
+    return (
+      <div className="flex items-center justify-center space-x-3 bg-blue-900/30 px-6 py-3 rounded-full border border-blue-500">
+        <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse shadow-blue-500/50"></div>
+        <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+        <span className="font-medium text-blue-300">Saving Recording to Supabase...</span>
+      </div>
+    );
+  }
+  
+  if (recordingStatus === 'saved' && recordingUrl) {
+    return (
+      <div className="flex flex-col items-center space-y-2">
+        <div className="flex items-center justify-center space-x-3 bg-green-900/30 px-6 py-3 rounded-full border border-green-500">
+          <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse shadow-green-500/50"></div>
+          <Icon name="podcast" className="w-5 h-5 text-green-400" />
+          <span className="font-medium text-green-300">Recording Saved to Supabase!</span>
+        </div>
+        <a 
+          href={recordingUrl} 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="text-green-400 text-sm hover:text-green-300 underline"
+        >
+          Download Recording
+        </a>
+      </div>
+    );
+  }
+  
+  if (recordingStatus === 'error') {
+    return (
+      <div className="flex items-center justify-center space-x-3 bg-red-900/30 px-6 py-3 rounded-full border border-red-500">
+        <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse shadow-red-500/50"></div>
+        <Icon name="podcast" className="w-5 h-5 text-red-400" />
+        <span className="font-medium text-red-300">Recording Save Failed</span>
       </div>
     );
   }
@@ -208,7 +249,6 @@ const NewPanelsRecording = () => {
   const [roomName] = useState(() => `test-room-123`); // Fixed room name for testing
   
   // Existing state
-  const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -235,6 +275,11 @@ const NewPanelsRecording = () => {
     adaptiveStream: true,
     dynacast: true,
   }));
+  
+  // Recording state
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingStatus, setRecordingStatus] = useState('idle'); // 'idle', 'recording', 'saving', 'saved', 'error'
+  const [recordingUrl, setRecordingUrl] = useState(null);
   
   // Time recording state
   const [startTime, setStartTime] = useState(null);
@@ -446,11 +491,46 @@ const fetchLiveKitToken = async () => {
   };
 
   // Disconnect from LiveKit room
-  const disconnectFromLiveKit = () => {
+  const disconnectFromLiveKit = async () => {
     console.log('🔄 Disconnecting from LiveKit room...');
+    
+    // If recording, stop egress and save to Supabase
+    if (isRecording && recordingStatus === 'recording') {
+      setRecordingStatus('saving');
+      showToast('💾 Saving recording to Supabase...', 'info');
+      
+      try {
+        const formData = new FormData();
+        formData.append('room_name', roomName);
+        
+        const response = await fetch('http://localhost:8000/livekit/stop-audio-egress', {
+          method: 'POST',
+          body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          setRecordingUrl(data.public_url);
+          setRecordingStatus('saved');
+          showToast('✅ Recording saved to Supabase!', 'success');
+          console.log('🎉 Recording saved:', data.public_url);
+        } else {
+          setRecordingStatus('error');
+          showToast('❌ Failed to save recording', 'error');
+          console.error('Failed to save recording:', data.error);
+        }
+      } catch (error) {
+        setRecordingStatus('error');
+        showToast('❌ Error saving recording', 'error');
+        console.error('Error saving recording:', error);
+      }
+    }
+    
     room.disconnect();
     setLiveKitConnected(false);
     setIsPlaying(false);
+    setIsRecording(false);
     // Reset timer state
     setElapsedTime(0);
     setPausedTime(0);
@@ -477,6 +557,8 @@ const fetchLiveKitToken = async () => {
     try {
       setIsPlaying(true);
       setConversationStarted(true);
+      setIsRecording(true);
+      setRecordingStatus('recording');
       // Unmute microphone to start the conversation
       await room.localParticipant.setMicrophoneEnabled(true);
       setIsMicOn(true);
@@ -485,7 +567,7 @@ const fetchLiveKitToken = async () => {
       setElapsedTime(0);
       setPausedTime(0);
       
-      showToast('🎙️ Agent started - You can speak now!', 'success');
+      showToast('🎙️ Agent started - Recording in progress!', 'success');
     } catch (error) {
       console.error('❌ Failed to start agent:', error);
       showToast('Failed to start agent', 'error');
@@ -697,6 +779,8 @@ const fetchLiveKitToken = async () => {
     setStreamingText('');
     setCurrentStreamingSpeaker(null);
     setIsRecording(false);
+    setRecordingStatus('idle');
+    setRecordingUrl(null);
     setIsPaused(false);
     setIsProcessing(false);
     setIsSpeaking(false);
@@ -819,7 +903,7 @@ const fetchLiveKitToken = async () => {
       setLiveKitConnected(true);
     };
 
-    const handleDisconnected = (reason) => {
+    const handleDisconnected = () => {
       setLiveKitConnected(false);
     };
 
@@ -964,6 +1048,8 @@ const fetchLiveKitToken = async () => {
               conversationStarted={conversationStarted}
               isPaused={isPaused}
               elapsedTime={elapsedTime}
+              recordingStatus={recordingStatus}
+              recordingUrl={recordingUrl}
             />
           </div>
 
