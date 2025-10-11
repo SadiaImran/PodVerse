@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Mic, Users, BookOpen, Settings, TrendingUp, Calendar, Bell, Search, Plus } from 'lucide-react';
+import { Home, Mic, Users, BookOpen, Settings, TrendingUp, Calendar, Bell, Search, Plus , MessageCircle} from 'lucide-react';
 import { HiOutlineUserCircle } from "react-icons/hi";
 import ActivityFeed from '../components/feed/activity-feed';
 import BaseLayout from "../components/layouts/BaseLayout";
@@ -18,6 +18,7 @@ const LeftSidebar = () => {
     { icon: Users, label: 'Following', count: 28 , navigateTo: "/following"},
     { icon: IoAnalyticsOutline, label: "Analytics" , navigateTo:"/analytics"},
     { icon: TrendingUp, label: 'Trending' , navigateTo: "/trending"},
+    { icon: MessageCircle, label: 'FAQ & Support', navigateTo: "/faq-chatbot" },
     { icon: Settings, label: 'Settings', navigateTo: "/settings" },
   ];
 
