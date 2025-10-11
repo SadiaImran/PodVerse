@@ -66,14 +66,44 @@ def get_token(
 active_egresses = {}
 
 @router.post("/start-audio-egress")
-async def start_audio_egress_async(room_name: str = Form(...)):
+async def start_audio_egress_async(
+    room_name: str = Form(...),
+    user_id: str = Form(None),
+    kb_id: str = Form(None)
+):
+    """Start audio egress with custom file naming including user_id, kb_id, room_name, and timestamp."""
     # ✅ CRITICAL FIX: Convert wss:// to https:// for API endpoint
     api_host = LIVEKIT_WS_URL.replace("wss://", "https://").replace("ws://", "http://")
     
     print(f"🔗 LiveKit API Host: {api_host}")
     print(f"🔑 API Key: {LIVEKIT_API_KEY}")
     print(f"🎬 Starting egress for room: {room_name}")
+    print(f"👤 User ID: {user_id}")
+    print(f"📚 KB ID: {kb_id}")
     
+    # Create custom filename with user_id, kb_id, room_name, and timestamp
+    timestamp = time.strftime("%Y-%m-%dT%H%M%S")
+    
+    # Build filename: user[user_id]_kb[kb_id]_room[room_name]_[timestamp].ogg
+    filename_parts = []
+    
+    if user_id:
+        filename_parts.append(f"user_{user_id}")
+    else:
+        filename_parts.append("user_unknown")
+        
+    if kb_id:
+        filename_parts.append(f"kb_{kb_id}")
+    else:
+        filename_parts.append("kb_unknown")
+        
+    filename_parts.append(f"room_{room_name}")
+    filename_parts.append(timestamp)
+    
+    custom_filename = "_".join(filename_parts) + ".ogg"
+    
+    print(f"📁 Custom filename: {custom_filename}")
+
     # Create LiveKit API client with correct parameter order
     # Signature: LiveKitAPI(url, api_key, api_secret)
     lk_api = api.LiveKitAPI(
@@ -82,7 +112,7 @@ async def start_audio_egress_async(room_name: str = Form(...)):
         api_secret=LIVEKIT_API_SECRET
     )
 
-    # Create egress request
+    # Create egress request with custom filename
     req = api.RoomCompositeEgressRequest(
         room_name=room_name,
         audio_only=True,
@@ -90,6 +120,8 @@ async def start_audio_egress_async(room_name: str = Form(...)):
         file_outputs=[
             api.EncodedFileOutput(
                 file_type=api.EncodedFileType.OGG,
+                filepath=custom_filename,  # Custom filename
+                disable_manifest=True,  # Disable JSON metadata file
                 s3=api.S3Upload(
                     bucket=SUPABASE_BUCKET,
                     access_key=SUPABASE_ACCESS_KEY,

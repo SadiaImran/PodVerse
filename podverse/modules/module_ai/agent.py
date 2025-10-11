@@ -146,12 +146,9 @@ async def entrypoint(ctx: agents.JobContext):
     print(f"🏠 Connected to room: {getattr(room, 'name', 'unknown')}")
     await asyncio.sleep(0.6)
 
-    try:
-        room_name_str = getattr(room, 'name', 'my-room')
-        print(f"🎬 Auto-starting recording for room: {room_name_str}")
-        await trigger_audio_egress(room_name_str)
-    except Exception as e:
-        print(f"⚠️ Recording auto-start failed: {e}")
+    # Don't start egress immediately - wait for participant metadata
+    room_name_str = getattr(room, 'name', 'my-room')
+    print(f"🎬 Will start recording after participant connects with metadata...")
 
 
     # safe on helper
@@ -179,11 +176,22 @@ async def entrypoint(ctx: agents.JobContext):
                         if "selectedKbId" in parsed:
                             agent.selected_kb_id = parsed["selectedKbId"]
                         print(f"✅ user_id from metadata: {agent.user_id}, kb_id: {agent.selected_kb_id}")
+                        
+                        # Start egress now that we have proper user_id and kb_id
+                        if agent.user_id != "default-user" and room_name_str:
+                            print(f"🎬 Starting egress with proper metadata...")
+                            asyncio.create_task(trigger_audio_egress(room_name_str, agent.user_id, agent.selected_kb_id))
+                            
                     except Exception as e:
                         print(f"⚠️ participant metadata parse error: {e}")
                 if agent.user_id == "default-user":
                     agent.user_id = ident
                     print(f"ℹ️ fallback user_id = identity: {agent.user_id}")
+                    
+                    # Start egress with fallback user_id
+                    if room_name_str:
+                        print(f"🎬 Starting egress with fallback user_id...")
+                        asyncio.create_task(trigger_audio_egress(room_name_str, agent.user_id, agent.selected_kb_id))
         except Exception as e:
             print(f"⚠️ on_participant_connected error: {e}")
 
@@ -228,6 +236,12 @@ async def entrypoint(ctx: agents.JobContext):
                         print(f"✅ Received KB ID from data channel: {kb_id}")
                         # Also try to fetch initial context with this KB ID
                         asyncio.create_task(fetch_initial_context_with_kb(agent, kb_id))
+                        # Restart egress with new KB ID for proper file naming
+                        if room_name_str and agent.user_id != "default-user":
+                            print(f"🔄 Restarting egress with new KB ID: {kb_id}")
+                            # First stop the current egress, then start new one
+                            asyncio.create_task(stop_audio_egress(room_name_str))
+                            asyncio.create_task(restart_egress_with_delay(room_name_str, agent.user_id, kb_id))
         except Exception as e:
             print(f"⚠️ on_data_received: {e}")
 
@@ -262,11 +276,19 @@ async def entrypoint(ctx: agents.JobContext):
                                 agent.user_id = parsed["userId"]
                             if "selectedKbId" in parsed:
                                 agent.selected_kb_id = parsed["selectedKbId"]
+                                # Start egress if we have proper metadata
+                                if agent.user_id != "default-user" and room_name_str:
+                                    print(f"🎬 Starting egress from startup discovery...")
+                                    asyncio.create_task(trigger_audio_egress(room_name_str, agent.user_id, agent.selected_kb_id))
                                 break
                         except Exception as e:
                             print(f"⚠️ Startup metadata parse error: {e}")
                     if agent.user_id == "default-user":
                         agent.user_id = p.identity
+                        # Start egress with fallback user_id
+                        if room_name_str:
+                            print(f"🎬 Starting egress from startup fallback...")
+                            asyncio.create_task(trigger_audio_egress(room_name_str, agent.user_id, agent.selected_kb_id))
                         break
             except Exception:
                 continue
@@ -521,14 +543,22 @@ async def entrypoint(ctx: agents.JobContext):
 
     # end of entrypoint — session runs until room disconnects
 
-async def trigger_audio_egress(room_name: str):
+async def trigger_audio_egress(room_name: str, user_id: str = None, kb_id: str = None):
     """Trigger backend route to start LiveKit audio egress with improved error handling."""
     try:
         async with aiohttp.ClientSession() as session:
             url = "http://localhost:8000/livekit/start-audio-egress"
             data = {"room_name": room_name}
             
+            # Add user_id and kb_id for custom file naming
+            if user_id:
+                data["user_id"] = user_id
+            if kb_id:
+                data["kb_id"] = kb_id
+            
             print(f"🎬 Triggering audio egress for room: {room_name}")
+            print(f"👤 User ID: {user_id}")
+            print(f"📚 KB ID: {kb_id}")
             print(f"🔗 Egress URL: {url}")
             
             async with session.post(url, data=data, timeout=aiohttp.ClientTimeout(total=30)) as resp:
@@ -632,6 +662,11 @@ async def fetch_initial_context_with_kb(agent, kb_id: str):
     except Exception as e:
         print(f"⚠️ fetch_initial_context_with_kb error: {e}")
     return ""
+
+async def restart_egress_with_delay(room_name: str, user_id: str, kb_id: str):
+    """Restart egress with a small delay to ensure stop completes."""
+    await asyncio.sleep(1)  # Small delay to ensure stop completes
+    await trigger_audio_egress(room_name, user_id, kb_id)
 
 
 
