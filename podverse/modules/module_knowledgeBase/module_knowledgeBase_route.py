@@ -894,7 +894,7 @@ async def generate_podcast_script(
     kb_id: Optional[str] = Form(None),  # NEW: Filter by specific document
     auth_data: dict = Depends(get_authenticated_supabase_client)
 ):
-    """Generate a conversational 15-minute podcast script based on user's knowledge base"""
+    """Generate a conversational podcast script STRICTLY based on user's knowledge base - NO fictional content"""
     try:
         supabase_authenticated = auth_data["client"]
         user_id = auth_data["user_id"]
@@ -919,67 +919,105 @@ async def generate_podcast_script(
         if not docs_result.data:
             return {
                 "error": "No documents found",
-                "message": "Please upload documents to your knowledge base first." if not kb_id else "No documents found for the selected knowledge base."
+                "message": "Please upload documents to your knowledge base first." if not kb_id else "No documents found for the selected knowledge base.",
+                "success": False
             }
 
+        # Combine all document content
         all_content = "\n\n".join([doc["content"] for doc in docs_result.data])
-        context_summary = all_content[:4000] + "..." if len(all_content) > 4000 else all_content
+        
+        # Check if we have enough content
+        if len(all_content.strip()) < 100:
+            return {
+                "error": "Insufficient content",
+                "message": "Your knowledge base doesn't have enough content to generate a meaningful podcast script. Please upload more detailed documents.",
+                "success": False
+            }
+
+        # Use more content for better context (up to 5000 chars)
+        context_summary = all_content[:5000] + "..." if len(all_content) > 5000 else all_content
+        content_word_count = len(all_content.split())
+
+        print(f"[script-gen] KB content: {content_word_count} words, {len(docs_result.data)} documents")
 
         # For ~15 minutes, set longer token limit
         config = {"segments": 10, "max_tokens": 4000}
 
-        # --------------- UPDATED PROMPTS --------------- #
+        # --------------- STRICT RAG PROMPTS --------------- #
         if role == "host":
             prompt = f"""
 You are the HOST in a podcast conversation with an expert guest.
-Use the knowledge base below as background context (don't quote it directly):
 
+CRITICAL INSTRUCTIONS:
+1. Use ONLY the information provided in the knowledge base below
+2. DO NOT invent, assume, or create any information that is not in the knowledge base
+3. If the knowledge base lacks information on something, the HOST should acknowledge it naturally
+4. Every statement must be directly supported by the knowledge base content
+
+Knowledge Base Content:
 {context_summary}
 
-Generate a continuous 15-minute conversational script (~2000–2500 words) between the HOST and the GUEST.
-Include only the dialogues — no headings, descriptions, or scene explanations.
+Generate a natural podcast conversation (~2000 words) between HOST and GUEST.
+The GUEST is an expert on the topics covered in the knowledge base.
 
-Make it sound natural, insightful, and flowing, with smooth transitions between topics.
-Change topics every few exchanges to keep it engaging — start from an introduction, move through insights, stories, and end with a natural closing.
+Rules:
+- Only discuss topics that are explicitly covered in the knowledge base
+- If the knowledge base is limited, create a shorter, focused conversation
+- Use conversational language but stay factually accurate to the source material
+- Include only dialogues - no headings, descriptions, or scene explanations
 
-Example format:
-[HOST]: Welcome! I'm excited to have you here today.
-[GUEST]: Thanks for having me, it's a pleasure.
-[HOST]: Let's start with how you began your journey...
-[GUEST]: It all started when...
+Format:
+[HOST]: Welcome to the show! Today we're discussing [topic from KB].
+[GUEST]: Thanks for having me. I'm excited to share insights about [specific topic from KB].
+[HOST]: Let's start with [question based on KB content]...
+[GUEST]: [Answer using only KB information]...
 
-Now, create the full conversation.
-Topic: {topic if topic else "general insights based on the knowledge base"}
-Keep tone professional yet friendly, with realistic pacing and topic changes."""
-        else:
+Topic Focus: {topic if topic else "topics from the knowledge base"}
+
+Create the conversation now, using ONLY information from the knowledge base provided above."""
+
+        else:  # guest
             prompt = f"""
 You are the GUEST expert in a podcast conversation.
-Use the knowledge base below as your background knowledge (don't quote it directly):
 
+CRITICAL INSTRUCTIONS:
+1. You can ONLY discuss information that is in the knowledge base below
+2. DO NOT invent facts, stories, or examples that are not in the knowledge base
+3. If asked about something not in the KB, politely redirect to topics you can discuss
+4. Every answer must be traceable to the knowledge base content
+
+Your Knowledge Base:
 {context_summary}
 
-Generate a continuous 15-minute dialogue (~2000–2500 words) between the HOST and the GUEST.
-Include only the dialogues — no descriptions, segment labels, or outlines.
+Generate a natural podcast dialogue (~2000 words) between HOST and GUEST.
+You are the GUEST who is an expert on the topics in the knowledge base.
 
-Make it natural, informative, and smooth. Change topics naturally — start with your introduction, move through key ideas, examples, and stories, and end with a thoughtful closing.
+Rules:
+- Answer questions using ONLY information from the knowledge base
+- If the knowledge base is limited, keep the conversation shorter and more focused
+- Be conversational but factually accurate to the source material
+- Include only dialogues - no descriptions or labels
 
-Example format:
-[HOST]: It's great to have you on the show. Could you tell us a bit about your work?
-[GUEST]: Absolutely! My work focuses on helping small businesses grow through...
-[HOST]: That's fascinating. How do you see this evolving?
+Format:
+[HOST]: Welcome! Can you tell us about [topic from KB]?
+[GUEST]: Absolutely. [Explain using only KB content]...
+[HOST]: That's interesting. How does [related KB topic] work?
+[GUEST]: [Answer based only on KB information]...
 
-Topic: {topic if topic else "general insights based on the knowledge base"}
-Keep the tone conversational and authentic, with back-and-forth rhythm between host and guest."""
+Topic Focus: {topic if topic else "topics from the knowledge base"}
+
+Create the conversation now, discussing ONLY what is covered in the knowledge base above."""
 
         # ------------------------------------------------ #
 
-        print(f"[script-gen] Calling LLM with {config['max_tokens']} max tokens")
-        script_text = make_llm_hf(prompt, temperature=0.7, max_tokens=config['max_tokens'])
+        print(f"[script-gen] Calling LLM with {config['max_tokens']} max tokens (STRICT RAG mode)")
+        script_text = make_llm_hf(prompt, temperature=0.3, max_tokens=config['max_tokens'])  # Lower temp for more factual
         
         if not script_text or len(script_text) < 50:
             return {
                 "error": "Script generation failed",
-                "message": "The AI couldn't generate a proper script. Please try again."
+                "message": "The AI couldn't generate a proper script. Please try again or add more content to your knowledge base.",
+                "success": False
             }
 
         # Parse script
@@ -991,20 +1029,34 @@ Keep the tone conversational and authentic, with back-and-forth rhythm between h
                 continue
             if line.upper().startswith('[HOST]') or line.upper().startswith('HOST:'):
                 content = line.split(':', 1)[-1].strip()
-                sections.append({"speaker": "HOST", "content": content})
+                if content:  # Only add non-empty content
+                    sections.append({"speaker": "HOST", "content": content})
             elif line.upper().startswith('[GUEST]') or line.upper().startswith('GUEST:'):
                 content = line.split(':', 1)[-1].strip()
-                sections.append({"speaker": "GUEST", "content": content})
-            elif sections:
+                if content:  # Only add non-empty content
+                    sections.append({"speaker": "GUEST", "content": content})
+            elif sections:  # Continue previous speaker's content
                 sections[-1]["content"] += " " + line
 
+        # Fallback: If parsing failed but we have script text
         if not sections and script_text:
             sections.append({
                 "speaker": "HOST" if role == "host" else "GUEST",
                 "content": script_text
             })
 
+        # Validate we have meaningful content
+        if not sections or len(sections) < 3:
+            return {
+                "error": "Insufficient script generated",
+                "message": "The knowledge base content may be too limited to generate a full conversation. Please add more detailed information.",
+                "success": False,
+                "sections": sections  # Return what we have
+            }
+
         word_count = len(script_text.split())
+        estimated_duration = max(1, word_count // 150)  # ~150 words per minute
+
         return {
             "success": True,
             "script_text": script_text,
@@ -1012,12 +1064,17 @@ Keep the tone conversational and authentic, with back-and-forth rhythm between h
             "metadata": {
                 "role": role,
                 "word_count": word_count,
-                "estimated_duration": "≈15 minutes",
+                "kb_word_count": content_word_count,
+                "estimated_duration": f"≈{estimated_duration} minutes",
                 "segment_count": len(sections),
                 "generated_at": time.time(),
-                "kb_id": kb_id
-            }
+                "kb_id": kb_id,
+                "mode": "strict_rag",
+                "note": "Script generated using only knowledge base content - no fictional information added"
+            },
+            "warning": "Script is based solely on your uploaded documents. Quality depends on the content in your knowledge base." if content_word_count < 500 else None
         }
+        
     except Exception as e:
         print(f"[script-gen] Unexpected error: {e}")
         raise HTTPException(status_code=500, detail=f"Script generation failed: {str(e)}")

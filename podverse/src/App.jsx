@@ -10,6 +10,7 @@ import ResetPassword from './assets/components/comp-signin/ResetPassword';
 import { AuthProvider } from './assets/context/AuthContext';
 import PrivateRoute from './assets/components/PrivateRoute'; 
 import AudioEditor from './assets/screens/screen-audio-edit';
+import ScreenFAQ from './assets/screens/screen-faq-chatbot';
 
 function App() {
   return (
@@ -68,6 +69,14 @@ function App() {
             element={
               <PrivateRoute>
                 <AudioEditor />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/faq-chatbot"
+            element={
+              <PrivateRoute>
+                <ScreenFAQ />
               </PrivateRoute>
             }
           />

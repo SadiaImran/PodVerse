@@ -1,5 +1,5 @@
 import Logo from "../../images/logo.png";
-import { Home, Mic, Users, BookOpen, Settings, TrendingUp, Calendar, Bell, Search, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Home, Mic, Users, BookOpen, Settings, TrendingUp, Calendar, Bell, Search, Plus, ChevronLeft, ChevronRight, MessageCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import {
@@ -23,8 +23,9 @@ const LeftSidebar = ({ open, setOpen }) => {
   { icon: Users, label: 'Following', count: 28 , navigateTo: "/following"},
   { icon: IoAnalyticsOutline, label: "Analytics" , navigateTo:"/analytics"},
   { icon: TrendingUp, label: 'Trending' , navigateTo: "/trending"},
+  { icon: MessageCircle, label: 'FAQ & Support', navigateTo: "/faq-chatbot" },
   { icon: Settings, label: 'Settings', navigateTo: "/settings" },
-];
+  ];
   const quickAccess = [
     { name: 'Tech Talks', color: 'bg-blue-500' },
     { name: 'Business Daily', color: 'bg-green-500' },
