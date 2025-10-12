@@ -11,6 +11,7 @@ import re
 from connection_supabase_client import (
     get_authenticated_supabase_client,
     get_service_role_client,
+    get_gradio_client
 )
 
 router = APIRouter()
@@ -21,17 +22,9 @@ load_dotenv()
 os.environ["TOGETHER_API_KEY"] = os.environ.get(
     "TOGETHER_API_KEY", "f98103d1acc08e8528e75028deee01807c69312f742eaddbd877d1b87123dffb"
 )
-HF_TOKEN_1075 = os.environ.get("HF_TOKEN_1075")
 
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-
-# Initialize Gradio client for LLM
-from gradio_client import Client
-
-client = Client(
-    "sadiaimran1075/deepseek-ai-DeepSeek-V3.2-Exp",
-    hf_token=HF_TOKEN_1075
-)
+client = None
 
 # Small talk patterns
 SMALL_TALK_PATTERNS = {
@@ -53,6 +46,9 @@ def detect_small_talk(text: str) -> Optional[str]:
 
 def make_llm_hf(query: str, temperature=0.1, max_tokens=512):
     """Use Hugging Face LLM for generating responses"""
+    global client
+    if not client:
+        client = get_gradio_client()
     try:
         result = client.predict(
             message=query,

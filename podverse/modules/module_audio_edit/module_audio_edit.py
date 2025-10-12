@@ -178,7 +178,8 @@ async def merge_audio(files: list[UploadFile]):
         list_file = os.path.join(TEMP_DIR, "list.txt")
         with open(list_file, "w") as f:
             for path in temp_paths:
-                f.write(f"file '{os.path.abspath(path).replace('\\', '/')}'\n")
+                abs_path = os.path.abspath(path).replace('\\', '/')
+                f.write(f"file '{abs_path}'\n")
 
         output_path = os.path.join(TEMP_DIR, "merged_output.wav")
 
