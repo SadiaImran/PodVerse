@@ -2,19 +2,20 @@ import os
 from dotenv import load_dotenv
 from fastapi import HTTPException, Header
 from supabase import ClientOptions, create_client, Client
+from gradio_client import Client
 
 load_dotenv()  
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_ANON_KEY")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+HF_TOKEN_1075 = os.environ.get("HF_TOKEN_1075")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
     raise ValueError("Missing SUPABASE_URL or SUPABASE_KEY in .env")
 
 if not SUPABASE_SERVICE_ROLE_KEY:
     raise ValueError("Missing SUPABASE_SERVICE_ROLE_KEY in .env")
-
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -48,3 +49,11 @@ def get_service_role_client() -> Client:
     if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
         raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set in env for server inserts.")
     return create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+def get_gradio_client() -> Client:
+    """Return a Gradio client created on HUGGING FACE."""
+    client = Client(
+        "sadiaimran1075/deepseek-ai-DeepSeek-V3.2-Exp",
+        hf_token=HF_TOKEN_1075
+    )
+    return client

@@ -21,6 +21,7 @@ from gradio_client import Client
 from connection_supabase_client import (
     get_authenticated_supabase_client,
     get_service_role_client,
+    get_gradio_client
 )
 
 router = APIRouter()
@@ -28,15 +29,12 @@ router = APIRouter()
 # ========= CONFIGURATION =========
 load_dotenv()
 
-os.environ["TOGETHER_API_KEY"] = os.environ.get(
-    "TOGETHER_API_KEY", "f98103d1acc08e8528e75028deee01807c69312f742eaddbd877d1b87123dffb"
-)
-HF_TOKEN_1075 = os.environ.get("HF_TOKEN_1075")
-LLM_URL = os.environ.get("LLM_URL")
-
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 100
+
+# Global client variable for LLM
+client = None
 
 # Small talk patterns
 SMALL_TALK_PATTERNS: Dict[str, str] = {
@@ -45,15 +43,12 @@ SMALL_TALK_PATTERNS: Dict[str, str] = {
     r"\b(bye|goodbye|see ya|see you)\b": "Thank you for having me! This was absolutely wonderful, take care!",
 }
 
-from gradio_client import Client
-
-client = Client(
-    "sadiaimran1075/deepseek-ai-DeepSeek-V3.2-Exp",
-    hf_token=HF_TOKEN_1075
-)
 
 @router.get("/test-llm/")
 def call_llm(query: str):
+    global client
+    if not client:
+        client = get_gradio_client()
     print(f"🎉 Test LLM endpoint called with query: {query}")
     try:
         result = client.predict(
@@ -79,6 +74,9 @@ def call_llm(query: str):
 # ========= LLM SETUP =========
 def make_llm_hf(query: str, temperature=0.1, max_tokens=512):
     """Use Hugging Face LLM for document Q&A"""
+    global client
+    if not client:
+        client = get_gradio_client()
     try:
         result = client.predict(
             message=query,
