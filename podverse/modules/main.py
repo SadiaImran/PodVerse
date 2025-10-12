@@ -10,11 +10,15 @@ from module_ai.livekit_token import router as livekit_router
 from module_voices.module_voices import router as voices_router
 # from module_voice_clone.module_voice_clone import router as voice_clone_router
 from module_faq.module_faq_route import router as faq_router
+from fastapi.staticfiles import StaticFiles
 
 import tempfile
 import os
 import time
 import json
+
+# Ensure output directory exists
+os.makedirs("module_voice_clone/output", exist_ok=True)
 
 app = FastAPI()
 
@@ -41,6 +45,8 @@ app.include_router(audios_router)
 app.include_router(livekit_router, prefix="/livekit", tags=["livekit"])
 # app.include_router(voice_clone_router, prefix="/voice-clone", tags=["voice-clone"])
 app.include_router(audio_edit_router, prefix="/audio-edit", tags=["audio-edit"])
+
+app.mount("/output", StaticFiles(directory="module_voice_clone/output"), name="output")
 app.include_router(voices_router)
 app.include_router(faq_router)
 

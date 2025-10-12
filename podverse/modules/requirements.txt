@@ -53,5 +53,6 @@ requests
 python-dotenv
 dotenv
 livekit-plugins
+pyjwt
 bs4
 pandas
