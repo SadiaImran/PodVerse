@@ -745,12 +745,25 @@ async def generate_response(
                 
                 if fallback.data:
                     import numpy as np
-                    qv = np.array(query_vector)
+                    qv = np.array(query_vector, dtype=np.float32)
                     scored = []
                     for row in fallback.data:
-                        dv = np.array(row["embedding"])
-                        sim = float(np.dot(qv, dv) / (np.linalg.norm(qv) * np.linalg.norm(dv)))
-                        scored.append((sim, row))
+                        try:
+                            # Ensure embedding is a proper numeric array
+                            embedding_data = row["embedding"]
+                            if isinstance(embedding_data, str):
+                                import json
+                                embedding_data = json.loads(embedding_data)
+                            
+                            dv = np.array(embedding_data, dtype=np.float32)
+                            
+                            # Validate that both vectors have the same shape
+                            if qv.shape == dv.shape:
+                                sim = float(np.dot(qv, dv) / (np.linalg.norm(qv) * np.linalg.norm(dv)))
+                                scored.append((sim, row))
+                        except Exception as e:
+                            print(f"[respond] Warning: Failed to process embedding: {e}")
+                            continue
                     scored.sort(key=lambda x: x[0], reverse=True)
                     candidate_rows = [r for _, r in scored[:5]]
             except Exception:
@@ -813,42 +826,114 @@ async def generate_response(
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
+# module_knowledgeBase_route.py
+
 @router.post("/internal/respond")
 async def internal_respond(
     query: str = Form(...),
     user_id: str = Form(...),
-    kb_id: str = Form(None),
+    kb_id: Optional[str] = Form(None),
 ):
     """
     Internal endpoint for agent to query knowledge base - returns only answer text.
     Uses service role client (no auth required).
     """
-    try:
-        service_client = get_service_role_client()
+    from .ai.speech import generate_tts_audio # Need to import for consistency
+    import numpy as np # Used for cosine similarity calculation
 
-        # Filter documents by user_id and kb_id (or storage_path)
-        docs_query = (
+    try:
+        import time
+        start_time = time.time()
+        service_client = get_service_role_client()
+        q = (query or "").strip()
+
+        print(f"[internal/respond] Processing query: {q[:50]}... for user: {user_id}, kb_id: {kb_id}")
+
+        # 1. Handle small talk
+        smalltalk = detect_small_talk(q)
+        if smalltalk:
+            return {"answer_text": smalltalk}
+
+        # 2. Retrieve relevant documents (Filtered by kb_id)
+        embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+        query_vector = embeddings.embed_query(q)
+        candidate_rows = []
+
+        # Start with the fallback query which correctly applies kb_id filter via eq()
+        fallback_query = (
             service_client.table("documents")
-            .select("*")
+            .select("content, metadata, embedding, kb_id")
             .eq("user_id", user_id)
         )
         if kb_id:
-            docs_query = docs_query.eq("kb_id", kb_id)
-        docs = docs_query.execute().data
-
-        if not docs:
-            return {"answer_text": "No documents found for the given user and KB ID."}
-
-        document = docs[0]
-        retrieved_document = Document(page_content=document.get("content", ""), metadata=document.get("metadata", {}))
-        context_text = retrieved_document.page_content
+            # CRITICAL: This ensures only documents linked to the current KB are searched.
+            fallback_query = fallback_query.eq("kb_id", kb_id)
         
-        return {"answer_text": context_text}
+        # Fetch a smaller set of documents (20) to manually rank for relevance - faster processing
+        fallback = fallback_query.limit(20).execute()
+        
+        if fallback.data:
+            qv = np.array(query_vector, dtype=np.float32)
+            scored = []
+            for row in fallback.data:
+                if row.get("embedding"):
+                    try:
+                        # Ensure embedding is a proper numeric array
+                        embedding_data = row["embedding"]
+                        if isinstance(embedding_data, str):
+                            # If it's a string, try to parse it as JSON
+                            import json
+                            embedding_data = json.loads(embedding_data)
+                        
+                        dv = np.array(embedding_data, dtype=np.float32)
+                        
+                        # Validate that both vectors have the same shape
+                        if qv.shape == dv.shape:
+                            # Calculate Cosine Similarity
+                            sim = float(np.dot(qv, dv) / (np.linalg.norm(qv) * np.linalg.norm(dv)))
+                            scored.append((sim, row))
+                        else:
+                            print(f"[internal/respond] Warning: Embedding shape mismatch - query: {qv.shape}, doc: {dv.shape}")
+                    except Exception as e:
+                        print(f"[internal/respond] Warning: Failed to process embedding for row {row.get('id', 'unknown')}: {e}")
+                        continue
+            
+            # Rank and select the top 5 most relevant chunks (K=5)
+            scored.sort(key=lambda x: x[0], reverse=True)
+            candidate_rows = [r for _, r in scored[:5]]
+        
+        if not candidate_rows:
+            # This handles both "no documents" and "no relevant documents found for query/KB"
+            # Try a simple text-based fallback if embeddings failed
+            if fallback.data:
+                print(f"[internal/respond] Embedding similarity failed, using simple text fallback")
+                # Use first few documents as fallback
+                candidate_rows = fallback.data[:3]
+            else:
+                answer = "I don't know based on the provided documents."
+                return {"answer_text": answer}
+
+        # 3. Create context and LLM Generation
+        retrieved_documents = [
+            Document(page_content=row.get("content", ""), metadata=row.get("metadata", {}))
+            for row in candidate_rows
+        ]
+        context_text = "\n\n".join([doc.page_content for doc in retrieved_documents])
+        
+        # Use SAFE_PROMPT structure to enforce strict RAG constraints
+        full_query = SAFE_PROMPT.format(context=context_text, question=q)
+        
+        answer = make_llm_hf(full_query, temperature=0.1, max_tokens=512)
+        answer = polish_answer(answer) # Use polish_answer to clean up text
+
+        elapsed_time = time.time() - start_time
+        print(f"[internal/respond] Query processed in {elapsed_time:.2f}s, found {len(candidate_rows)} relevant chunks")
+        
+        return {"answer_text": answer}
 
     except Exception as e:
         print(f"[internal respond] Error: {e}")
         return {"answer_text": "I'm sorry, I couldn't process your request right now."}
-
 
 @router.post("/internal/fetch-chunks")
 def fetch_chunks(user_id: str = Form(...)):
