@@ -30,7 +30,7 @@ class Assistant(Agent):
     def __init__(self) -> None:
         llm_model = google.beta.realtime.RealtimeModel(
             model="models/gemini-2.0-flash-exp",
-            temperature=2.0,
+            temperature=0.7,
         )
 
         super().__init__(
