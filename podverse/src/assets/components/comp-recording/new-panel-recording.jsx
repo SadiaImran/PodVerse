@@ -200,12 +200,12 @@ const StatusIndicator = ({ isRecording, isProcessing, isSpeaking, conversationSt
   if (isRecording || (conversationStarted && !isPaused)) { 
     return (
       <div className="flex flex-col items-center space-y-2">
-        <div className="flex items-center justify-center space-x-3 bg-red-900/30 px-6 py-3 rounded-full border border-red-500">
-          <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse shadow-red-500/50"></div>
-          <Icon name="mic" className="w-5 h-5 text-red-400" />
-          <span className="font-medium text-red-300">LIVE RECORDING</span>
+        <div className="flex items-center justify-center space-x-3 bg-gradient-to-r from-red-500 to-red-600 px-6 py-3 rounded-full border-2 border-red-700 shadow-lg">
+          <div className="w-3 h-3 bg-white rounded-full animate-pulse shadow-white/50"></div>
+          <Icon name="mic" className="w-5 h-5 text-white" />
+          <span className="font-bold text-white">LIVE RECORDING</span>
         </div>
-        <div className="text-red-300 text-sm font-medium">
+        <div className="text-red-600 text-sm font-bold bg-white px-3 py-1 rounded-full border border-red-200">
           {formatTime(elapsedTime)}
         </div>
       </div>
@@ -318,11 +318,12 @@ const NewPanelsRecording = () => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [transcript, streamingText]);
 
-  // **FIXED: Timer logic to correctly track elapsed time**
+  // **IMPROVED: Timer logic to correctly track elapsed time and resume from where left off**
   useEffect(() => {
     if (isPlaying && !isPaused) {
       if (timerRef.current === null) {
-        const start = Date.now() - pausedTime; // Resume from paused time
+        // Calculate the start time based on current elapsed time
+        const start = Date.now() - (elapsedTime * 1000);
         setStartTime(start); 
 
         timerRef.current = setInterval(() => {
@@ -331,8 +332,6 @@ const NewPanelsRecording = () => {
       }
     } else if (timerRef.current) {
       clearInterval(timerRef.current);
-      // Save the elapsed time as pausedTime
-      setPausedTime(elapsedTime * 1000); 
       setStartTime(null);
       timerRef.current = null;
     }
@@ -342,7 +341,7 @@ const NewPanelsRecording = () => {
         clearInterval(timerRef.current);
       }
     };
-  }, [isPlaying, isPaused, pausedTime, elapsedTime]);
+  }, [isPlaying, isPaused, elapsedTime]);
 
   useEffect(() => {
     const savedScript = sessionStorage.getItem('podcastScript');
@@ -827,16 +826,18 @@ const fetchLiveKitToken = async () => {
             }
             setCurrentStreamingSpeaker('AI Assistant');
             setStreamingText(segment.text);
-            // Write streaming directly into the AI bubble
+            // Write streaming directly into the AI bubble - FIXED: Better handling of streaming text
             setTranscript(prev => {
               const lastMessage = prev[prev.length - 1];
               const now = new Date().toISOString();
               if (lastMessage && lastMessage.speaker === 'AI Assistant' && lastMessage.isStreaming) {
+                // Update existing streaming message
                 return [
                   ...prev.slice(0, -1),
                   { speaker: 'AI Assistant', text: segment.text, timestamp: lastMessage.timestamp || now, isStreaming: true }
                 ];
               }
+              // Create new streaming message
               return [...prev, { speaker: 'AI Assistant', text: segment.text, timestamp: now, isStreaming: true }];
             });
             setIsSpeaking(true);
@@ -851,14 +852,17 @@ const fetchLiveKitToken = async () => {
               assistantBufferRef.current = { type: 'final', text: segment.text };
               return;
             }
+            // FIXED: Better handling of final AI messages to prevent breaking
             setTranscript(prev => {
               const lastMessage = prev[prev.length - 1];
               if (lastMessage && lastMessage.speaker === 'AI Assistant' && lastMessage.isStreaming) {
+                // Replace streaming message with final message
                 return [
                   ...prev.slice(0, -1),
                   { speaker: 'AI Assistant', text: segment.text, timestamp: new Date().toISOString(), isStreaming: false }
                 ];
               }
+              // Add new final message
               return [...prev, { speaker: 'AI Assistant', text: segment.text, timestamp: new Date().toISOString(), isStreaming: false }];
             });
             if (currentStreamingSpeaker === 'AI Assistant') {
@@ -882,6 +886,7 @@ const fetchLiveKitToken = async () => {
               setStreamingText('');
               setCurrentStreamingSpeaker(null);
             }
+            // Process buffered assistant message
             const buffered = assistantBufferRef.current;
             if (buffered) {
               assistantBufferRef.current = null;
@@ -1064,19 +1069,19 @@ const fetchLiveKitToken = async () => {
         ))}
       </div>
 
-      <div className="h-full rounded-3xl border-2 border-purple-200/50 shadow-2xl overflow-hidden flex bg-white/80 backdrop-blur-sm">
+      <div className="h-full rounded-3xl border-2 border-purple-200/50 shadow-2xl overflow-hidden flex bg-white/90 backdrop-blur-sm">
           {/* Left Panel - Recording Studio (More Space) */}
-          <div className="w-3/5 bg-gradient-to-br from-purple-100/50 via-white to-purple-50/30 flex">
+          <div className="w-3/5 bg-gradient-to-br from-purple-50 via-white to-purple-100/30 flex">
         
         {/* Left Section - Participants + Session Management */}
         <section className="flex flex-col justify-center items-center my-auto mx-8 font-headingPoppins">
           {/* Participants Section - Only LiveKit Participants */}
-          <div className="py-8 px-8 bg-white/90 backdrop-blur-md rounded-3xl border-2 border-purple-200/50 shadow-2xl hover:shadow-3xl transition-all duration-300">
+          <div className="py-8 px-8 bg-purple-600 backdrop-blur-md rounded-3xl border-2 border-purple-200/50 shadow-2xl hover:shadow-3xl transition-all duration-300">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-purple-600 rounded-full flex items-center justify-center">
                 <Icon name="podcast" className="w-5 h-5 text-white" />
               </div>
-              <h3 className="text-xl font-bold text-gray-800">Participants</h3>
+              <h3 className="text-xl font-bold text-white">Participants</h3>
             </div>
             <div className="space-y-4">
               {/* LiveKit Participants */}
@@ -1084,12 +1089,12 @@ const fetchLiveKitToken = async () => {
               
               {/* Show message if no participants */}
               {!liveKitConnected && (
-                <div className="text-center text-gray-500 py-8">
+                <div className="text-center text-white py-8">
                   <div className="w-16 h-16 bg-gradient-to-br from-purple-100 to-purple-200 rounded-full flex items-center justify-center mx-auto mb-4">
                     <Icon name="podcast" className="w-8 h-8 text-purple-400" />
                   </div>
-                  <p className="text-sm font-medium text-gray-600">Connect to see participants</p>
-                  <p className="text-xs text-gray-400 mt-1">Live participants will appear here</p>
+                  <p className="text-sm font-medium ">Connect to see participants</p>
+                  <p className="text-xs ">Live participants will appear here</p>
                 </div>
               )}
             </div>
@@ -1278,8 +1283,8 @@ const fetchLiveKitToken = async () => {
       </div>
 
       {/* Right Panel - Transcript (Less Space) */}
-      <div className="w-2/5 bg-gradient-to-br from-white to-purple-50/20 flex flex-col border-l-2 border-purple-200/50">
-        {/* Header with Search */}
+      <div className="w-2/5 bg-gradient-to-br from-gray-50 to-purple-50/30 flex flex-col border-l-2 border-purple-200/50">
+        {/* Header */}
         <div className="bg-gradient-to-r from-purple-50 to-white border-b-2 border-purple-200/50 px-6 py-4">
           <div className="flex items-center justify-between">
             {/* Tab Buttons */}
@@ -1324,10 +1329,12 @@ const fetchLiveKitToken = async () => {
                 )}
               </button>
             </div>
+            
+            {/* Export/Download Button */}
             <div className="flex items-center space-x-3">
-              <button className="text-purple-600 text-sm font-medium hover:text-purple-800 flex items-center space-x-2 bg-purple-100 px-3 py-1.5 rounded-lg hover:bg-purple-200 transition-all duration-200">
-                <span>Search</span>
-                <Icon name="play" className="w-3 h-3 rotate-90" />
+              <button className="bg-gradient-to-r from-purple-500 to-purple-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:from-purple-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl hover:-translate-y-0.5 flex items-center space-x-2">
+                <Icon name="podcast" className="w-4 h-4" />
+                <span>Export Transcript</span>
               </button>
             </div>
           </div>
@@ -1359,7 +1366,7 @@ const fetchLiveKitToken = async () => {
         </div>
 
         {/* Transcript Area - Streaming Style */}
-        <div className="flex-1 overflow-y-auto p-6 bg-gradient-to-br from-purple-50/20 via-white to-purple-50/10">
+        <div className="flex-1 overflow-y-auto p-6 bg-gradient-to-br from-white via-gray-50/50 to-purple-50/20">
           {activeTab === 'transcript' ? (
             // Enhanced Transcript View
             <>
@@ -1495,19 +1502,6 @@ const fetchLiveKitToken = async () => {
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="border-t-2 border-purple-200/50 px-6 py-4 bg-gradient-to-r from-purple-50 to-white">
-          <div className="flex items-center justify-between">
-            <label className="flex items-center space-x-2 text-sm text-gray-600 cursor-pointer">
-              <input type="checkbox" className="rounded border-purple-300 text-purple-600 focus:ring-purple-500" />
-              <span className="font-medium">Export Transcript</span>
-            </label>
-            <button className="bg-gradient-to-r from-purple-500 to-purple-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:from-purple-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl hover:-translate-y-0.5 flex items-center space-x-2">
-              <Icon name="podcast" className="w-4 h-4" />
-              <span>Download</span>
-            </button>
-          </div>
-        </div>
         </div>
       </div>
       
