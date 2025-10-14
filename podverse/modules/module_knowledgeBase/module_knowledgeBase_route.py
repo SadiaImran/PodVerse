@@ -917,6 +917,45 @@ def fetch_chunks(kb_id: str = Form(...)):
         print(f"⚠️ Error fetching chunks for kb_id {kb_id}: {e}")
         return {"chunks": []}
 
+@router.post("/internal/get-document-summary")
+async def get_document_summary(
+    user_id: str = Form(...),
+    kb_id: Optional[str] = Form(None)
+):
+    """
+    Fetch all chunks for a user/kb and return them as raw text for Google LLM to summarize.
+    """
+    try:
+        service_client = get_service_role_client()
+        
+        # Build query
+        query = service_client.table("documents").select("content, metadata")
+        
+        if kb_id:
+            query = query.eq("kb_id", kb_id)
+            print(f"📄 Fetching chunks for kb_id: {kb_id}")
+        else:
+            query = query.eq("user_id", user_id)
+            print(f"📄 Fetching all chunks for user_id: {user_id}")
+        
+        result = query.limit(50).execute()  # Limit to prevent huge responses
+        chunks = result.data or []
+        
+        if not chunks:
+            return {"summary": "No documents found for this knowledge base."}
+        
+        # Combine all chunk content
+        all_content = "\n\n".join([chunk.get("content", "") for chunk in chunks])
+        
+        print(f"📄 Fetched {len(chunks)} chunks, total content: {len(all_content)} chars")
+        
+        # Return raw content for Google LLM to process
+        return {"summary": all_content}
+        
+    except Exception as e:
+        print(f"⚠️ Error fetching document summary for kb_id {kb_id}: {e}")
+        return {"summary": "Error fetching document content."}
+
 
 # ========= PODCAST SCRIPT GENERATION =========
 @router.post("/generate-podcast-script/")
