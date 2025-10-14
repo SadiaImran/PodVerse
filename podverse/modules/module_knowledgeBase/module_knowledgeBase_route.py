@@ -10,7 +10,9 @@ from langchain.prompts import PromptTemplate
 from langchain_core.documents import Document
 from langchain.schema import BaseRetriever
 import speech_recognition as sr
-import os
+import os, json
+import numpy as np
+from sklearn.metrics.pairwise import cosine_similarity 
 import time
 import tempfile
 import re
@@ -42,34 +44,6 @@ SMALL_TALK_PATTERNS: Dict[str, str] = {
     r"\b(thank(s)?|thank you|appreciate it)\b": "You're so welcome! I'm thrilled to be here and excited about our chat!",
     r"\b(bye|goodbye|see ya|see you)\b": "Thank you for having me! This was absolutely wonderful, take care!",
 }
-
-
-@router.get("/test-llm/")
-def call_llm(query: str):
-    global client
-    if not client:
-        client = get_gradio_client()
-    print(f"🎉 Test LLM endpoint called with query: {query}")
-    try:
-        result = client.predict(
-            message=query,
-            api_name="/chat"
-        )
-        print(f"✅ LLM Response: {result}")
-        return {
-            "message": "LLM test successful!",
-            "query": query,
-            "response": result,
-            "status": "success"
-        }
-    except Exception as e:
-        print(f"❌ LLM Error: {e}")
-        return {
-            "message": "LLM test failed!",
-            "query": query,
-            "error": str(e),
-            "status": "error"
-        }
 
 # ========= LLM SETUP =========
 def make_llm_hf(query: str, temperature=0.1, max_tokens=512):
@@ -823,9 +797,6 @@ async def generate_response(
         print(f"[respond] Error: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
-
-# module_knowledgeBase_route.py
-
 @router.post("/internal/respond")
 async def internal_respond(
     query: str = Form(...),
@@ -836,138 +807,116 @@ async def internal_respond(
     Internal endpoint for agent to query knowledge base - returns only answer text.
     Uses service role client (no auth required).
     """
-    from .ai.speech import generate_tts_audio # Need to import for consistency
-    import numpy as np # Used for cosine similarity calculation
-
     try:
-        import time
         start_time = time.time()
         service_client = get_service_role_client()
         q = (query or "").strip()
 
-        print(f"[internal/respond] Processing query: {q[:50]}... for user: {user_id}, kb_id: {kb_id}")
+        print(f"[internal/respond] 🔍 Processing query: {q[:60]}... for user={user_id}, kb_id={kb_id}")
 
-        # 1. Handle small talk
+        # 1️⃣ Handle small talk
         smalltalk = detect_small_talk(q)
         if smalltalk:
             return {"answer_text": smalltalk}
 
-        # 2. Retrieve relevant documents (Filtered by kb_id)
+        # 2️⃣ Get embeddings for query
         embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
         query_vector = embeddings.embed_query(q)
-        candidate_rows = []
+        qv = np.array(query_vector, dtype=np.float32).reshape(1, -1)
 
-        # Start with the fallback query which correctly applies kb_id filter via eq()
+        # 3️⃣ Fetch candidate docs from DB (with proper filters)
         fallback_query = (
             service_client.table("documents")
             .select("content, metadata, embedding, kb_id")
             .eq("user_id", user_id)
         )
         if kb_id:
-            # CRITICAL: This ensures only documents linked to the current KB are searched.
             fallback_query = fallback_query.eq("kb_id", kb_id)
-        
-        # Fetch a smaller set of documents (20) to manually rank for relevance - faster processing
-        fallback = fallback_query.limit(20).execute()
-        
+
+        # Increased limit for better recall
+        fallback = fallback_query.limit(80).execute()
+        candidate_rows = []
+
+        # 4️⃣ Compute cosine similarity
         if fallback.data:
-            qv = np.array(query_vector, dtype=np.float32)
             scored = []
             for row in fallback.data:
-                if row.get("embedding"):
-                    try:
-                        # Ensure embedding is a proper numeric array
-                        embedding_data = row["embedding"]
-                        if isinstance(embedding_data, str):
-                            # If it's a string, try to parse it as JSON
-                            import json
-                            embedding_data = json.loads(embedding_data)
-                        
-                        dv = np.array(embedding_data, dtype=np.float32)
-                        
-                        # Validate that both vectors have the same shape
-                        if qv.shape == dv.shape:
-                            # Calculate Cosine Similarity
-                            sim = float(np.dot(qv, dv) / (np.linalg.norm(qv) * np.linalg.norm(dv)))
-                            scored.append((sim, row))
-                        else:
-                            print(f"[internal/respond] Warning: Embedding shape mismatch - query: {qv.shape}, doc: {dv.shape}")
-                    except Exception as e:
-                        print(f"[internal/respond] Warning: Failed to process embedding for row {row.get('id', 'unknown')}: {e}")
-                        continue
-            
-            # Rank and select the top 5 most relevant chunks (K=5)
+                emb = row.get("embedding")
+                if not emb:
+                    continue
+                try:
+                    if isinstance(emb, str):
+                        emb = json.loads(emb)
+                    dv = np.array(emb, dtype=np.float32).reshape(1, -1)
+                    score = float(cosine_similarity(qv, dv)[0][0])
+                    scored.append((score, row))
+                except Exception as e:
+                    print(f"[respond] ⚠️ embed parse fail: {e}")
+                    continue
+
+            # sort high→low and keep top 5
             scored.sort(key=lambda x: x[0], reverse=True)
             candidate_rows = [r for _, r in scored[:5]]
-        
+
+            if scored:
+                avg_score = np.mean([s for s, _ in scored[:5]])
+                print(f"[respond] ✅ Found {len(candidate_rows)} top chunks (avg score={avg_score:.3f})")
+            else:
+                print(f"[respond] ⚠️ No scored matches found.")
+
+        # 5️⃣ Fallback if no embeddings matched
         if not candidate_rows:
-            # This handles both "no documents" and "no relevant documents found for query/KB"
-            # Try a simple text-based fallback if embeddings failed
             if fallback.data:
-                print(f"[internal/respond] Embedding similarity failed, using simple text fallback")
-                # Use first few documents as fallback
-                candidate_rows = fallback.data[:3]
+                print(f"[internal/respond] ⚠️ Embedding similarity failed, using text fallback")
+                # simple fuzzy fallback
+                import difflib
+                matches = sorted(
+                    fallback.data,
+                    key=lambda r: difflib.SequenceMatcher(None, q.lower(), r["content"].lower()).ratio(),
+                    reverse=True,
+                )
+                candidate_rows = matches[:3]
             else:
                 answer = "I don't know based on the provided documents."
                 return {"answer_text": answer}
 
-        # 3. Create context and LLM Generation
+        # 6️⃣ Merge top chunks as context
         retrieved_documents = [
             Document(page_content=row.get("content", ""), metadata=row.get("metadata", {}))
             for row in candidate_rows
         ]
         context_text = "\n\n".join([doc.page_content for doc in retrieved_documents])
-        
-        # Use SAFE_PROMPT structure to enforce strict RAG constraints
-        full_query = SAFE_PROMPT.format(context=context_text, question=q)
-        
-        answer = make_llm_hf(full_query, temperature=0.1, max_tokens=512)
-        answer = polish_answer(answer) # Use polish_answer to clean up text
 
-        elapsed_time = time.time() - start_time
-        print(f"[internal/respond] Query processed in {elapsed_time:.2f}s, found {len(candidate_rows)} relevant chunks")
-        
-        return {"answer_text": answer}
+        elapsed = time.time() - start_time
+        print(f"[internal/respond] ⏱️ Query processed in {elapsed:.2f}s, found {len(candidate_rows)} relevant chunks")
+
+        return {"answer_text": context_text}
 
     except Exception as e:
-        print(f"[internal respond] Error: {e}")
+        print(f"[internal/respond] ❌ Error: {e}")
         return {"answer_text": "I'm sorry, I couldn't process your request right now."}
 
+
 @router.post("/internal/fetch-chunks")
-def fetch_chunks(user_id: str = Form(...)):
+def fetch_chunks(kb_id: str = Form(...)):
     """
-    Return a list of uploaded chunk/document metadata for the given user.
+    Return a list of chunks/documents for the given knowledge base ID.
     """
     try:
         service_client = get_service_role_client()
-        result = service_client.table("knowledge_base").select("id, file_name, storage_path").eq("user_id", user_id).execute()
+        result = (
+            service_client.table("documents")
+            .select("id, content, metadata, kb_id")
+            .eq("kb_id", kb_id)
+            .execute()
+        )
         chunks = result.data or []
+        print(f"📄 Fetched {len(chunks)} chunks for kb_id: {kb_id}")
         return {"chunks": chunks}
     except Exception as e:
-        print("⚠️ Error fetching chunks:", e)
+        print(f"⚠️ Error fetching chunks for kb_id {kb_id}: {e}")
         return {"chunks": []}
 
-@router.get("/debug/documents/{user_id}")
-def debug_documents(user_id: str):
-    """Debug endpoint to check documents table for a user_id"""
-    try:
-        service_client = get_service_role_client()
-        
-        # Check documents table
-        docs_result = service_client.table("documents").select("id, user_id, metadata, kb_id").eq("user_id", user_id).limit(5).execute()
-        
-        # Check knowledge_base table
-        kb_result = service_client.table("knowledge_base").select("id, user_id, file_name").eq("user_id", user_id).limit(5).execute()
-        
-        return {
-            "user_id": user_id,
-            "documents_count": len(docs_result.data) if docs_result.data else 0,
-            "documents": docs_result.data or [],
-            "knowledge_base_count": len(kb_result.data) if kb_result.data else 0,
-            "knowledge_base": kb_result.data or []
-        }
-    except Exception as e:
-        return {"error": str(e)}
 
 # ========= PODCAST SCRIPT GENERATION =========
 @router.post("/generate-podcast-script/")
