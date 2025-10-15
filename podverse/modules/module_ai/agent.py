@@ -53,7 +53,7 @@ class Assistant(Agent):
                 form.add_field("kb_id", kb_id)
                 async with session.post(
                     "http://localhost:8000/internal/respond", data=form,
-                    timeout=aiohttp.ClientTimeout(total=60)
+                    timeout=aiohttp.ClientTimeout(total=120)
                 ) as resp:
                     if resp.status == 200:
                         j = await resp.json()
@@ -66,13 +66,37 @@ class Assistant(Agent):
                         print(f"⚠️ RAG backend error: {txt}")
                         return "I couldn't find relevant information in your documents."
         except asyncio.TimeoutError:
-            print(f"❌ query_knowledge_base timed out after 60 seconds")
+            print(f"❌ query_knowledge_base timed out after 120 seconds")
             return "I'm having trouble accessing your documents right now. Please try again."
         except Exception as e:
             print(f"❌ query_knowledge_base exception: {e}")
             traceback.print_exc()
             return "Error querying knowledge base."
 
+# ---------- Helper: topic extraction ----------
+def extract_topic_from_context(context: str) -> str:
+    """
+    Try to pull a short 'topic' phrase from context:
+    - first heading line
+    - or first sentence under 100 chars
+    """
+    if not context:
+        return "this topic"
+    # try first non-empty line
+    lines = [ln.strip() for ln in context.splitlines() if ln.strip()]
+    if lines:
+        first = lines[0]
+        # If first line is long, try first sentence
+        first_sent = re.split(r'\.|\n', first)[0].strip()
+        if len(first_sent) <= 120:
+            # sanitize
+            first_sent = re.sub(r'\s+', ' ', first_sent)
+            return first_sent
+    # fallback: first sentence of full context
+    m = re.search(r'(.{10,120}?)\.', context)
+    if m:
+        return m.group(1).strip()
+    return "this topic"
 
 # ---------- Entrypoint ----------
 async def entrypoint(ctx: agents.JobContext):
@@ -279,16 +303,46 @@ async def entrypoint(ctx: agents.JobContext):
 
     # send initial greeting using SESSION_INSTRUCTION
     try:
-        # Add timeout to prevent hanging
-        await asyncio.wait_for(
-            session.generate_reply(instructions=SESSION_INSTRUCTION),
-            timeout=30.0  # 30 second timeout
-        )
-        print("💬 Initial greeting sent using SESSION_INSTRUCTION.")
-    except asyncio.TimeoutError:
-        print("⏰ Initial greeting timed out - continuing without greeting...")
+        # fetch initial chunk context from backend
+        print(f"🔍 Attempting initial context fetch for user_id: {agent.user_id}")
+        async with aiohttp.ClientSession() as s:
+            form = aiohttp.FormData()
+            form.add_field("query", "Tell me about the document I uploaded")
+            form.add_field("user_id", agent.user_id)
+            if agent.selected_kb_id:
+                form.add_field("kb_id", agent.selected_kb_id)
+                print(f"🔍 Initial fetch with kb_id: {agent.selected_kb_id}")
+            else:
+                print(f"⚠️ No kb_id available for initial fetch")
+            async with s.post("http://localhost:8000/internal/respond", data=form, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                if resp.status == 200:
+                    j = await resp.json()
+                    initial_context = j.get("answer_text", "") or ""
+                    print(f"📄 Initial chunks fetched ({len(initial_context)} chars)")
+                    topic = extract_topic_from_context(initial_context) if initial_context else "the topic you shared"
+                else:
+                    txt = await resp.text()
+                    print(f"⚠️ initial fetch failed: {txt}")
     except Exception as e:
-        print(f"⚠️ generate_reply error: {e}")
+        print(f"⚠️ initial chunks exception: {e}")
+        print(f"⚠️ Exception type: {type(e)}")
+        import traceback
+        traceback.print_exc()
+        print(f"⚠️ Continuing without initial context...")
+
+    # craft initial greeting instruction — avoid the word 'document'
+    init_instruction = (
+        f"You are PODHOST. Greet the guest warmly and in one sentence mention the topic: '{topic}'. "
+        "Briefly (one short sentence) summarize what you found, then ask a light, open-ended opening question to start the conversation."
+    )
+
+    try:
+        # Use generate_reply only with instructions (no text=)
+        await session.generate_reply(instructions=init_instruction)
+        
+        print("💬 Initial greeting/instruction sent.")
+    except Exception as e:
+        print(f"⚠️ generate_reply(initial) error: {e}")
         traceback.print_exc()
         print("⚠️ Continuing without initial greeting...")
 

@@ -18,30 +18,25 @@ import tempfile
 import re
 from typing import Dict, Optional, List
 from dotenv import load_dotenv
-import requests
-# from gradio_client import Client
+from gradio_client import Client
 
 from connection_supabase_client import (
     get_authenticated_supabase_client,
     get_service_role_client,
-    # get_gradio_client
+    get_gradio_client
 )
 
 router = APIRouter()
 
 # ========= CONFIGURATION =========
 load_dotenv()
-# Together API Configuration
-TOGETHER_API_KEY = os.environ.get("TOGETHER_API_KEY")
-TOGETHER_API_URL = "https://api.together.xyz/v1/chat/completions"
-TOGETHER_MODEL = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
 
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 100
 
 # Global client variable for LLM
-# client = None
+client = None
 
 # Small talk patterns
 SMALL_TALK_PATTERNS: Dict[str, str] = {
@@ -50,79 +45,20 @@ SMALL_TALK_PATTERNS: Dict[str, str] = {
     r"\b(bye|goodbye|see ya|see you)\b": "Thank you for having me! This was absolutely wonderful, take care!",
 }
 
-# @router.get("/test-llm/")
-# def call_llm(query: str):
-#     global client
-#     if not client:
-#         client = get_gradio_client()
-#     print(f"🎉 Test LLM endpoint called with query: {query}")
-#     try:
-#         result = client.predict(
-#             message=query,
-#             api_name="/chat"
-#         )
-#         print(f"✅ LLM Response: {result}")
-#         return {
-#             "message": "LLM test successful!",
-#             "query": query,
-#             "response": result,
-#             "status": "success"
-#         }
-#     except Exception as e:
-#         print(f"❌ LLM Error: {e}")
-#         return {
-#             "message": "LLM test failed!",
-#             "query": query,
-#             "error": str(e),
-#             "status": "error"
-#         }
 # ========= LLM SETUP =========
-# def make_llm_hf(query: str, temperature=0.1, max_tokens=512):
-#     """Use Hugging Face LLM for document Q&A"""
-#     global client
-#     if not client:
-#         client = get_gradio_client()
-#     try:
-#         result = client.predict(
-#             message=query,
-#             api_name="/chat"
-#         )
-#         return result
-#     except Exception as e:
-#         print(f"❌ Hugging Face LLM Error: {e}")
-#         return "I'm sorry, I couldn't process your request right now."
-
-def make_llm_together(query: str, temperature=0.1, max_tokens=512):
-    """Use Together API for document Q&A"""
-    if not TOGETHER_API_KEY:
-        print("❌ TOGETHER_API_KEY not found in environment")
-        return "I'm sorry, I couldn't process your request right now."
-    
+def make_llm_hf(query: str, temperature=0.1, max_tokens=512):
+    """Use Hugging Face LLM for document Q&A"""
+    global client
+    if not client:
+        client = get_gradio_client()
     try:
-        response = requests.post(
-            TOGETHER_API_URL,
-            headers={
-                "Authorization": f"Bearer {TOGETHER_API_KEY}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "model": TOGETHER_MODEL,
-                "messages": [{"role": "user", "content": query}],
-                "max_tokens": max_tokens,
-                "temperature": temperature
-            },
-            timeout=30
+        result = client.predict(
+            message=query,
+            api_name="/chat"
         )
-        
-        if response.status_code == 200:
-            result = response.json()
-            return result["choices"][0]["message"]["content"]
-        else:
-            print(f"❌ Together API Error: {response.status_code} - {response.text}")
-            return "I'm sorry, I couldn't process your request right now."
-            
+        return result
     except Exception as e:
-        print(f"❌ Together API Error: {e}")
+        print(f"❌ Hugging Face LLM Error: {e}")
         return "I'm sorry, I couldn't process your request right now."
 
 # Standard Q&A prompt
@@ -837,7 +773,7 @@ async def generate_response(
         context_text = "\n\n".join([doc.page_content for doc in retrieved_documents])
         full_query = f"Context: {context_text}\n\nQuestion: {q}\n\nAnswer based on the context:"
         
-        answer = make_llm_together(full_query, temperature=0.1, max_tokens=512)
+        answer = make_llm_hf(full_query, temperature=0.1, max_tokens=512)
         answer = polish_answer(answer)
 
         sources = [
@@ -950,12 +886,6 @@ async def internal_respond(
             for row in candidate_rows
         ]
         context_text = "\n\n".join([doc.page_content for doc in retrieved_documents])
-        
-        # Use SAFE_PROMPT structure to enforce strict RAG constraints
-        full_query = SAFE_PROMPT.format(context=context_text, question=q)
-        
-        answer = make_llm_together(full_query, temperature=0.1, max_tokens=512)
-        answer = polish_answer(answer) # Use polish_answer to clean up text
 
         elapsed = time.time() - start_time
         print(f"[internal/respond] ⏱️ Query processed in {elapsed:.2f}s, found {len(candidate_rows)} relevant chunks")
@@ -1152,7 +1082,7 @@ Create the conversation now, discussing ONLY what is covered in the knowledge ba
         # ------------------------------------------------ #
 
         print(f"[script-gen] Calling LLM with {config['max_tokens']} max tokens (STRICT RAG mode)")
-        script_text = make_llm_together(prompt, temperature=0.3, max_tokens=config['max_tokens'])  # Lower temp for more factual
+        script_text = make_llm_hf(prompt, temperature=0.3, max_tokens=config['max_tokens'])  # Lower temp for more factual
         
         if not script_text or len(script_text) < 50:
             return {
