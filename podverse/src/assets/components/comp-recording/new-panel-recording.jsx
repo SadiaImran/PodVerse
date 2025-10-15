@@ -200,12 +200,12 @@ const StatusIndicator = ({ isRecording, isProcessing, isSpeaking, conversationSt
   if (isRecording || (conversationStarted && !isPaused)) { 
     return (
       <div className="flex flex-col items-center space-y-2">
-        <div className="flex items-center justify-center space-x-3 bg-red-900/30 px-6 py-3 rounded-full border border-red-500">
-          <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse shadow-red-500/50"></div>
-          <Icon name="mic" className="w-5 h-5 text-red-400" />
-          <span className="font-medium text-red-300">LIVE RECORDING</span>
+        <div className="flex items-center justify-center space-x-3 bg-gradient-to-r from-red-500 to-red-600 px-6 py-3 rounded-full border-2 border-red-700 shadow-lg">
+          <div className="w-3 h-3 bg-white rounded-full animate-pulse shadow-white/50"></div>
+          <Icon name="mic" className="w-5 h-5 text-white" />
+          <span className="font-bold text-white">LIVE RECORDING</span>
         </div>
-        <div className="text-red-300 text-sm font-medium">
+        <div className="text-red-600 text-sm font-bold bg-white px-3 py-1 rounded-full border border-red-200">
           {formatTime(elapsedTime)}
         </div>
       </div>
@@ -318,11 +318,12 @@ const NewPanelsRecording = () => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [transcript, streamingText]);
 
-  // **FIXED: Timer logic to correctly track elapsed time**
+  // **IMPROVED: Timer logic to correctly track elapsed time and resume from where left off**
   useEffect(() => {
     if (isPlaying && !isPaused) {
       if (timerRef.current === null) {
-        const start = Date.now() - pausedTime; // Resume from paused time
+        // Calculate the start time based on current elapsed time
+        const start = Date.now() - (elapsedTime * 1000);
         setStartTime(start); 
 
         timerRef.current = setInterval(() => {
@@ -331,8 +332,6 @@ const NewPanelsRecording = () => {
       }
     } else if (timerRef.current) {
       clearInterval(timerRef.current);
-      // Save the elapsed time as pausedTime
-      setPausedTime(elapsedTime * 1000); 
       setStartTime(null);
       timerRef.current = null;
     }
@@ -342,7 +341,7 @@ const NewPanelsRecording = () => {
         clearInterval(timerRef.current);
       }
     };
-  }, [isPlaying, isPaused, pausedTime, elapsedTime]);
+  }, [isPlaying, isPaused, elapsedTime]);
 
   useEffect(() => {
     const savedScript = sessionStorage.getItem('podcastScript');
@@ -382,14 +381,14 @@ const fetchLiveKitToken = async () => {
     formData.append("user_id", user.id); 
 
     // Get selected knowledge base ID from localStorage
-    const selectedKB = localStorage.getItem('selectedKnowledgeBase');
+    const selectedKB = sessionStorage.getItem('current_kb_id');
+    console.log("Retrieved selected KB ID from sessionStorage:", selectedKB);
+
     if (selectedKB) {
       try {
-        const kbInfo = JSON.parse(selectedKB);
-        if (kbInfo.type === 'existing' && kbInfo.id) {
-          formData.append("selected_kb_id", kbInfo.id);
-          console.log("🎯 Using selected KB ID:", kbInfo.id);
-        }
+          formData.append("selected_kb_id",selectedKB);
+          console.log("🎯 Using selected KB ID:",selectedKB);
+        
       } catch (e) {
         console.warn("Failed to parse selected KB info:", e);
       }
@@ -744,36 +743,27 @@ const fetchLiveKitToken = async () => {
     // Clear input
     setManualMessage('');
     
-    // Show processing indicator - Simulate LiveKit sending data
+    // Show processing indicator
     setIsProcessing(true);
     
     try {
-      // In a real LiveKit agent setup, you would use room.localParticipant.publishData
-      // to send this text to the agent's data channel.
-      
-      // --- SIMULATED RESPONSE ---
-      setTimeout(() => {
-        setIsProcessing(false);
-        setIsSpeaking(true);
+      // Send the message through LiveKit data channel to trigger real AI response
+      if (room && room.localParticipant) {
+        const messageData = JSON.stringify({
+          type: 'manual_message',
+          text: messageToSend,
+          timestamp: new Date().toISOString()
+        });
         
-        // Simulating the agent's response being streamed back as a final segment
-        setTranscript(prev => [...prev, {
-          speaker: 'AI Assistant',
-          text: `Roger Boss. I have acknowledged your manual input: "${messageToSend}". My simulated response is complete.`,
-          timestamp: new Date().toISOString(),
-          isResponse: true,
-          isStreaming: false, // Treat simulated as final for simplicity
-        }]);
-        setConversationHistory(prev => [...prev, {
-            speaker: 'AI Assistant',
-            text: `Roger Boss. I have acknowledged your manual input: "${messageToSend}". My simulated response is complete.`,
-            timestamp: new Date().toISOString(),
-        }]);
-
-        // Simulate AI speaking for a few seconds
-        setTimeout(() => setIsSpeaking(false), 3000);
-      }, 1500);
-      // --- END SIMULATED RESPONSE ---
+        await room.localParticipant.publishData(messageData, { reliable: true });
+        console.log('📤 Sent manual message through LiveKit data channel:', messageToSend);
+        
+        // The AI will respond through the normal transcription flow
+        // No need for simulated response - let the real AI handle it
+        showToast('Message sent to AI - waiting for response...', 'info');
+      } else {
+        throw new Error('LiveKit room not available');
+      }
     } catch (error) {
       console.error('Error sending manual message:', error);
       setIsProcessing(false);
@@ -836,16 +826,18 @@ const fetchLiveKitToken = async () => {
             }
             setCurrentStreamingSpeaker('AI Assistant');
             setStreamingText(segment.text);
-            // Write streaming directly into the AI bubble
+            // Write streaming directly into the AI bubble - FIXED: Better handling of streaming text
             setTranscript(prev => {
               const lastMessage = prev[prev.length - 1];
               const now = new Date().toISOString();
               if (lastMessage && lastMessage.speaker === 'AI Assistant' && lastMessage.isStreaming) {
+                // Update existing streaming message
                 return [
                   ...prev.slice(0, -1),
                   { speaker: 'AI Assistant', text: segment.text, timestamp: lastMessage.timestamp || now, isStreaming: true }
                 ];
               }
+              // Create new streaming message
               return [...prev, { speaker: 'AI Assistant', text: segment.text, timestamp: now, isStreaming: true }];
             });
             setIsSpeaking(true);
@@ -860,14 +852,17 @@ const fetchLiveKitToken = async () => {
               assistantBufferRef.current = { type: 'final', text: segment.text };
               return;
             }
+            // FIXED: Better handling of final AI messages to prevent breaking
             setTranscript(prev => {
               const lastMessage = prev[prev.length - 1];
               if (lastMessage && lastMessage.speaker === 'AI Assistant' && lastMessage.isStreaming) {
+                // Replace streaming message with final message
                 return [
                   ...prev.slice(0, -1),
                   { speaker: 'AI Assistant', text: segment.text, timestamp: new Date().toISOString(), isStreaming: false }
                 ];
               }
+              // Add new final message
               return [...prev, { speaker: 'AI Assistant', text: segment.text, timestamp: new Date().toISOString(), isStreaming: false }];
             });
             if (currentStreamingSpeaker === 'AI Assistant') {
@@ -891,6 +886,7 @@ const fetchLiveKitToken = async () => {
               setStreamingText('');
               setCurrentStreamingSpeaker(null);
             }
+            // Process buffered assistant message
             const buffered = assistantBufferRef.current;
             if (buffered) {
               assistantBufferRef.current = null;
@@ -1073,92 +1069,116 @@ const fetchLiveKitToken = async () => {
         ))}
       </div>
 
-
-      <div className="h-full rounded-3xl border-[3px] border-light-accent overflow-hidden flex">
-      {/* Left Panel - Recording Studio (More Space) */}
-      <div className="w-3/5 bg-gradient-to-b from-light-accent to-purple-200 flex">
+      <div className="h-full rounded-3xl border-2 border-purple-200/50 shadow-2xl overflow-hidden flex bg-white/90 backdrop-blur-sm">
+          {/* Left Panel - Recording Studio (More Space) */}
+          <div className="w-3/5 bg-gradient-to-br from-purple-50 via-white to-purple-100/30 flex">
         
         {/* Left Section - Participants + Session Management */}
         <section className="flex flex-col justify-center items-center my-auto mx-8 font-headingPoppins">
           {/* Participants Section - Only LiveKit Participants */}
-          <div className="py-6 px-8 bg-white/20 backdrop-blur-md rounded-3xl border border-white/30 shadow-2xl">
-            <h3 className="text-lg font-semibold text-gray-800 mb-6 text-center">Participants</h3>
+          <div className="py-8 px-8 bg-light-lightPurple backdrop-blur-md rounded-3xl border-2 border-purple-200/50 shadow-2xl hover:shadow-3xl transition-all duration-300">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-8 h-8 bg-gradient-to-br from-light-lightPurple to-light-lavender rounded-full flex items-center justify-center">
+                <Icon name="podcast" className="w-5 h-5 text-white" />
+              </div>
+              <h3 className="text-xl font-bold text-white">Participants</h3>
+            </div>
             <div className="space-y-4">
               {/* LiveKit Participants */}
               <LiveKitParticipants />
               
               {/* Show message if no participants */}
               {!liveKitConnected && (
-                <div className="text-center text-gray-600 text-sm py-4">
-                  <Icon name="podcast" className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                  <p>Connect to see participants</p>
+                <div className="text-center text-white py-8">
+                  <div className="w-16 h-16 bg-gradient-to-br from-purple-100 to-purple-200 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Icon name="podcast" className="w-8 h-8 text-purple-400" />
+                  </div>
+                  <p className="text-sm font-medium ">Connect to see participants</p>
+                  <p className="text-xs ">Live participants will appear here</p>
                 </div>
               )}
             </div>
         </div>
           {/* LiveKit Connection */}
-          <div className="mt-6">
+          <div className="mt-8">
             {!liveKitConnected ? (
               <button 
                 onClick={connectToLiveKit}
                 disabled={liveKitConnecting}
-                className={`flex items-center space-x-3 px-6 py-3 rounded-2xl text-sm font-medium transition-all duration-300 border shadow-lg ${
+                className={`group flex items-center space-x-3 px-8 py-4 rounded-2xl text-sm font-semibold transition-all duration-300 border-2 shadow-lg hover:shadow-xl hover:-translate-y-0.5 ${
                   liveKitConnecting
-                    ? 'bg-blue-500/20 text-blue-800 border-blue-500/30 cursor-not-allowed'
-                    : 'bg-green-500/20 text-green-800 border-green-500/30 hover:bg-green-500/30 cursor-pointer'
+                    ? 'bg-blue-500/10 text-blue-700 border-blue-500/30 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-green-500 to-green-600 text-white border-green-500 hover:from-green-600 hover:to-green-700 cursor-pointer'
                 }`}
               >
-                <div className={`w-3 h-3 rounded-full ${
-                  liveKitConnecting ? 'bg-blue-500 animate-pulse' : 'bg-green-500'
+                <div className={`w-4 h-4 rounded-full ${
+                  liveKitConnecting ? 'bg-blue-500 animate-pulse' : 'bg-white'
                 }`}></div>
                 <span>{liveKitConnecting ? 'Connecting...' : 'Connect LiveKit'}</span>
+                {!liveKitConnecting && (
+                  <div className="w-5 h-5 bg-white/20 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <div className="w-2 h-2 bg-white rounded-full"></div>
+                  </div>
+                )}
               </button>
             ) : (
               <button 
                 onClick={disconnectFromLiveKit}
-                className="flex items-center space-x-3 bg-red-500/20 backdrop-blur-md text-red-800 px-6 py-3 rounded-2xl text-sm font-medium hover:bg-red-500/30 transition-all duration-300 border border-red-500/30 shadow-lg"
+                className="group flex items-center space-x-3 bg-gradient-to-r from-red-500 to-red-600 text-white px-8 py-4 rounded-2xl text-sm font-semibold hover:from-red-600 hover:to-red-700 transition-all duration-300 border-2 border-red-500 shadow-lg hover:shadow-xl hover:-translate-y-0.5"
               >
-                <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+                <div className="w-4 h-4 bg-white rounded-full animate-pulse"></div>
                 <span>Disconnect LiveKit</span>
+                <div className="w-5 h-5 bg-white/20 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <div className="w-2 h-2 bg-white rounded-full"></div>
+                </div>
               </button>
             )}
             
             {/* Connection Status */}
-            <div className="mt-2 text-xs text-center">
-              <span className={`px-2 py-1 rounded-full ${
+            <div className="mt-3 text-center">
+              <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-medium ${
                 liveKitConnected 
-                  ? 'bg-green-100 text-green-800' 
+                  ? 'bg-green-100 text-green-800 border border-green-200' 
                   : liveKitConnecting
-                  ? 'bg-blue-100 text-blue-800'
-                  : 'bg-gray-100 text-gray-600'
+                  ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                  : 'bg-gray-100 text-gray-600 border border-gray-200'
               }`}>
+                <div className={`w-2 h-2 rounded-full ${
+                  liveKitConnected ? 'bg-green-500 animate-pulse' : 
+                  liveKitConnecting ? 'bg-blue-500 animate-pulse' : 'bg-gray-400'
+                }`}></div>
                 {liveKitConnected ? 'Connected' : liveKitConnecting ? 'Connecting...' : 'Disconnected'}
               </span>
             </div>
           </div>
 
           {/* Restart Session */}
-          <div className="mt-4">
+          <div className="mt-6">
             <button 
               onClick={restartRecording}
               disabled={isProcessing}
-              className="flex items-center space-x-3 bg-white/20 backdrop-blur-md text-gray-800 px-6 py-3 rounded-2xl text-sm font-medium hover:bg-white/30 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed border border-white/30 shadow-lg"
+              className="group flex items-center space-x-3 bg-gradient-to-r from-gray-500 to-gray-600 text-white px-6 py-3 rounded-2xl text-sm font-semibold hover:from-gray-600 hover:to-gray-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed border-2 border-gray-500 shadow-lg hover:shadow-xl hover:-translate-y-0.5"
             >
-              <GrPowerCycle className="w-5 h-5" /> 
+              <GrPowerCycle className="w-5 h-5 group-hover:rotate-180 transition-transform duration-500" /> 
               <span>Restart Session</span>
             </button>
           </div>
         </section>
 
         {/* Separator */}
-        <div className="w-px bg-light-grey "></div>
+        <div className="w-px bg-gradient-to-b from-purple-200 to-purple-300"></div>
 
         {/* Right Section - Main Controls */}
         <section className="w-2/3 flex flex-col my-auto mx-8">
 
           {/* Header */}
-          <div className="bg-light-charcoal text-white px-6 py-3 mx-auto rounded-3xl mt-28 text-2xl font-semibold font-headingPoppins">
-            <h1 className="text-lg font-semibold">THE DAILY CONVERSATION</h1>
+          <div className="bg-gradient-to-r from-light-lightPurple to-light-lavender text-white px-8 py-4 mx-auto rounded-3xl mt-20 shadow-2xl border-2 border-purple-500/20">
+            <div className="flex items-center justify-center gap-3">
+              <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
+                <Icon name="podcast" className="w-5 h-5 text-white" />
+              </div>
+              <h1 className="text-xl font-bold font-headingPoppins tracking-wide">THE DAILY CONVERSATION</h1>
+            </div>
           </div>
           
           {/* Status Indicator */}
@@ -1177,7 +1197,7 @@ const fetchLiveKitToken = async () => {
 
             {/* WhatsApp-Style Waveform Section */}
             <div className="flex justify-center items-center py-8">
-              <div className="bg-purple-50/30 border border-purple-200/50 rounded-lg p-6 w-8/12 h-72 flex items-center justify-center">
+              <div className="bg-gradient-to-br from-purple-50 to-white border-2 border-purple-200/50 rounded-2xl p-8 w-8/12 h-80 flex items-center justify-center shadow-lg hover:shadow-xl transition-all duration-300">
                 <WhatsAppWaveform 
                   isActive={isSpeaking || (isMicOn && isPlaying)} 
                   audioLevel={isSpeaking ? 0.8 : 0.3}
@@ -1186,51 +1206,53 @@ const fetchLiveKitToken = async () => {
             </div>
 
           {/* Controls - Two Parallel Columns */}
-          <div className="flex justify-center items-center py-6">
-            <div className="flex space-x-6">
+          <div className="flex justify-center items-center py-8">
+            <div className="flex space-x-8">
 
               {/* Left Column - Mic & Playback */}
-              <div className="w-1/2 flex justify-center items-center gap-3">
+              <div className="w-1/2 flex justify-center items-center gap-6">
               {/* Microphone Toggle Button - Purple */}
-              <div className="flex justify-center items-center">
+              <div className="flex flex-col items-center gap-2">
                 <button 
                   onClick={toggleMicrophone}
                   disabled={!liveKitConnected || !isPlaying || isPaused} // Only enabled when live and unpaused
-                  className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 shadow-lg ${
+                  className={`w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 shadow-lg hover:shadow-xl hover:-translate-y-1 ${
                     !liveKitConnected || !isPlaying || isPaused
                       ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                       : isMicOn 
-                      ? 'bg-purple-500 text-white border-2 border-purple-600' 
-                      : 'bg-white text-purple-500 border-2 border-purple-500'
+                      ? 'bg-gradient-to-br from-purple-500 to-purple-600 text-white border-2 border-purple-700 shadow-purple-500/50' 
+                      : 'bg-white text-purple-500 border-2 border-purple-500 hover:bg-purple-50'
                   }`}
                 >
                   {isMicOn ? (
-                    <PiMicrophoneBold className="w-8 h-8" />
+                    <PiMicrophoneBold className="w-10 h-10" />
                   ) : (
-                    <PiMicrophoneSlashBold className="w-8 h-8" />
+                    <PiMicrophoneSlashBold className="w-10 h-10" />
                   )}
                 </button>
+                <span className="text-xs font-medium text-gray-600">Microphone</span>
               </div>
 
               {/* Play/Pause Toggle Button - Purple */}
-              <div className="flex justify-center items-center">
+              <div className="flex flex-col items-center gap-2">
                 <button 
                   onClick={togglePlayPause}
                   disabled={!liveKitConnected}
-                  className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 shadow-lg ${
+                  className={`w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 shadow-lg hover:shadow-xl hover:-translate-y-1 ${
                     !liveKitConnected
                       ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                       : isPlaying && !isPaused
-                      ? 'bg-purple-500 text-white border-2 border-purple-600' 
-                      : 'bg-white text-purple-500 border-2 border-purple-500'
+                      ? 'bg-gradient-to-br from-purple-500 to-purple-600 text-white border-2 border-purple-700 shadow-purple-500/50' 
+                      : 'bg-white text-purple-500 border-2 border-purple-500 hover:bg-purple-50'
                   }`}
                 >
                   {isPlaying && !isPaused ? (
-                    <PiPauseBold className="w-8 h-8" />
+                    <PiPauseBold className="w-10 h-10" />
                   ) : (
-                    <PiPlayFill className="w-8 h-8" />
+                    <PiPlayFill className="w-10 h-10" />
                   )}
                 </button>
+                <span className="text-xs font-medium text-gray-600">Play/Pause</span>
               </div>
               </div>
 
@@ -1239,13 +1261,18 @@ const fetchLiveKitToken = async () => {
                   <button 
                     onClick={stopSpeaking}
                   disabled={!isSpeaking && !streamingText}
-                  className={`px-8 py-3 rounded-3xl text-xl font-medium transition-all duration-300 ${
+                  className={`group px-10 py-4 rounded-3xl text-lg font-semibold transition-all duration-300 shadow-lg hover:shadow-xl hover:-translate-y-1 ${
                     isSpeaking || streamingText
-                      ? 'bg-red-500 text-white hover:bg-white hover:text-red-500 hover:border-2 hover:border-red-500 cursor-pointer'
+                      ? 'bg-gradient-to-r from-red-500 to-red-600 text-white hover:from-red-600 hover:to-red-700 border-2 border-red-500 cursor-pointer'
                       : 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-50'
                   }`}
                 >
-                  Halt AI
+                  <span className="flex items-center gap-2">
+                    <div className={`w-3 h-3 rounded-full ${
+                      isSpeaking || streamingText ? 'bg-white animate-pulse' : 'bg-gray-400'
+                    }`}></div>
+                    Halt AI
+                  </span>
                 </button>
               </div>
             
@@ -1256,50 +1283,68 @@ const fetchLiveKitToken = async () => {
       </div>
 
       {/* Right Panel - Transcript (Less Space) */}
-      <div className="w-2/5 bg-white flex flex-col">
-        {/* Header with Search */}
-        <div className="border-b border-gray-200 px-4 py-3">
+      <div className="w-2/5 bg-gradient-to-br from-gray-50 to-purple-50/30 flex flex-col border-l-2 border-purple-200/50">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-purple-50 to-white border-b-2 border-purple-200/50 px-6 py-4">
           <div className="flex items-center justify-between">
             {/* Tab Buttons */}
-            <div className="flex space-x-4">
+            <div className="flex space-x-6">
               <button 
                 onClick={() => setActiveTab('transcript')}
-                className={`pb-2 text-sm font-medium transition-colors ${
+                className={`pb-3 text-sm font-semibold transition-all duration-300 relative ${
                   activeTab === 'transcript'
-                    ? 'text-blue-600 border-b-2 border-blue-600'
-                    : 'text-gray-500 hover:text-gray-700'
+                    ? 'text-purple-600'
+                    : 'text-gray-500 hover:text-purple-600'
                 }`}
               >
-                Transcript
+                <span className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${
+                    activeTab === 'transcript' ? 'bg-purple-500' : 'bg-gray-300'
+                  }`}></div>
+                  Transcript
+                </span>
+                {activeTab === 'transcript' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-purple-500 to-purple-600 rounded-full"></div>
+                )}
               </button>
               <button 
                 onClick={() => setActiveTab('script')}
-                className={`pb-2 text-sm font-medium transition-colors relative ${
+                className={`pb-3 text-sm font-semibold transition-all duration-300 relative ${
                   activeTab === 'script'
-                    ? 'text-purple-600 border-b-2 border-purple-600'
-                    : 'text-gray-500 hover:text-gray-700'
+                    ? 'text-purple-600'
+                    : 'text-gray-500 hover:text-purple-600'
                 }`}
               >
-                Script
-                {podcastScript && (
-                  <span className="absolute -top-1 -right-2 w-2 h-2 bg-purple-500 rounded-full"></span>
+                <span className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${
+                    activeTab === 'script' ? 'bg-purple-500' : 'bg-gray-300'
+                  }`}></div>
+                  Script
+                  {podcastScript && (
+                    <span className="w-2 h-2 bg-purple-500 rounded-full animate-pulse"></span>
+                  )}
+                </span>
+                {activeTab === 'script' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-purple-500 to-purple-600 rounded-full"></div>
                 )}
               </button>
             </div>
+            
+            {/* Export/Download Button */}
             <div className="flex items-center space-x-3">
-              <button className="text-blue-600 text-sm font-medium hover:text-blue-800 flex items-center space-x-1">
-                <span>Search</span>
-                <Icon name="play" className="w-3 h-3 rotate-90" />
+              <button className="bg-gradient-to-r from-light-lightPurple to-light-lavender text-white px-4 py-2 rounded-lg text-sm font-semibold hover:from-purple-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl hover:-translate-y-0.5 flex items-center space-x-2">
+                <Icon name="podcast" className="w-4 h-4" />
+                <span>Export Transcript</span>
               </button>
             </div>
           </div>
           
           {/* Status Banner - Only show on transcript tab */}
           {activeTab === 'transcript' && (
-            <div className="mt-2 p-2 bg-purple-50 border border-purple-200 rounded-lg">
-              <div className="flex items-center space-x-2">
-                <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-                <span className="text-xs text-purple-700 font-medium">
+            <div className="mt-3 p-3 bg-gradient-to-r from-purple-50 to-purple-100 border border-purple-200 rounded-xl shadow-sm">
+              <div className="flex items-center space-x-3">
+                <div className="w-3 h-3 bg-purple-500 rounded-full animate-pulse"></div>
+                <span className="text-sm text-purple-700 font-semibold">
                   Knowledge Base Active - AI can access your selected documents
                 </span>
               </div>
@@ -1308,10 +1353,10 @@ const fetchLiveKitToken = async () => {
           
           {/* Script Info Banner - Only show on script tab */}
           {activeTab === 'script' && podcastScript && (
-            <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-lg">
-              <div className="flex items-center space-x-2">
-                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                <span className="text-xs text-green-700 font-medium">
+            <div className="mt-3 p-3 bg-gradient-to-r from-green-50 to-green-100 border border-green-200 rounded-xl shadow-sm">
+              <div className="flex items-center space-x-3">
+                <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                <span className="text-sm text-green-700 font-semibold">
                   Script loaded: {podcastScript.metadata?.segment_count || 0} segments • 
                   {podcastScript.metadata?.word_count || 0} words
                 </span>
@@ -1321,60 +1366,57 @@ const fetchLiveKitToken = async () => {
         </div>
 
         {/* Transcript Area - Streaming Style */}
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto p-6 bg-gradient-to-br from-white via-gray-50/50 to-purple-50/20">
           {activeTab === 'transcript' ? (
-            // Existing Transcript View
+            // Enhanced Transcript View
             <>
               {transcript.length === 0 && !streamingText ? (
-                <div className="text-center text-gray-500 mt-16">
-                  <Icon name="podcast" className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                  <p className="text-sm">Ready to start conversation</p>
-                  <p className="text-xs">Your transcript will appear here</p>
+                <div className="text-center text-gray-500 mt-20">
+                  <div className="w-20 h-20 bg-gradient-to-br from-purple-100 to-purple-200 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <Icon name="podcast" className="w-10 h-10 text-purple-400" />
+                  </div>
+                  <p className="text-lg font-semibold text-gray-600 mb-2">Ready to start conversation</p>
+                  <p className="text-sm text-gray-400">Your transcript will appear here in real-time</p>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-4">
                   {transcript.map((entry, idx) => (
                     <div 
                       key={`${idx}-${entry.speaker}`} 
-                      className={`flex items-start space-x-2 ${
-                        entry.isSystem ? 'bg-yellow-50 p-3 rounded-lg border-l-4 border-yellow-400' : 
-                        entry.isWelcomeBack ? 'bg-blue-50 p-3 rounded-lg border-l-4 border-blue-400' : ''
+                      className={`flex ${entry.speaker === "You" ? 'justify-end' : 'justify-start'} ${
+                        entry.isSystem ? 'justify-center' : ''
                       }`}
+                      style={{ animation: 'fadeIn 0.3s ease-in' }}
                     >
-                      <div className="flex-shrink-0">
-                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold ${
-                          entry.speaker === "You" ? "bg-blue-500" : 
-                          entry.speaker === "System" ? "bg-yellow-500" :
-                          entry.speaker === "AI Assistant" ? "bg-purple-500" : "bg-gray-500"
-                        }`}>
-                          {entry.speaker === "You" ? "U" : 
-                          entry.speaker === "System" ? "S" :
-                          entry.speaker === "AI Assistant" ? "AI" : "?"}
-                        </div>
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-1 mb-1">
-                          <span className="text-xs font-medium text-gray-700">
-                            {entry.speaker}
-                          </span>
-                          <div className={`w-3 h-3 rounded-full flex items-center justify-center ${
-                            entry.speaker === "You" ? "bg-blue-500" : 
-                            entry.speaker === "System" ? "bg-yellow-500" :
-                            "bg-purple-500"
+                      <div className={`flex items-start gap-3 max-w-[80%] ${entry.speaker === "You" ? 'flex-row-reverse' : ''}`}>
+                        <div className="flex-shrink-0">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-lg ${
+                            entry.speaker === "You" ? "bg-gradient-to-br from-purple-500 to-purple-600" : 
+                            entry.speaker === "System" ? "bg-gradient-to-br from-yellow-500 to-yellow-600" :
+                            entry.speaker === "AI Assistant" ? "bg-gradient-to-br from-blue-500 to-blue-600" : "bg-gradient-to-br from-gray-500 to-gray-600"
                           }`}>
-                            <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
+                            {entry.speaker === "You" ? "U" : 
+                            entry.speaker === "System" ? "S" :
+                            entry.speaker === "AI Assistant" ? "AI" : "?"}
                           </div>
-                          <span className="text-xs text-gray-500">
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <div className={`rounded-2xl px-5 py-3.5 ${
+                            entry.speaker === "You"
+                              ? 'bg-gradient-to-br from-purple-500 to-purple-600 text-white shadow-lg'
+                              : entry.isSystem
+                              ? 'bg-gradient-to-r from-yellow-50 to-yellow-100 border-2 border-yellow-200 shadow-md'
+                              : entry.isWelcomeBack
+                              ? 'bg-gradient-to-r from-blue-50 to-blue-100 border-2 border-blue-200 shadow-md'
+                              : 'bg-white border-2 border-purple-100 shadow-md hover:shadow-lg transition-shadow'
+                          }`}>
+                            <p className="text-sm leading-relaxed">
+                              {entry.text}
+                            </p>
+                          </div>
+                          <span className={`text-xs text-gray-400 px-2 ${entry.speaker === "You" ? 'text-right' : ''}`}>
                             {new Date(entry.timestamp).toLocaleTimeString()}
                           </span>
-                        </div>
-                        <div className={`rounded p-2 ${
-                          entry.isSystem ? 'bg-yellow-100' : 
-                          entry.isWelcomeBack ? 'bg-blue-100' : 'bg-gray-50'
-                        }`}>
-                          <p className="text-gray-800 text-xs leading-relaxed">
-                            {entry.text}
-                          </p>
                         </div>
                       </div>
                     </div>
@@ -1382,25 +1424,21 @@ const fetchLiveKitToken = async () => {
                   
                   {/* Streaming message - only show for User */}
                   {streamingText && currentStreamingSpeaker === 'You' && (
-                    <div className="flex items-start space-x-2">
-                      <div className="flex-shrink-0">
-                        <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold bg-blue-500">
-                          U
-                        </div>
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-1 mb-1">
-                          <span className="text-xs font-medium text-gray-700">You</span>
-                          <div className="w-3 h-3 bg-blue-500 rounded-full flex items-center justify-center animate-pulse">
-                            <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
+                    <div className="flex justify-end" style={{ animation: 'fadeIn 0.3s ease-in' }}>
+                      <div className="flex items-start gap-3 max-w-[80%] flex-row-reverse">
+                        <div className="flex-shrink-0">
+                          <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold bg-gradient-to-br from-purple-500 to-purple-600 shadow-lg animate-pulse">
+                            U
                           </div>
-                          <span className="text-xs text-gray-500">Now</span>
                         </div>
-                        <div className="bg-gray-50 rounded p-2">
-                          <p className="text-gray-800 text-xs leading-relaxed">
-                            {streamingText}
-                            <span className="animate-pulse ml-1 text-purple-500">●</span>
-                          </p>
+                        <div className="flex flex-col gap-1">
+                          <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-2xl px-5 py-3.5 shadow-lg">
+                            <p className="text-sm leading-relaxed">
+                              {streamingText}
+                              <span className="animate-pulse ml-1 text-white text-lg">●</span>
+                            </p>
+                          </div>
+                          <span className="text-xs text-gray-400 px-2 text-right">Now</span>
                         </div>
                       </div>
                     </div>
@@ -1417,45 +1455,54 @@ const fetchLiveKitToken = async () => {
         </div>
 
         {/* Manual Message Input */}
-        <div className="border-t border-gray-200 p-4">
-          <div className="flex space-x-2">
-            <input
-              type="text"
-              value={manualMessage}
-              onChange={(e) => setManualMessage(e.target.value)}
-              placeholder="Type a message..."
-              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              disabled={!liveKitConnected || !isPlaying || isPaused}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  sendManualMessage();
-                }
-              }}
-            />
+        <div className="border-t-2 border-purple-200/50 p-6 bg-gradient-to-r from-purple-50 to-white">
+          <div className="flex gap-3 items-end">
+            <div className="flex-1 relative">
+              <textarea
+                value={manualMessage}
+                onChange={(e) => setManualMessage(e.target.value)}
+                placeholder="Type a message to send to the AI..."
+                className="w-full px-5 py-4 pr-12 border-2 border-purple-200 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-4 focus:ring-purple-100 resize-none transition-all duration-200 font-medium text-sm"
+                rows="1"
+                style={{ maxHeight: '120px', minHeight: '52px' }}
+                disabled={!liveKitConnected || !isPlaying || isPaused}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendManualMessage();
+                  }
+                }}
+              />
+              <div className="absolute right-4 top-4 w-5 h-5 text-purple-300">
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+              </div>
+            </div>
             <button
               onClick={sendManualMessage}
               disabled={!manualMessage.trim() || !liveKitConnected || !isPlaying || isPaused}
-              className="bg-purple-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-purple-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-6 py-4 bg-gradient-to-br from-purple-500 to-purple-700 text-white rounded-xl hover:from-purple-600 hover:to-purple-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-xl disabled:shadow-none hover:-translate-y-0.5 flex items-center gap-2 font-semibold"
             >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              </svg>
               Send
             </button>
           </div>
-        </div>
-
-        {/* Footer */}
-        <div className="border-t border-gray-200 px-4 py-3">
-          <div className="flex items-center justify-between">
-            <label className="flex items-center space-x-1 text-xs text-gray-600">
-              <input type="checkbox" className="rounded" />
-              <span>Export Transcript</span>
-            </label>
-            <button className="bg-purple-500 text-white px-3 py-1.5 rounded text-xs font-medium hover:bg-purple-600 transition-colors flex items-center space-x-1">
-              <Icon name="podcast" className="w-3 h-3" />
-              <span>Download</span>
-            </button>
+          <div className="flex items-center justify-center gap-2 mt-3">
+            <div className="flex items-center gap-1.5">
+              <div className={`w-2 h-2 rounded-full ${
+                liveKitConnected && isPlaying && !isPaused ? 'bg-green-500 animate-pulse' : 'bg-gray-400'
+              }`}></div>
+              <p className="text-xs text-gray-500 font-medium">
+                {liveKitConnected && isPlaying && !isPaused ? 'Ready to send messages' : 'Connect and start conversation to send messages'}
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+
+        </div>
       </div>
       
       {/* LiveKit Audio Renderer */}
@@ -1475,6 +1522,19 @@ const fetchLiveKitToken = async () => {
         }
         .animate-slide-in-right {
           animation: slide-in-right 0.3s ease-out;
+        }
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+            transform: translateY(10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        .animate-fade-in {
+          animation: fadeIn 0.3s ease-in;
         }
       `}</style>
     </RoomContext.Provider>
@@ -1507,20 +1567,21 @@ const LiveKitParticipants = () => {
       {uniqueParticipants.map((participant) => {
         const isAgent = participant.identity?.includes('agent');
         return (
-          <div key={participant.sid} className="flex items-center space-x-4 p-3 bg-white/30 rounded-2xl backdrop-blur-sm border border-white/40 hover:bg-white/40 transition-all duration-300">
-            <div className={`w-12 h-12 bg-gradient-to-br ${isAgent ? 'from-purple-500 to-purple-600' : 'from-blue-500 to-blue-600'} rounded-full flex items-center justify-center text-white shadow-lg`}>
+          <div key={participant.sid} className="group flex items-center space-x-4 p-4 bg-white/80 rounded-2xl backdrop-blur-sm border-2 border-purple-200/50 hover:bg-white hover:border-purple-300 hover:shadow-lg transition-all duration-300">
+            <div className={`w-14 h-14 bg-gradient-to-br ${isAgent ? 'from-purple-500 to-purple-600' : 'from-blue-500 to-blue-600'} rounded-full flex items-center justify-center text-white shadow-lg group-hover:scale-105 transition-transform duration-300`}>
               {isAgent ? (
-                <Icon name="podcast" className="w-6 h-6" />
+                <Icon name="podcast" className="w-7 h-7" />
               ) : (
-                <span className="text-xs font-bold">{participant.identity?.charAt(0).toUpperCase() || 'U'}</span>
+                <span className="text-sm font-bold">{participant.identity?.charAt(0).toUpperCase() || 'U'}</span>
               )}
           </div>
-          <div className="flex flex-col">
-              <span className="text-sm font-medium text-gray-800">{isAgent ? 'AI Agent' : participant.identity || 'User'}</span>
-              <span className="text-xs text-gray-600">{isAgent ? 'Assistant' : 'Listener'}</span>
+          <div className="flex flex-col flex-1">
+              <span className="text-sm font-semibold text-gray-800">{isAgent ? 'AI Agent' : participant.identity || 'User'}</span>
+              <span className="text-xs text-gray-600 font-medium">{isAgent ? 'AI Assistant' : 'Live Participant'}</span>
           </div>
-          <div className="ml-auto">
-            <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+          <div className="flex items-center space-x-2">
+            <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse shadow-green-500/50"></div>
+            <span className="text-xs text-green-600 font-medium">Online</span>
           </div>
         </div>
         );
