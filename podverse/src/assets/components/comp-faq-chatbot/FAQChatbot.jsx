@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles, MessageCircle, Mic, Settings, Zap, Users, Book, ChevronRight } from 'lucide-react';
+import { Send, Sparkles, MessageCircle, Mic, Settings, Zap, Users, Book, ChevronRight, ShieldCheck } from 'lucide-react';
 import {getSupabaseAuthorizedtoken } from '../../supabaseClient'
+import { MdSecurityUpdateWarning } from 'react-icons/md';
 
 const FAQChatbot = () => {
   const [messages, setMessages] = useState([
@@ -50,10 +51,11 @@ const FAQChatbot = () => {
       gradient: "from-pink-500 to-pink-600"
     },
     { 
-      icon: <Users className="w-5 h-5" />, 
-      text: "How to invite guests?",
+      icon: <ShieldCheck className="w-5 h-5" />, 
+      text: "Is my data secure on PodVerse?",
       gradient: "from-indigo-500 to-indigo-600"
     },
+
     { 
       icon: <Zap className="w-5 h-5" />, 
       text: "Export and distribution options",
