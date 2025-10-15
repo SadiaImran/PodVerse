@@ -381,14 +381,14 @@ const fetchLiveKitToken = async () => {
     formData.append("user_id", user.id); 
 
     // Get selected knowledge base ID from localStorage
-    const selectedKB = localStorage.getItem('selectedKnowledgeBase');
+    const selectedKB = sessionStorage.getItem('current_kb_id');
+    console.log("Retrieved selected KB ID from sessionStorage:", selectedKB);
+
     if (selectedKB) {
       try {
-        const kbInfo = JSON.parse(selectedKB);
-        if (kbInfo.type === 'existing' && kbInfo.id) {
-          formData.append("selected_kb_id", kbInfo.id);
-          console.log("🎯 Using selected KB ID:", kbInfo.id);
-        }
+          formData.append("selected_kb_id",selectedKB);
+          console.log("🎯 Using selected KB ID:",selectedKB);
+        
       } catch (e) {
         console.warn("Failed to parse selected KB info:", e);
       }
@@ -1076,9 +1076,9 @@ const fetchLiveKitToken = async () => {
         {/* Left Section - Participants + Session Management */}
         <section className="flex flex-col justify-center items-center my-auto mx-8 font-headingPoppins">
           {/* Participants Section - Only LiveKit Participants */}
-          <div className="py-8 px-8 bg-purple-600 backdrop-blur-md rounded-3xl border-2 border-purple-200/50 shadow-2xl hover:shadow-3xl transition-all duration-300">
+          <div className="py-8 px-8 bg-light-lightPurple backdrop-blur-md rounded-3xl border-2 border-purple-200/50 shadow-2xl hover:shadow-3xl transition-all duration-300">
             <div className="flex items-center gap-3 mb-6">
-              <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-purple-600 rounded-full flex items-center justify-center">
+              <div className="w-8 h-8 bg-gradient-to-br from-light-lightPurple to-light-lavender rounded-full flex items-center justify-center">
                 <Icon name="podcast" className="w-5 h-5 text-white" />
               </div>
               <h3 className="text-xl font-bold text-white">Participants</h3>
@@ -1172,7 +1172,7 @@ const fetchLiveKitToken = async () => {
         <section className="w-2/3 flex flex-col my-auto mx-8">
 
           {/* Header */}
-          <div className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-8 py-4 mx-auto rounded-3xl mt-20 shadow-2xl border-2 border-purple-500/20">
+          <div className="bg-gradient-to-r from-light-lightPurple to-light-lavender text-white px-8 py-4 mx-auto rounded-3xl mt-20 shadow-2xl border-2 border-purple-500/20">
             <div className="flex items-center justify-center gap-3">
               <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
                 <Icon name="podcast" className="w-5 h-5 text-white" />
@@ -1332,7 +1332,7 @@ const fetchLiveKitToken = async () => {
             
             {/* Export/Download Button */}
             <div className="flex items-center space-x-3">
-              <button className="bg-gradient-to-r from-purple-500 to-purple-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:from-purple-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl hover:-translate-y-0.5 flex items-center space-x-2">
+              <button className="bg-gradient-to-r from-light-lightPurple to-light-lavender text-white px-4 py-2 rounded-lg text-sm font-semibold hover:from-purple-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl hover:-translate-y-0.5 flex items-center space-x-2">
                 <Icon name="podcast" className="w-4 h-4" />
                 <span>Export Transcript</span>
               </button>

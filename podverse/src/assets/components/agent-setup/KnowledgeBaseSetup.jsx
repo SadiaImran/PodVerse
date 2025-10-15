@@ -215,7 +215,6 @@ const KnowledgeBaseSetup = ({ goNext, goBack }) => {
           }
         });
 
-        // ✅ CAPTURE KB_ID FROM RESPONSE
         const kb_id = res.data.kb_id;
         console.log("✅ Captured kb_id:", kb_id);
 
@@ -227,7 +226,7 @@ const KnowledgeBaseSetup = ({ goNext, goBack }) => {
         };
         
         localStorage.setItem('selectedKnowledgeBase', JSON.stringify(knowledgeBaseInfo));
-        sessionStorage.setItem('current_kb_id', kb_id);  // ← Also store separately for easy access
+        sessionStorage.setItem('current_kb_id', kb_id);  
 
         alert("Document uploaded successfully!");
         console.log("Response from server:", res.data);
@@ -263,7 +262,6 @@ const KnowledgeBaseSetup = ({ goNext, goBack }) => {
           }
         });
 
-        // ✅ CAPTURE KB_ID FROM RESPONSE
         const kb_id = res.data.kb_id;
         console.log("✅ Captured kb_id from URL:", kb_id);
 
@@ -302,7 +300,9 @@ const KnowledgeBaseSetup = ({ goNext, goBack }) => {
       };
       
       localStorage.setItem('selectedKnowledgeBase', JSON.stringify(knowledgeBaseInfo));
-      sessionStorage.setItem('current_kb_id', kb_id);  // ← Also store separately for easy access
+      sessionStorage.setItem('current_kb_id', kb_id);  
+      console.log("Stored existing knowledge base info in localStorage:", knowledgeBaseInfo);
+      console.log("Stored current_kb_id in sessionStorage:", kb_id);
 
       alert(`Using existing file: ${selectedExistingFile.file_name}.`);
       console.log(`Proceeding with existing file. KB ID: ${kb_id}`);

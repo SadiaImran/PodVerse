@@ -10,7 +10,7 @@ from livekit.agents import AgentSession, Agent, RoomInputOptions
 from livekit.agents.llm import function_tool
 from livekit.plugins import noise_cancellation, google
 
-from prompts import AGENT_INSTRUCTION
+from prompts import AGENT_INSTRUCTION , SESSION_INSTRUCTION
 
 load_dotenv()
 
@@ -39,6 +39,12 @@ class Assistant(Agent):
         try:
             uid = self.user_id or "default-user"
             kb_id = self.selected_kb_id
+            
+            # Check if we have a valid knowledge base ID
+            if not kb_id:
+                print(f"⚠️ No knowledge base selected (kb_id=None) for user {uid}")
+                return "I don't have access to your knowledge base yet. Please make sure you've selected a knowledge base for this session."
+            
             print(f"🔍 RAG query for user_id={uid}, kb_id={kb_id} (q={query[:80]})")
             async with aiohttp.ClientSession() as session:
                 form = aiohttp.FormData()
@@ -66,32 +72,6 @@ class Assistant(Agent):
             print(f"❌ query_knowledge_base exception: {e}")
             traceback.print_exc()
             return "Error querying knowledge base."
-
-
-# ---------- Helper: topic extraction ----------
-def extract_topic_from_context(context: str) -> str:
-    """
-    Try to pull a short 'topic' phrase from context:
-    - first heading line
-    - or first sentence under 100 chars
-    """
-    if not context:
-        return "this topic"
-    # try first non-empty line
-    lines = [ln.strip() for ln in context.splitlines() if ln.strip()]
-    if lines:
-        first = lines[0]
-        # If first line is long, try first sentence
-        first_sent = re.split(r'\.|\n', first)[0].strip()
-        if len(first_sent) <= 120:
-            # sanitize
-            first_sent = re.sub(r'\s+', ' ', first_sent)
-            return first_sent
-    # fallback: first sentence of full context
-    m = re.search(r'(.{10,120}?)\.', context)
-    if m:
-        return m.group(1).strip()
-    return "this topic"
 
 
 # ---------- Entrypoint ----------
@@ -197,8 +177,6 @@ async def entrypoint(ctx: agents.JobContext):
                     if kb_id:
                         agent.selected_kb_id = kb_id
                         print(f"✅ Received KB ID from data channel: {kb_id}")
-                        # Also try to fetch initial context with this KB ID
-                        asyncio.create_task(fetch_initial_context_with_kb(agent, kb_id, session))
                         # Restart egress with new KB ID for proper file naming
                         if room_name_str and agent.user_id != "default-user":
                             print(f"🔄 Restarting egress with new KB ID: {kb_id}")
@@ -299,81 +277,18 @@ async def entrypoint(ctx: agents.JobContext):
         traceback.print_exc()
         return
 
-    # Now fetch initial context after session is started
+    # send initial greeting using SESSION_INSTRUCTION
     try:
-        # fetch initial chunk context from backend
-        print(f"🔍 Attempting initial summary fetch for user_id: {agent.user_id}")
-        async with aiohttp.ClientSession() as s:
-            form = aiohttp.FormData()
-            form.add_field("user_id", agent.user_id)
-            if agent.selected_kb_id:
-                form.add_field("kb_id", agent.selected_kb_id)
-                print(f"🔍 Initial summary with kb_id: {agent.selected_kb_id}")
-            else:
-                print(f"⚠️ No kb_id available for initial summary")
-            async with s.post("http://localhost:8000/internal/get-document-summary", data=form, timeout=aiohttp.ClientTimeout(total=30)) as resp:
-                if resp.status == 200:
-                    j = await resp.json()
-                    raw_content = j.get("summary", "") or ""
-                    print(f"📄 Raw content fetched ({len(raw_content)} chars)")
-                    
-                    # Use Google LLM to create summary
-                    if raw_content and len(raw_content.strip()) > 10:
-                        summary_prompt = f"""Based on the following document content, provide a brief 2-3 sentence summary of the main topic and key points:
-
-{raw_content[:2000]}
-
-Summary:"""
-                        
-                        try:
-                            # Use session's generate_reply for summary - RealtimeModel doesn't have agenerate
-                            summary_instruction = f"Create a brief 2-3 sentence summary of this document content:\n\n{raw_content[:2000]}\n\nSummary:"
-                            summary_response = await session.generate_reply(instructions=summary_instruction)
-                            initial_context = summary_response if summary_response else raw_content[:500]
-                            print(f"🤖 Google LLM summary created ({len(initial_context)} chars)")
-                        except Exception as llm_error:
-                            print(f"⚠️ LLM summary failed: {llm_error}")
-                            initial_context = raw_content[:500]  # Fallback to first 500 chars
-                    else:
-                        initial_context = ""
-                    
-                    topic = extract_topic_from_context(initial_context) if initial_context else "the topic you shared"
-                else:
-                    txt = await resp.text()
-                    print(f"⚠️ initial summary fetch failed: {txt}")
+        # Add timeout to prevent hanging
+        await asyncio.wait_for(
+            session.generate_reply(instructions=SESSION_INSTRUCTION),
+            timeout=30.0  # 30 second timeout
+        )
+        print("💬 Initial greeting sent using SESSION_INSTRUCTION.")
     except asyncio.TimeoutError:
-        print(f"⚠️ Initial context fetch timed out after 30 seconds")
-        print(f"⚠️ This may be due to large knowledge base or slow processing")
-        print(f"⚠️ Continuing without initial context - agent will fetch context on-demand")
+        print("⏰ Initial greeting timed out - continuing without greeting...")
     except Exception as e:
-        print(f"⚠️ initial chunks exception: {e}")
-        print(f"⚠️ Exception type: {type(e)}")
-        import traceback
-        traceback.print_exc()
-        print(f"⚠️ Continuing without initial context...")
-
-    # craft initial greeting instruction — STRICT: only use provided context
-    if initial_context and len(initial_context.strip()) > 10:
-        init_instruction = (
-            f"You are PODHOST. Greet the guest warmly. "
-            f"Based on this summary of their document: '{initial_context}' "
-            f"Briefly mention the main topic and ask an engaging opening question related to it. "
-            f"Keep it conversational and natural. DO NOT add any information not in the summary."
-        )
-    else:
-        init_instruction = (
-            "You are PODHOST. Greet the guest warmly and ask them to tell you about the topic they'd like to discuss. "
-            "Keep it simple and don't assume any specific topics or fields."
-        )
-
-    # send initial greeting & instruction
-    try:
-        # Use generate_reply only with instructions (no text=)
-        await session.generate_reply(instructions=init_instruction)
-        
-        print("💬 Initial greeting/instruction sent.")
-    except Exception as e:
-        print(f"⚠️ generate_reply(initial) error: {e}")
+        print(f"⚠️ generate_reply error: {e}")
         traceback.print_exc()
         print("⚠️ Continuing without initial greeting...")
 
@@ -468,45 +383,6 @@ async def stop_audio_egress(room_name: str):
         import traceback
         traceback.print_exc()
 
-async def fetch_initial_context_with_kb(agent, kb_id: str, session):
-    """Fetch initial context when KB ID is received via data channel."""
-    try:
-        print(f"🔍 Fetching initial summary with KB ID: {kb_id}")
-        async with aiohttp.ClientSession() as s:
-            form = aiohttp.FormData()
-            form.add_field("user_id", agent.user_id)
-            form.add_field("kb_id", kb_id)
-            async with s.post("http://localhost:8000/internal/get-document-summary", data=form, timeout=aiohttp.ClientTimeout(total=25)) as resp:
-                if resp.status == 200:
-                    j = await resp.json()
-                    raw_content = j.get("summary", "")
-                    print(f"📄 Raw content with KB ID fetched ({len(raw_content)} chars)")
-                    
-                    # Use Google LLM to create summary
-                    if raw_content and len(raw_content.strip()) > 10:
-                        summary_prompt = f"""Based on the following document content, provide a brief 2-3 sentence summary of the main topic and key points:
-
-{raw_content[:2000]}
-
-Summary:"""
-                        
-                        try:
-                            # Use session's generate_reply for summary - RealtimeModel doesn't have agenerate
-                            summary_instruction = f"Create a brief 2-3 sentence summary of this document content:\n\n{raw_content[:2000]}\n\nSummary:"
-                            summary_response = await session.generate_reply(instructions=summary_instruction)
-                            context = summary_response if summary_response else raw_content[:500]
-                            print(f"🤖 Google LLM summary created ({len(context)} chars)")
-                            return context
-                        except Exception as llm_error:
-                            print(f"⚠️ LLM summary failed: {llm_error}")
-                            return raw_content[:500]  # Fallback to first 500 chars
-                    else:
-                        return ""
-                else:
-                    print(f"⚠️ Failed to fetch summary with KB ID: {resp.status}")
-    except Exception as e:
-        print(f"⚠️ fetch_initial_context_with_kb error: {e}")
-    return ""
 
 async def restart_egress_with_delay(room_name: str, user_id: str, kb_id: str):
     """Restart egress with a small delay to ensure stop completes."""
