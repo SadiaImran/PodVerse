@@ -7,11 +7,12 @@ from typing import List, Optional
 from dotenv import load_dotenv
 import os
 import re
+import requests
 
 from connection_supabase_client import (
     get_authenticated_supabase_client,
     get_service_role_client,
-    get_gradio_client
+    # get_gradio_client
 )
 
 router = APIRouter()
@@ -19,12 +20,17 @@ router = APIRouter()
 # ========= CONFIGURATION =========
 load_dotenv()
 
+# Together API Configuration
+TOGETHER_API_KEY = os.environ.get("TOGETHER_API_KEY")
+TOGETHER_API_URL = "https://api.together.xyz/v1/chat/completions"
+TOGETHER_MODEL = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
+
 os.environ["TOGETHER_API_KEY"] = os.environ.get(
     "TOGETHER_API_KEY", "f98103d1acc08e8528e75028deee01807c69312f742eaddbd877d1b87123dffb"
 )
 
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-client = None
+# client = None
 
 # Small talk patterns
 SMALL_TALK_PATTERNS = {
@@ -44,19 +50,52 @@ def detect_small_talk(text: str) -> Optional[str]:
             return reply
     return None
 
-def make_llm_hf(query: str, temperature=0.1, max_tokens=512):
-    """Use Hugging Face LLM for generating responses"""
-    global client
-    if not client:
-        client = get_gradio_client()
+# def make_llm_hf(query: str, temperature=0.1, max_tokens=512):
+#     """Use Hugging Face LLM for generating responses"""
+#     global client
+#     if not client:
+#         client = get_gradio_client()
+#     try:
+#         result = client.predict(
+#             message=query,
+#             api_name="/chat"
+#         )
+#         return result
+#     except Exception as e:
+#         print(f"❌ Hugging Face LLM Error: {e}")
+#         return "I'm sorry, I couldn't process your request right now."
+
+def make_llm_together(query: str, temperature=0.1, max_tokens=512):
+    """Use Together API for generating responses"""
+    if not TOGETHER_API_KEY:
+        print("❌ TOGETHER_API_KEY not found in environment")
+        return "I'm sorry, I couldn't process your request right now."
+    
     try:
-        result = client.predict(
-            message=query,
-            api_name="/chat"
+        response = requests.post(
+            TOGETHER_API_URL,
+            headers={
+                "Authorization": f"Bearer {TOGETHER_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": TOGETHER_MODEL,
+                "messages": [{"role": "user", "content": query}],
+                "max_tokens": max_tokens,
+                "temperature": temperature
+            },
+            timeout=30
         )
-        return result
+        
+        if response.status_code == 200:
+            result = response.json()
+            return result["choices"][0]["message"]["content"]
+        else:
+            print(f"❌ Together API Error: {response.status_code} - {response.text}")
+            return "I'm sorry, I couldn't process your request right now."
+            
     except Exception as e:
-        print(f"❌ Hugging Face LLM Error: {e}")
+        print(f"❌ Together API Error: {e}")
         return "I'm sorry, I couldn't process your request right now."
 
 def polish_answer(answer: str) -> str:
@@ -330,7 +369,7 @@ IMPORTANT: Only rephrase the existing information. Do not add any new informatio
 
 Rephrased Answer:"""
                 
-                ai_response = make_llm_hf(context, temperature=0.1, max_tokens=256)
+                ai_response = make_llm_together(context, temperature=0.1, max_tokens=256)
                 answer = polish_answer(ai_response)
             else:
                 # Without AI, just return the original answer
