@@ -121,7 +121,7 @@ async def start_audio_egress_async(
             api.EncodedFileOutput(
                 file_type=api.EncodedFileType.OGG,
                 filepath=custom_filename,  # Custom filename
-                disable_manifest=False,  # Enable transcript JSON file
+                disable_manifest=True,  # Disable JSON metadata file
                 s3=api.S3Upload(
                     bucket=SUPABASE_BUCKET,
                     access_key=SUPABASE_ACCESS_KEY,

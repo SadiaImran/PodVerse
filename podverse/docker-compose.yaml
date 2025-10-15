@@ -1,0 +1,51 @@
+services:
+  # 1. Redis Service (Messaging Queue)
+  redis:
+    image: redis:6-alpine
+    container_name: livekit-redis
+    ports:
+      - '6379:6379' 
+    volumes:
+      - redis_data:/data 
+
+  # 2. LiveKit Server (Core Signaling and API)
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: livekit-server
+    command: ["--dev", "--redis-host", "livekit-redis:6379", "--bind", "0.0.0.0"] 
+    environment:
+      - LIVEKIT_API_KEY=devkey           
+      - LIVEKIT_API_SECRET=secret        
+    ports:
+      - '7880:7880'
+      - '7881:7881'
+      - '7882:7882/udp'
+
+  # 3. Egress Service (The Recorder)
+  egress:
+    image: livekit/egress:latest
+    container_name: livekit-egress
+    depends_on:
+      - livekit
+    environment:
+      - LIVEKIT_URL=http://livekit-server:7880  
+      - LIVEKIT_API_KEY=devkey
+      - LIVEKIT_API_SECRET=secret
+
+      - S3_ENDPOINT=https://oufynyanxakkbnubfwco.supabase.co/storage/v1/s3
+      - S3_ACCESS_KEY=ec41a513d4170d4dd71d5e3fd7f78dfb      
+      - S3_SECRET_KEY=c960490608c7bb5883320b46c3fa461ae946ba27c21dc94757c599f1708df4aa  
+      - S3_BUCKET=recordings
+      - S3_REGION=us-east-1
+      - EGRESS_UPLOAD_PROTOCOL=s3
+      
+      - EGRESS_CONFIG_FILE=/config/egress.yaml 
+    ports:
+      - '8081:8081' # Egress Webhook/Admin Port
+    volumes:
+      - ./egress_temp:/out
+      - ./egress_config:/config
+    # Egress needs higher CPU/memory; you may need to adjust Docker resource limits
+
+volumes:
+  redis_data:

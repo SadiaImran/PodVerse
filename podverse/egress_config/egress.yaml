@@ -1,0 +1,13 @@
+api_key: "devkey"
+api_secret: "secret"
+ws_url: "ws://livekit-server:7880"
+redis:
+  address: "livekit-redis:6379"
+log_level: "info"
+# S3 configuration for uploads
+s3:
+  access_key: "ec41a513d4170d4dd71d5e3fd7f78dfb"
+  secret: "c960490608c7bb5883320b46c3fa461ae946ba27c21dc94757c599f1708df4aa"
+  region: "us-east-1"
+  bucket: "recordings"
+  endpoint: "https://oufynyanxakkbnubfwco.supabase.co/storage/v1/s3"
