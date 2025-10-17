@@ -11,3 +11,4 @@ s3:
   region: "us-east-1"
   bucket: "recordings"
   endpoint: "https://oufynyanxakkbnubfwco.supabase.co/storage/v1/s3"
+

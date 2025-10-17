@@ -145,9 +145,9 @@ async def entrypoint(ctx: agents.JobContext):
                         print(f"✅ user_id from metadata: {agent.user_id}, kb_id: {agent.selected_kb_id}")
                         
                         # Start egress now that we have proper user_id and kb_id
-                        if agent.user_id != "default-user" and room_name_str:
-                            print(f"🎬 Starting egress with proper metadata...")
-                            asyncio.create_task(trigger_audio_egress(room_name_str, agent.user_id, agent.selected_kb_id))
+                        # if agent.user_id != "default-user" and room_name_str:
+                        #     print(f"🎬 Starting egress with proper metadata...")
+                        #     asyncio.create_task(trigger_audio_egress(room_name_str, agent.user_id, agent.selected_kb_id))
                             
                     except Exception as e:
                         print(f"⚠️ participant metadata parse error: {e}")
@@ -156,9 +156,9 @@ async def entrypoint(ctx: agents.JobContext):
                     print(f"ℹ️ fallback user_id = identity: {agent.user_id}")
                     
                     # Start egress with fallback user_id
-                    if room_name_str:
-                        print(f"🎬 Starting egress with fallback user_id...")
-                        asyncio.create_task(trigger_audio_egress(room_name_str, agent.user_id, agent.selected_kb_id))
+                    # if room_name_str:
+                    #     print(f"🎬 Starting egress with fallback user_id...")
+                    #     asyncio.create_task(trigger_audio_egress(room_name_str, agent.user_id, agent.selected_kb_id))
         except Exception as e:
             print(f"⚠️ on_participant_connected error: {e}")
 
@@ -242,18 +242,18 @@ async def entrypoint(ctx: agents.JobContext):
                             if "selectedKbId" in parsed:
                                 agent.selected_kb_id = parsed["selectedKbId"]
                                 # Start egress if we have proper metadata
-                                if agent.user_id != "default-user" and room_name_str:
-                                    print(f"🎬 Starting egress from startup discovery...")
-                                    asyncio.create_task(trigger_audio_egress(room_name_str, agent.user_id, agent.selected_kb_id))
+                                # if agent.user_id != "default-user" and room_name_str:
+                                #     print(f"🎬 Starting egress from startup discovery...")
+                                #     asyncio.create_task(trigger_audio_egress(room_name_str, agent.user_id, agent.selected_kb_id))
                                 break
                         except Exception as e:
                             print(f"⚠️ Startup metadata parse error: {e}")
                     if agent.user_id == "default-user":
                         agent.user_id = p.identity
                         # Start egress with fallback user_id
-                        if room_name_str:
-                            print(f"🎬 Starting egress from startup fallback...")
-                            asyncio.create_task(trigger_audio_egress(room_name_str, agent.user_id, agent.selected_kb_id))
+                        # if room_name_str:
+                        #     print(f"🎬 Starting egress from startup fallback...")
+                        #     asyncio.create_task(trigger_audio_egress(room_name_str, agent.user_id, agent.selected_kb_id))
                         break
             except Exception:
                 continue
