@@ -4,6 +4,7 @@ import SignInScreenEmail from './assets/screens/screen-signin-email';
 import CreatePodcastPage from './assets/screens/screen-create-podcast';
 import ActivityFeedPage from './assets/screens/screen-activity-feed';
 import AgentSetupFlow from './assets/screens/screen-agent-setup';
+import PodcastSetupFlow from './assets/screens/screen-podcast-setup';
 import ScreenRecording from './assets/screens/screen-recording';
 import ForgotPassword from './assets/components/comp-signin/ForgotPassword';
 import ResetPassword from './assets/components/comp-signin/ResetPassword';
@@ -53,6 +54,14 @@ function App() {
             element={
               <PrivateRoute>
                 <AgentSetupFlow />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/podcast-setup"
+            element={
+              <PrivateRoute>
+                <PodcastSetupFlow />
               </PrivateRoute>
             }
           />

@@ -112,7 +112,7 @@ const CreatePodcastPage = () => {
             <div className="text-white">
               <h1 className="text-3xl md:text-4xl font-bold mb-2">Welcome to PodVerse</h1>
               <p className="text-lg md:text-xl mb-6">Create amazing podcasts with AI</p>
-              <button onClick={() => navigate("/agent-setup")} className="bg-light-purple text-white px-6 py-3 rounded-lg font-semibold hover:bg-white hover:text-light-purple hover:border hover:border-light-purple transition-all duration-300">
+              <button onClick={() => navigate("/podcast-setup")} className="bg-light-purple text-white px-6 py-3 rounded-lg font-semibold hover:bg-white hover:text-light-purple hover:border hover:border-light-purple transition-all duration-300">
                 Get Started →
               </button>
             </div>
@@ -131,7 +131,7 @@ const CreatePodcastPage = () => {
             
             {/* New Project Button */}
             <button 
-              onClick={() => navigate("/agent-setup")}
+              onClick={() => navigate("/podcast-setup")}
               className="bg-purple-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-purple-700 transition-colors">
               <Plus className="w-4 h-4 inline mr-2" />
               New project

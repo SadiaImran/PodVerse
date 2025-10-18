@@ -819,6 +819,27 @@ async def internal_respond(
         if smalltalk:
             return {"answer_text": smalltalk}
 
+        # 1.5️⃣ Special handling for initial context queries (faster response)
+        is_initial_query = any(phrase in q.lower() for phrase in ["what is this document about", "tell me about the document", "what is this about"])
+        if is_initial_query:
+            print(f"[internal/respond] 🚀 Fast initial context query detected")
+            # Use smaller limit for faster response
+            fallback_query = (
+                service_client.table("documents")
+                .select("content, metadata, embedding, kb_id")
+                .eq("user_id", user_id)
+            )
+            if kb_id:
+                fallback_query = fallback_query.eq("kb_id", kb_id)
+            
+            fallback = fallback_query.limit(5).execute()  # Very small limit for speed
+            if fallback.data:
+                # Just return the first few chunks as context
+                context_parts = [doc["content"][:500] for doc in fallback.data[:3]]  # First 500 chars of top 3 docs
+                context_text = "\n\n".join(context_parts)
+                print(f"[internal/respond] ⚡ Fast initial context: {len(context_text)} chars")
+                return {"answer_text": context_text}
+
         # 2️⃣ Get embeddings for query
         embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
         query_vector = embeddings.embed_query(q)
@@ -833,8 +854,8 @@ async def internal_respond(
         if kb_id:
             fallback_query = fallback_query.eq("kb_id", kb_id)
 
-        # Increased limit for better recall
-        fallback = fallback_query.limit(80).execute()
+        # Optimized limit for faster initial context fetch
+        fallback = fallback_query.limit(20).execute()
         candidate_rows = []
 
         # 4️⃣ Compute cosine similarity

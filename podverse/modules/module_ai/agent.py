@@ -307,14 +307,14 @@ async def entrypoint(ctx: agents.JobContext):
         print(f"🔍 Attempting initial context fetch for user_id: {agent.user_id}")
         async with aiohttp.ClientSession() as s:
             form = aiohttp.FormData()
-            form.add_field("query", "Tell me about the document I uploaded")
+            form.add_field("query", "What is this document about?")
             form.add_field("user_id", agent.user_id)
             if agent.selected_kb_id:
                 form.add_field("kb_id", agent.selected_kb_id)
                 print(f"🔍 Initial fetch with kb_id: {agent.selected_kb_id}")
             else:
                 print(f"⚠️ No kb_id available for initial fetch")
-            async with s.post("http://localhost:8000/internal/respond", data=form, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+            async with s.post("http://localhost:8000/internal/respond", data=form, timeout=aiohttp.ClientTimeout(total=60)) as resp:
                 if resp.status == 200:
                     j = await resp.json()
                     initial_context = j.get("answer_text", "") or ""
@@ -323,6 +323,9 @@ async def entrypoint(ctx: agents.JobContext):
                 else:
                     txt = await resp.text()
                     print(f"⚠️ initial fetch failed: {txt}")
+    except asyncio.TimeoutError:
+        print(f"⏰ Initial context fetch timed out after 60 seconds")
+        print(f"⚠️ Continuing without initial context - agent will fetch context on first user message...")
     except Exception as e:
         print(f"⚠️ initial chunks exception: {e}")
         print(f"⚠️ Exception type: {type(e)}")

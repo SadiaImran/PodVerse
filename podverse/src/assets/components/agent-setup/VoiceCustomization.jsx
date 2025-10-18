@@ -36,40 +36,48 @@ const VoiceCustomization = ({ goNext, goBack }) => {
   };
 
   return (
-    <div className="flex flex-col md:flex-row gap-8">
-      <div className="space-y-5 flex flex-col justify-between flex-[2] bg-white p-6 rounded-3xl shadow-md border-2 border-gray-300">
-        <h2 className="text-2xl font-semibold text-gray-800">Choose or Upload AI Voice</h2>
-        
-        {/* Voice Selection Mode Toggle */}
-        <div className="space-y-3 font-medium w-full">
-          <div className="flex flex-col md:flex-row gap-4 w-full">
-            
+    <div className="max-w-7xl mx-auto">
+      <div className="bg-gradient-to-br from-white to-gray-50 rounded-3xl shadow-2xl border border-gray-200 p-8">
+        {/* Header - Left Aligned */}
+        <div className="mb-8">
+          <div className="flex items-center gap-4 mb-4">
+            <div className="w-12 h-12 bg-gradient-to-br from-light-purple to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+              <PiSpeakerHighBold className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h2 className="text-3xl font-bold bg-gradient-to-r from-light-purple to-purple-600 bg-clip-text text-transparent">
+                Voice Setup
+              </h2>
+              <p className="text-gray-600">Choose or upload your AI voice</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Voice Options - Top Section */}
+        <div className="mb-6">
+          <h3 className="text-lg font-semibold text-gray-800 mb-3">Choose Voice Option</h3>
+          <div className="flex gap-4 justify-center">
             {/* Use Sample Voice */}
-            <div
+            <button
               onClick={() => setFormData({
                 ...formData,
                 customVoiceUpload: false,
                 sampleVoice: true
               })}
-              className={`flex-1 cursor-pointer p-4 border rounded-lg transition-all ${
+              className={`px-6 py-3 rounded-xl transition-all border-2 ${
                 formData.sampleVoice
-                  ? "border-blue-500 bg-blue-50"
-                  : "border-gray-200 hover:border-blue-300"
+                  ? "border-blue-500 bg-blue-500 text-white shadow-md"
+                  : "border-gray-300 bg-white text-gray-700 hover:border-blue-400 hover:bg-blue-50"
               }`}
             >
-              <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 bg-blue-100 text-blue-600 p-2 rounded-full">
-                  <PiSpeakerHighBold className="h-6 w-6" />
-                </div>
-                <div>
-                  <h4 className="font-medium text-lg">Use Sample Voices</h4>
-                  <p className="text-gray-600 text-sm">Choose from our collection of high-quality voice samples.</p>
-                </div>
+              <div className="flex items-center gap-2">
+                <PiSpeakerHighBold className="h-5 w-5" />
+                <span className="font-medium">Sample Voices</span>
               </div>
-            </div>
+            </button>
       
             {/* Custom Upload */}
-            <div
+            <button
               onClick={() => {
                 setFormData({
                   ...formData,
@@ -78,76 +86,40 @@ const VoiceCustomization = ({ goNext, goBack }) => {
                 });
                 console.log("FormData after clicking Upload Your Voice:", formData);
               }}
-              className={`flex-1 cursor-pointer p-4 border rounded-lg transition-all ${
+              className={`px-6 py-3 rounded-xl transition-all border-2 ${
                 formData.customVoiceUpload
-                  ? "border-purple-500 bg-purple-50"
-                  : "border-gray-200 hover:border-purple-300"
+                  ? "border-purple-500 bg-purple-500 text-white shadow-md"
+                  : "border-gray-300 bg-white text-gray-700 hover:border-purple-400 hover:bg-purple-50"
               }`}
             >
-              <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 bg-purple-100 text-purple-600 p-2 rounded-full">
-                  <HiOutlineUpload className="h-6 w-6" />
-                </div>
-                <div>
-                  <h4 className="font-medium text-lg">Upload Your Voice</h4>
-                  <p className="text-gray-600 text-sm">Clone your own voice for a personalized experience.</p>
-                </div>
+              <div className="flex items-center gap-2">
+                <HiOutlineUpload className="h-5 w-5" />
+                <span className="font-medium">Upload Voice</span>
               </div>
-            </div>
+            </button>
           </div>
         </div>
-        
-        {/* Display appropriate content based on selection */}
-        <div className="w-full">
-          {formData.sampleVoice && (
-            <SampleVoices onVoiceSelect={setSelectedVoiceData}  />
-          )}
-      
-          {formData.customVoiceUpload && (
-  
-            <VoiceUploadSystem 
-              formData={formData}
-              setFormData={setFormData}
-              hamdleVoiceUpload={handleVoiceUpload}
-            >
-            </VoiceUploadSystem>
-          )}
-        </div>
 
-        {/* Navigation Buttons */}
-        <div className="flex justify-between pt-4 w-full">
-          <button onClick={goBack} className="text-light-purple font-medium text-3xl hover:underline">
-            <IoMdArrowRoundBack />
-          </button>
-          <button
-            onClick={goNext}
-            className="bg-light-purple text-white px-8 py-2 rounded-xl transition hover:text-gray-800 hover:border-2 hover:border-light-purple hover:bg-white font-semibold"
-          >
-            Next
-          </button>
-        </div>
-      </div>
-      {
-       formData.sampleVoice && (
-        <div className="flex bg-white p-6 rounded-xl shadow-md border border-gray-100 flex-[1] h-full overflow-auto ">
-          {/* Voice Preview */}
-      <div className="flex flex-col w-full"> 
-        <div className="bg-indigo-50 p-4 border-b border-gray-100">
-          <h3 className="font-semibold text-xl text-gray-800">Preview Your Voice</h3>
-          <p className="text-base text-gray-500">See details about your selected voice</p>
-        </div>
-        
-        {selectedVoiceData ? (
-              <div className="p-6">
+        {/* Content Section */}
+        <div className="space-y-6">
+          {/* Voice Preview Panel - Show for sample voices when selected */}
+          {formData.sampleVoice && selectedVoiceData && (
+            <div className="bg-gradient-to-br from-white to-gray-50 p-6 rounded-2xl shadow-lg border border-gray-200">
+              <div className="bg-gradient-to-r from-indigo-500 to-purple-600 p-4 rounded-t-xl -m-6 mb-6">
+                <h3 className="font-semibold text-xl text-white">Preview Your Voice</h3>
+                <p className="text-indigo-100">See details about your selected voice</p>
+              </div>
+              
+              <div>
                 <div className="mb-4 flex items-center justify-center gap-4">
-                  <div className={`px-6 py-4 rounded-full ${selectedVoiceData.color} ${selectedVoiceData.textColor} flex items-center justify-center text-xl font-medium`}>
+                  <div className={`px-6 py-4 rounded-full ${selectedVoiceData.color} ${selectedVoiceData.textColor} flex items-center justify-center text-xl font-medium shadow-lg`}>
                     {selectedVoiceData.name.charAt(0)}
                   </div>
                   <div>
-                    <h3 className="text-xl font-semibold">{selectedVoiceData.name}</h3>
+                    <h3 className="text-xl font-semibold text-gray-800">{selectedVoiceData.name}</h3>
                     <div className="flex flex-wrap gap-2 mt-1">
                       {selectedVoiceData.category.map((label, idx) => (
-                        <span key={idx} className="text-xs bg-gray-100 rounded-full px-3 py-1">{label}</span>
+                        <span key={idx} className="text-xs bg-gradient-to-r from-light-purple to-purple-600 text-white rounded-full px-3 py-1">{label}</span>
                       ))}
                     </div>
                   </div>
@@ -158,19 +130,40 @@ const VoiceCustomization = ({ goNext, goBack }) => {
                     <p className="text-gray-600">{selectedVoiceData.description}</p>
                   </div>
                 )}
-                <audio controls src={selectedVoiceData.audioSrc} className="w-full mt-2" />
+                <audio controls src={selectedVoiceData.audioSrc} className="w-full mt-2 rounded-lg" />
               </div>
-            ) : (
-              <div className="p-6 text-center text-gray-500">
-                <PiSpeakerHighBold className="w-12 h-12 mx-auto mb-2 text-gray-400" />
-                <p>Select a voice to see its details</p>
-              </div>
+            </div>
+          )}
+
+          {/* Voice Content */}
+          <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-200">
+            {formData.sampleVoice && (
+              <SampleVoices onVoiceSelect={setSelectedVoiceData} />
+            )}
+        
+            {formData.customVoiceUpload && (
+              <VoiceUploadSystem 
+                formData={formData}
+                setFormData={setFormData}
+                hamdleVoiceUpload={handleVoiceUpload}
+              />
             )}
           </div>
         </div>
-       )
-      }
 
+        {/* Navigation Buttons */}
+        <div className="flex justify-between items-center mt-8 pt-6 border-t border-gray-200">
+          <button onClick={goBack} className="text-light-purple font-medium text-3xl hover:underline transition-all hover:scale-110">
+            <IoMdArrowRoundBack />
+          </button>
+          <button
+            onClick={goNext}
+            className="bg-gradient-to-r from-light-purple to-purple-600 text-white px-8 py-3 rounded-xl transition-all hover:from-purple-600 hover:to-indigo-600 hover:shadow-lg font-semibold transform hover:scale-105"
+          >
+            Next: Script Generation →
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
