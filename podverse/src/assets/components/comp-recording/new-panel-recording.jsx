@@ -680,8 +680,8 @@ const fetchLiveKitToken = async () => {
     // Ignore segments if paused
     if (isPaused) return;
     
-    // Add small delay to prevent overwhelming the UI
-    setTimeout(() => {
+    // Performance debugging
+    const startTime = performance.now();
     
     segments.forEach(segment => {
       if (segment.text && segment.text.trim()) {
@@ -695,27 +695,43 @@ const fetchLiveKitToken = async () => {
               assistantBufferRef.current = { type: 'stream', text: segment.text };
               return;
             }
-            setCurrentStreamingSpeaker('AI Assistant');
-            setStreamingText(segment.text);
-            // Write streaming directly into the AI bubble - FIXED: Better handling of streaming text
+            // Only update if different to avoid unnecessary re-renders
+            if (currentStreamingSpeaker !== 'AI Assistant') {
+              setCurrentStreamingSpeaker('AI Assistant');
+            }
+            if (streamingText !== segment.text) {
+              setStreamingText(segment.text);
+            }
+            // Write streaming directly into the AI bubble - Optimized for performance
             setTranscript(prev => {
               const lastMessage = prev[prev.length - 1];
-              const now = new Date().toISOString();
               if (lastMessage && lastMessage.speaker === 'AI Assistant' && lastMessage.isStreaming) {
-                // Update existing streaming message
-                return [
-                  ...prev.slice(0, -1),
-                  { speaker: 'AI Assistant', text: segment.text, timestamp: lastMessage.timestamp || now, isStreaming: true }
-                ];
+                // Update existing streaming message (more efficient)
+                const newTranscript = [...prev];
+                newTranscript[newTranscript.length - 1] = { 
+                  ...lastMessage, 
+                  text: segment.text 
+                };
+                return newTranscript;
               }
               // Create new streaming message
-              return [...prev, { speaker: 'AI Assistant', text: segment.text, timestamp: now, isStreaming: true }];
+              return [...prev, { 
+                speaker: 'AI Assistant', 
+                text: segment.text, 
+                timestamp: new Date().toISOString(), 
+                isStreaming: true 
+              }];
             });
             setIsSpeaking(true);
             setIsProcessing(false);
           } else {
-            setCurrentStreamingSpeaker('You');
-            setStreamingText(segment.text);
+            // Only update if different to avoid unnecessary re-renders
+            if (currentStreamingSpeaker !== 'You') {
+              setCurrentStreamingSpeaker('You');
+            }
+            if (streamingText !== segment.text) {
+              setStreamingText(segment.text);
+            }
           }
         } else {
           if (isAgent) {
@@ -723,24 +739,32 @@ const fetchLiveKitToken = async () => {
               assistantBufferRef.current = { type: 'final', text: segment.text };
               return;
             }
-            // FIXED: Better handling of final AI messages to prevent breaking
+            // Optimized handling of final AI messages
             setTranscript(prev => {
               const lastMessage = prev[prev.length - 1];
               if (lastMessage && lastMessage.speaker === 'AI Assistant' && lastMessage.isStreaming) {
-                // Replace streaming message with final message
-                return [
-                  ...prev.slice(0, -1),
-                  { speaker: 'AI Assistant', text: segment.text, timestamp: new Date().toISOString(), isStreaming: false }
-                ];
+                // Replace streaming message with final message (more efficient)
+                const newTranscript = [...prev];
+                newTranscript[newTranscript.length - 1] = { 
+                  ...lastMessage, 
+                  text: segment.text, 
+                  isStreaming: false 
+                };
+                return newTranscript;
               }
               // Add new final message
-              return [...prev, { speaker: 'AI Assistant', text: segment.text, timestamp: new Date().toISOString(), isStreaming: false }];
+              return [...prev, { 
+                speaker: 'AI Assistant', 
+                text: segment.text, 
+                timestamp: new Date().toISOString(), 
+                isStreaming: false 
+              }];
             });
             if (currentStreamingSpeaker === 'AI Assistant') {
               setStreamingText('');
               setCurrentStreamingSpeaker(null);
             }
-            setTimeout(() => setIsSpeaking(false), 500);
+            setTimeout(() => setIsSpeaking(false), 200);
           } else {
             // finalize user
             setTranscript(prev => {
@@ -763,7 +787,7 @@ const fetchLiveKitToken = async () => {
               assistantBufferRef.current = null;
               if (buffered.type === 'final') {
                 setTranscript(prev => [...prev, { speaker: 'AI Assistant', text: buffered.text, timestamp: new Date().toISOString(), isStreaming: false }]);
-                setTimeout(() => setIsSpeaking(false), 500);
+                setTimeout(() => setIsSpeaking(false), 200);
               } else if (buffered.type === 'stream') {
                 setCurrentStreamingSpeaker('AI Assistant');
                 setStreamingText(buffered.text);
@@ -775,11 +799,23 @@ const fetchLiveKitToken = async () => {
         
         // Update conversation history for persistent storage (using the FINAL text for history)
         if (segment.final) {
-            setConversationHistory(prev => [...prev, { speaker, text: segment.text, timestamp: new Date().toISOString() }]);
+            setConversationHistory(prev => {
+              // Avoid duplicate entries
+              const lastEntry = prev[prev.length - 1];
+              if (lastEntry && lastEntry.speaker === speaker && lastEntry.text === segment.text) {
+                return prev;
+              }
+              return [...prev, { speaker, text: segment.text, timestamp: new Date().toISOString() }];
+            });
         }
       }
     });
-    }, 50); // Small delay to prevent overwhelming the UI
+    
+    // Performance debugging
+    const endTime = performance.now();
+    if (endTime - startTime > 10) {
+      console.log(`⚠️ Transcript processing took ${endTime - startTime}ms`);
+    }
   }, [isPaused, currentStreamingSpeaker]); // Dependency on currentStreamingSpeaker is key for clearing
 
   // Set up room event listeners
