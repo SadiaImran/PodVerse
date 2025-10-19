@@ -129,37 +129,32 @@ const AgentCustomization = ({ formData, setFormData, goNext }) => {
           {/* Tone Selection */}
         <div className="space-y-8 font-subheadingDMSans">
           <h3 className="text-2xl font-semibold text-light-charcoal ">Customize Tone</h3>
-          <div className="flex gap-5">
-            <button
-              onClick={() => setFormData({ ...formData, tone: "formal" })}
-              className={`px-6 py-2 rounded-lg ${
-                formData.tone === "formal"
-                  ? "bg-indigo-500 text-white"
-                  : "bg-indigo-500 text-white"
-              }`}
-            >
-              Formal
-            </button>
-            <button
-              onClick={() => setFormData({ ...formData, tone: "casual" })}
-              className={`px-5 py-2 rounded-md ${
-                formData.tone === "casual"
-                  ? "bg-slate-100 text-gray-700 ring-2 ring-blue-400"
-                  : "bg-slate-100 text-gray-700"
-              }`}
-            >
-              Casual
-            </button>
-            <button
-              onClick={() => setFormData({ ...formData, tone: "friendly" })}
-              className={`px-5 py-2 rounded-md ${
-                formData.tone === "friendly"
-                  ? "bg-yellow-300 ring-2 ring-blue-400"
-                  : "bg-yellow-300"
-              }`}
-            >
-              Friendly
-            </button>
+          <div className="flex flex-wrap gap-3">
+            {[
+              { name: "formal", bgColor: "bg-indigo-500", borderColor: "border-indigo-500" },
+              { name: "casual", bgColor: "bg-purple-500", borderColor: "border-purple-500" },
+              { name: "friendly", bgColor: "bg-pink-500", borderColor: "border-pink-500" },
+              { name: "professional", bgColor: "bg-green-500", borderColor: "border-green-500" }
+            ].map((tone) => {
+              const isSelected = formData.tone === tone.name;
+              const hasSelection = formData.tone && formData.tone !== "";
+              
+              return (
+                <button
+                  key={tone.name}
+                  onClick={() => setFormData({ ...formData, tone: tone.name })}
+                  className={`px-4 py-2 rounded-lg font-medium transition-all duration-300 border-2 ${
+                    isSelected
+                      ? `${tone.bgColor} text-white shadow-md`
+                      : hasSelection
+                      ? `bg-white text-gray-800 ${tone.borderColor} hover:bg-gray-50`
+                      : `${tone.bgColor} text-white hover:opacity-80`
+                  }`}
+                >
+                  {tone.name.charAt(0).toUpperCase() + tone.name.slice(1)}
+                </button>
+              );
+            })}
           </div>
         </div>
         {/* Next Button */}

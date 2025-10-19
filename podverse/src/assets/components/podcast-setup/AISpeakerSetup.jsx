@@ -57,6 +57,41 @@ const AISpeakerSetup = ({ formData, setFormData, goNext, goBack }) => {
     }
   };
 
+  const handleNext = () => {
+    // Determine which configuration to use based on what's filled
+    let finalConfig = { ...formData };
+    
+    // If both AI host and guest are configured, prioritize based on completeness
+    const hostConfigured = formData.agentName.trim() && formData.avatar;
+    const guestConfigured = formData.guestPersona.name.trim() && 
+                           formData.guestPersona.role.trim() && 
+                           formData.guestPersona.background.trim() &&
+                           formData.avatar;
+    
+    if (hostConfigured && guestConfigured) {
+      // Both are configured - use the currently selected speaker type
+      console.log(`Both AI host and guest configured. Using: ${formData.speakerType}`);
+    } else if (hostConfigured && !guestConfigured) {
+      // Only host is configured
+      finalConfig.speakerType = "ai-host";
+      console.log("Using AI host configuration");
+    } else if (!hostConfigured && guestConfigured) {
+      // Only guest is configured
+      finalConfig.speakerType = "ai-guest";
+      console.log("Using AI guest configuration");
+    }
+    
+    // Update form data with final configuration
+    setFormData(finalConfig);
+    
+    // Store agent type in sessionStorage for the recording panel
+    const agentType = finalConfig.speakerType === "ai-host" ? "host" : "guest";
+    sessionStorage.setItem('selected_agent_type', agentType);
+    console.log(`🎯 Stored agent type in sessionStorage: ${agentType}`);
+    
+    goNext();
+  };
+
   return (
     <div className="max-w-6xl mx-auto">
       <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8">
@@ -182,12 +217,15 @@ const AISpeakerSetup = ({ formData, setFormData, goNext, goBack }) => {
             </label>
             <div className="flex flex-wrap gap-3">
               {[
-                { name: "formal", bgColor: "bg-yellow-500", hoverColor: "hover:bg-yellow-600", selectedColor: "bg-yellow-600" },
-                { name: "casual", bgColor: "bg-purple-500", hoverColor: "hover:bg-purple-600", selectedColor: "bg-purple-600" },
-                { name: "friendly", bgColor: "bg-pink-500", hoverColor: "hover:bg-pink-600", selectedColor: "bg-pink-600" },
-                { name: "professional", bgColor: "bg-indigo-500", hoverColor: "hover:bg-indigo-600", selectedColor: "bg-indigo-600" }
+                { name: "formal", bgColor: "bg-yellow-500", borderColor: "border-yellow-500" },
+                { name: "casual", bgColor: "bg-purple-500", borderColor: "border-purple-500" },
+                { name: "friendly", bgColor: "bg-pink-500", borderColor: "border-pink-500" },
+                { name: "professional", bgColor: "bg-indigo-500", borderColor: "border-indigo-500" }
               ].map((tone) => {
-                const isSelected = (formData.speakerType === "ai-host" ? formData.tone : formData.guestPersona.tone) === tone.name;
+                const currentTone = formData.speakerType === "ai-host" ? formData.tone : formData.guestPersona.tone;
+                const isSelected = currentTone === tone.name;
+                const hasSelection = currentTone && currentTone !== "";
+                
                 return (
                   <button
                     key={tone.name}
@@ -201,10 +239,12 @@ const AISpeakerSetup = ({ formData, setFormData, goNext, goBack }) => {
                         });
                       }
                     }}
-                    className={`px-4 py-2 rounded-lg font-medium transition-all duration-300 text-white ${
+                    className={`px-4 py-2 rounded-lg font-medium transition-all duration-300 border-2 ${
                       isSelected
-                        ? `${tone.selectedColor} shadow-md`
-                        : `${tone.bgColor} ${tone.hoverColor} shadow-sm hover:shadow-md`
+                        ? `${tone.bgColor} text-white shadow-md`
+                        : hasSelection
+                        ? `bg-white text-gray-800 ${tone.borderColor} hover:bg-gray-50`
+                        : `${tone.bgColor} text-white hover:opacity-80`
                     }`}
                   >
                     {tone.name.charAt(0).toUpperCase() + tone.name.slice(1)}
@@ -217,7 +257,7 @@ const AISpeakerSetup = ({ formData, setFormData, goNext, goBack }) => {
 
         {/* AI Guest Additional Setup */}
         {formData.speakerType === "ai-guest" && (
-          <div className="space-y-8">
+          <div className="space-y-8 mt-10">
             <h3 className="text-xl font-semibold text-gray-800">AI Guest Persona Details</h3>
             
             {/* Role */}
@@ -261,14 +301,17 @@ const AISpeakerSetup = ({ formData, setFormData, goNext, goBack }) => {
               </label>
               <div className="space-y-3">
                 <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="e.g., team leadership, match strategy"
-                    value={newExpertise}
-                    onChange={(e) => setNewExpertise(e.target.value)}
-                    onKeyPress={handleKeyPress}
-                    className="flex-1 border-2 border-gray-300 rounded-xl p-4 text-lg focus:outline-none focus:ring-2 focus:ring-light-purple focus:border-transparent transition-all"
-                  />
+                  <div className="relative flex-1">
+                    <RiAddLine className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                    <input
+                      type="text"
+                      placeholder="e.g., team leadership, match strategy"
+                      value={newExpertise}
+                      onChange={(e) => setNewExpertise(e.target.value)}
+                       onKeyPress={handleKeyPress}
+                      className="w-full border-2 border-gray-300 rounded-xl p-4 pl-12 text-lg focus:outline-none focus:ring-2 focus:ring-light-purple focus:border-transparent transition-all"
+                    />
+                  </div>
                   <button
                     onClick={addExpertise}
                     className="bg-light-purple text-white px-6 py-4 rounded-xl hover:bg-purple-700 transition-colors flex items-center gap-2"
@@ -284,12 +327,12 @@ const AISpeakerSetup = ({ formData, setFormData, goNext, goBack }) => {
                     {formData.guestPersona.expertise.map((exp, index) => (
                       <span
                         key={index}
-                        className="bg-purple-100 text-purple-800 px-4 py-2 rounded-full text-sm flex items-center gap-2"
+                        className="bg-light-purple text-white px-4 py-2 rounded-full text-sm flex items-center gap-2"
                       >
                         {exp}
                         <button
                           onClick={() => removeExpertise(exp)}
-                          className="hover:bg-purple-200 rounded-full p-1 transition-colors"
+                          className="hover:bg-purple-700 rounded-full p-1 transition-colors"
                         >
                           <RiCloseLine className="w-3 h-3" />
                         </button>
@@ -317,22 +360,6 @@ const AISpeakerSetup = ({ formData, setFormData, goNext, goBack }) => {
               />
             </div>
 
-            {/* Tone */}
-            <div>
-              <label className="block text-lg font-semibold text-gray-700 mb-3">
-                Tone
-              </label>
-              <input
-                type="text"
-                placeholder="e.g., humble and motivational, confident and direct"
-                value={formData.guestPersona.tone}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  guestPersona: { ...formData.guestPersona, tone: e.target.value }
-                })}
-                className="w-full border-2 border-gray-300 rounded-xl p-4 text-lg focus:outline-none focus:ring-2 focus:ring-light-purple focus:border-transparent transition-all"
-              />
-            </div>
           </div>
         )}
 
@@ -345,7 +372,7 @@ const AISpeakerSetup = ({ formData, setFormData, goNext, goBack }) => {
             <IoMdArrowRoundBack />
           </button>
           <button
-            onClick={goNext}
+            onClick={handleNext}
             disabled={!isFormValid()}
             className={`px-8 py-4 rounded-xl font-semibold text-lg transition-all ${
               isFormValid()

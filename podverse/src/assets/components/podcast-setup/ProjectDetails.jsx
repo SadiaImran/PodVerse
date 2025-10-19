@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { Plus, X, Clock, Hash, Tag } from "lucide-react";
+import ProjectImage from '../../images/Speech-to-text-pana.png';
+import ProjectImage2 from '../../images/Podcast-audience-pana.png';
+import { Plus, X, Clock, Hash, Tag, Podcast } from "lucide-react";
 
 const ProjectDetails = ({ formData, setFormData, goNext }) => {
   const [newTag, setNewTag] = useState("");
@@ -43,8 +45,21 @@ const ProjectDetails = ({ formData, setFormData, goNext }) => {
                      formData.episodeNumber.trim();
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8">
+    <div className="max-w-6xl mx-auto relative">
+      {/* Left Side Image - Fixed position */}
+      <div className="hidden lg:block absolute -left-1/3 top-1/3 transform -translate-y-1/2 z-0">
+        <div className="w-1/3 h-full">
+          <img 
+            src={ProjectImage} 
+            alt="Podcast Creation" 
+            className="w-full h-full object-fill"
+          />
+        </div>
+      </div>
+      
+      {/* Main Content - Centered */}
+      <div className="max-w-4xl mx-auto relative z-10">
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8">
         <div className="text-center mb-8">
           <h2 className="text-3xl font-bold text-gray-900 mb-2">Project Details</h2>
           <p className="text-gray-600">Tell us about your podcast episode</p>
@@ -61,7 +76,7 @@ const ProjectDetails = ({ formData, setFormData, goNext }) => {
               placeholder="e.g., Daily Conversations, Help Me Grow, Tech Talk"
               value={formData.podcastName}
               onChange={(e) => setFormData({ ...formData, podcastName: e.target.value })}
-              className="w-full border-2 border-gray-300 rounded-xl p-4 text-lg focus:outline-none focus:ring-2 focus:ring-light-purple focus:border-transparent transition-all"
+              className="w-full border-2 border-gray-300 rounded-xl p-4 text-lg focus:outline-none focus:ring-2 focus:ring-light-purple focus:border-transparent transition-all relative z-20"
             />
           </div>
 
@@ -75,7 +90,7 @@ const ProjectDetails = ({ formData, setFormData, goNext }) => {
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               rows={4}
-              className="w-full border-2 border-gray-300 rounded-xl p-4 text-lg focus:outline-none focus:ring-2 focus:ring-light-purple focus:border-transparent transition-all resize-none"
+              className="w-full border-2 border-gray-300 rounded-xl p-4 text-lg focus:outline-none focus:ring-2 focus:ring-light-purple focus:border-transparent transition-all resize-none relative z-20"
             />
           </div>
 
@@ -91,7 +106,7 @@ const ProjectDetails = ({ formData, setFormData, goNext }) => {
                 placeholder="e.g., Episode 1, Season 2 Episode 5"
                 value={formData.episodeNumber}
                 onChange={(e) => setFormData({ ...formData, episodeNumber: e.target.value })}
-                className="w-full border-2 border-gray-300 rounded-xl p-4 pl-12 text-lg focus:outline-none focus:ring-2 focus:ring-light-purple focus:border-transparent transition-all"
+                className="w-full border-2 border-gray-300 rounded-xl p-4 pl-12 text-lg focus:outline-none focus:ring-2 focus:ring-light-purple focus:border-transparent transition-all relative z-20"
               />
             </div>
           </div>
@@ -167,21 +182,23 @@ const ProjectDetails = ({ formData, setFormData, goNext }) => {
           </div>
         </div>
 
-        {/* Next Button */}
-        <div className="flex justify-end mt-8">
-          <button
-            onClick={goNext}
-            disabled={!isFormValid}
-            className={`px-8 py-4 rounded-xl font-semibold text-lg transition-all ${
-              isFormValid
-                ? 'bg-light-purple text-white hover:bg-purple-700 hover:shadow-lg'
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-            }`}
-          >
-            Next: AI Speaker Setup →
-          </button>
+          {/* Next Button */}
+          <div className="flex justify-end mt-8">
+            <button
+              onClick={goNext}
+              disabled={!isFormValid}
+              className={`px-8 py-4 rounded-xl font-semibold text-lg transition-all ${
+                isFormValid
+                  ? 'bg-light-purple text-white hover:bg-purple-700 hover:shadow-lg'
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              }`}
+            >
+              Next: AI Speaker Setup →
+            </button>
+          </div>
         </div>
       </div>
+     
     </div>
   );
 };

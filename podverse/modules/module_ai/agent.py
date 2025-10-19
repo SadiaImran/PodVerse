@@ -196,6 +196,9 @@ async def entrypoint(ctx: agents.JobContext):
                         agent._paused = True
                     elif cmd in ("resume", "play"):
                         agent._paused = False
+                    elif cmd == "halt":
+                        agent._paused = True
+                        print(f"🛑 AI Agent halted by user command")
                 elif msg.get("type") == "kb_selection":
                     kb_id = msg.get("kb_id")
                     if kb_id:
