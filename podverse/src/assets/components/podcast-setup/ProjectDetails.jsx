@@ -47,7 +47,7 @@ const ProjectDetails = ({ formData, setFormData, goNext }) => {
   return (
     <div className="max-w-6xl mx-auto relative">
       {/* Left Side Image - Fixed position */}
-      <div className="hidden lg:block absolute -left-1/3 top-1/3 transform -translate-y-1/2">
+      <div className="hidden lg:block absolute -left-1/3 top-1/3 transform -translate-y-1/2 z-0">
         <div className="w-1/3 h-full">
           <img 
             src={ProjectImage} 
@@ -58,7 +58,7 @@ const ProjectDetails = ({ formData, setFormData, goNext }) => {
       </div>
       
       {/* Main Content - Centered */}
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-4xl mx-auto relative z-10">
         <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8">
         <div className="text-center mb-8">
           <h2 className="text-3xl font-bold text-gray-900 mb-2">Project Details</h2>
@@ -76,7 +76,7 @@ const ProjectDetails = ({ formData, setFormData, goNext }) => {
               placeholder="e.g., Daily Conversations, Help Me Grow, Tech Talk"
               value={formData.podcastName}
               onChange={(e) => setFormData({ ...formData, podcastName: e.target.value })}
-              className="w-full border-2 border-gray-300 rounded-xl p-4 text-lg focus:outline-none focus:ring-2 focus:ring-light-purple focus:border-transparent transition-all"
+              className="w-full border-2 border-gray-300 rounded-xl p-4 text-lg focus:outline-none focus:ring-2 focus:ring-light-purple focus:border-transparent transition-all relative z-20"
             />
           </div>
 
@@ -90,7 +90,7 @@ const ProjectDetails = ({ formData, setFormData, goNext }) => {
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               rows={4}
-              className="w-full border-2 border-gray-300 rounded-xl p-4 text-lg focus:outline-none focus:ring-2 focus:ring-light-purple focus:border-transparent transition-all resize-none"
+              className="w-full border-2 border-gray-300 rounded-xl p-4 text-lg focus:outline-none focus:ring-2 focus:ring-light-purple focus:border-transparent transition-all resize-none relative z-20"
             />
           </div>
 
@@ -106,7 +106,7 @@ const ProjectDetails = ({ formData, setFormData, goNext }) => {
                 placeholder="e.g., Episode 1, Season 2 Episode 5"
                 value={formData.episodeNumber}
                 onChange={(e) => setFormData({ ...formData, episodeNumber: e.target.value })}
-                className="w-full border-2 border-gray-300 rounded-xl p-4 pl-12 text-lg focus:outline-none focus:ring-2 focus:ring-light-purple focus:border-transparent transition-all"
+                className="w-full border-2 border-gray-300 rounded-xl p-4 pl-12 text-lg focus:outline-none focus:ring-2 focus:ring-light-purple focus:border-transparent transition-all relative z-20"
               />
             </div>
           </div>
@@ -198,6 +198,7 @@ const ProjectDetails = ({ formData, setFormData, goNext }) => {
           </div>
         </div>
       </div>
+     
     </div>
   );
 };

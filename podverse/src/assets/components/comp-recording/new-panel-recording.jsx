@@ -385,6 +385,11 @@ const fetchLiveKitToken = async () => {
       }
     }
 
+    // Get agent type from sessionStorage (set during podcast setup)
+    const agentType = sessionStorage.getItem('selected_agent_type') || 'host';
+    formData.append("agent_type", agentType);
+    console.log("🎯 Using agent type:", agentType);
+
     console.log("🎟️ Fetching LiveKit token for:", user);
 
     const response = await axios.post(
@@ -585,7 +590,7 @@ const fetchLiveKitToken = async () => {
       
       // Start audio egress (recording)
       const formData = new FormData();
-      formData.append('room_name', 'podcast-room');
+      formData.append('room_name', roomName); // Use the actual room name
       formData.append('user_id', user?.id || '');
       formData.append('kb_id', podcastConfig?.selectedKnowledgeBase || '');
 
@@ -619,7 +624,7 @@ const fetchLiveKitToken = async () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ room_name: 'podcast-room' }),
+        body: JSON.stringify({ room_name: roomName }),
       });
 
       if (response.ok) {
@@ -674,6 +679,9 @@ const fetchLiveKitToken = async () => {
   const handleTranscriptionReceived = useCallback((segments, participant, publication) => {
     // Ignore segments if paused
     if (isPaused) return;
+    
+    // Add small delay to prevent overwhelming the UI
+    setTimeout(() => {
     
     segments.forEach(segment => {
       if (segment.text && segment.text.trim()) {
@@ -771,6 +779,7 @@ const fetchLiveKitToken = async () => {
         }
       }
     });
+    }, 50); // Small delay to prevent overwhelming the UI
   }, [isPaused, currentStreamingSpeaker]); // Dependency on currentStreamingSpeaker is key for clearing
 
   // Set up room event listeners
@@ -1108,7 +1117,7 @@ const fetchLiveKitToken = async () => {
                      className={`w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 shadow-lg hover:shadow-xl hover:-translate-y-1 ${
                        isMicOn 
                          ? 'bg-gradient-to-br from-purple-500 to-purple-600 text-white border-2 border-purple-700 shadow-purple-500/50' 
-                         : 'bg-white text-purple-500 border-2 border-purple-500 hover:bg-purple-50'
+                         : 'bg-white text-light-lightPurple border-2 border-light-lightPurple hover:bg-purple-50'
                      }`}
                    >
                      {isMicOn ? (
@@ -1120,8 +1129,6 @@ const fetchLiveKitToken = async () => {
                    <span className="text-xs font-medium text-gray-600">Microphone</span>
                  </div>
                )}
-
-             
              </div>
 
            </div>
@@ -1157,21 +1164,21 @@ const fetchLiveKitToken = async () => {
                 onClick={() => setActiveTab('script')}
                 className={`pb-3 text-lg font-semibold transition-all duration-300 relative ${
                   activeTab === 'script'
-                    ? 'text-purple-600'
-                    : 'text-gray-500 hover:text-purple-600'
+                    ? 'text-light-lightPurple'
+                    : 'text-gray-500 hover:text-light-lightPurple'
                 }`}
               >
                 <span className="flex items-center gap-2">
                   <div className={`w-4 h-4 rounded-full ${
-                    activeTab === 'script' ? 'bg-purple-500' : 'bg-gray-300'
+                    activeTab === 'script' ? 'bg-light-lightPurple' : 'bg-gray-300'
                   }`}></div>
                   Script
                   {podcastScript && (
-                    <span className="w-2 h-2 bg-purple-500 rounded-full animate-pulse"></span>
+                    <span className="w-2 h-2 bg-light-lightPurple rounded-full animate-pulse"></span>
                   )}
                 </span>
                 {activeTab === 'script' && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-purple-500 to-purple-600 rounded-full"></div>
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-light-lightPurple rounded-full"></div>
                 )}
               </button>
             </div>
@@ -1233,7 +1240,7 @@ const fetchLiveKitToken = async () => {
                       <div className={`flex items-start gap-3 max-w-[80%] ${isUser ? 'flex-row-reverse' : ''}`}>
                         <div className="flex-shrink-0">
                           <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-lg overflow-hidden ${
-                            isUser ? "bg-gradient-to-br from-purple-500 to-purple-600" : 
+                            isUser ? "bg-light-lightPurple" : 
                             entry.speaker === "System" ? "bg-gradient-to-br from-yellow-500 to-yellow-600" :
                             isAI ? "bg-gradient-to-br from-blue-500 to-blue-600" : "bg-gradient-to-br from-gray-500 to-gray-600"
                           }`}>
@@ -1259,7 +1266,7 @@ const fetchLiveKitToken = async () => {
                         <div className="flex flex-col gap-1">
                           <div className={`rounded-2xl px-5 py-3.5 ${
                             isUser
-                              ? 'bg-gradient-to-br from-purple-500 to-purple-600 text-white shadow-lg'
+                              ? 'bg-light-lightPurple text-white shadow-lg'
                               : entry.isSystem
                               ? 'bg-gradient-to-r from-yellow-50 to-yellow-100 border-2 border-yellow-200 shadow-md'
                               : entry.isWelcomeBack
@@ -1299,7 +1306,7 @@ const fetchLiveKitToken = async () => {
                           </div>
                         </div>
                         <div className="flex flex-col gap-1">
-                          <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-2xl px-5 py-3.5 shadow-lg">
+                          <div className="bg-light-lightPurple text-white rounded-2xl px-5 py-3.5 shadow-lg">
                             <p className="text-sm leading-relaxed">
                               {streamingText}
                               <span className="animate-pulse ml-1 text-white text-lg">●</span>

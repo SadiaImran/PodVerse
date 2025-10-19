@@ -34,6 +34,7 @@ def get_token(
     room_name: str = Form(...),
     user_id: str = Form(...),
     selected_kb_id: str = Form(None),
+    agent_type: str = Form("host"),  # NEW: Agent type (host/guest)
     auth_data: dict = Depends(get_authenticated_supabase_client)
 ):
     """Generate LiveKit token and embed user_id and selected KB as metadata."""
@@ -43,11 +44,12 @@ def get_token(
 
     user_id_final = user_id or current_user_id
 
-    print(f"🎟️ Token request: identity={identity}, room={room_name}, user_id={user_id_final}, kb_id={selected_kb_id}")
+    print(f"🎟️ Token request: identity={identity}, room={room_name}, user_id={user_id_final}, kb_id={selected_kb_id}, agent_type={agent_type}")
 
     metadata_dict = {
         "userId": user_id_final,
-        "selectedKbId": selected_kb_id
+        "selectedKbId": selected_kb_id,
+        "agent_type": agent_type
     }
     metadata = json.dumps(metadata_dict)
     print("🧩 Token metadata dict:", metadata_dict)

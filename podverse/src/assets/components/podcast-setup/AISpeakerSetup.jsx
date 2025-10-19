@@ -83,6 +83,12 @@ const AISpeakerSetup = ({ formData, setFormData, goNext, goBack }) => {
     
     // Update form data with final configuration
     setFormData(finalConfig);
+    
+    // Store agent type in sessionStorage for the recording panel
+    const agentType = finalConfig.speakerType === "ai-host" ? "host" : "guest";
+    sessionStorage.setItem('selected_agent_type', agentType);
+    console.log(`🎯 Stored agent type in sessionStorage: ${agentType}`);
+    
     goNext();
   };
 
