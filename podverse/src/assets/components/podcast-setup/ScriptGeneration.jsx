@@ -92,34 +92,34 @@ const ScriptGeneration = ({ formData, goNext, goBack }) => {
 
         <div className="space-y-8">
           {/* Script Generation Section */}
-          <div className="bg-gradient-to-br from-purple-50 via-indigo-50 to-purple-50 rounded-2xl p-6 border-2 border-purple-200 shadow-lg">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Left Column - Main Generation */}
-              <div>
-                <h3 className="text-xl font-bold text-gray-800 mb-2">AI Script Generation</h3>
-                <p className="text-purple-600 font-medium mb-4">Powered by your knowledge base</p>
+          <div className="bg-gradient-to-br from-purple-50 via-indigo-50 to-purple-50 rounded-2xl p-8 border-2 border-purple-200 shadow-lg">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              {/* Left Column - Main Generation (2/3 width) */}
+              <div className="lg:col-span-2">
+                <h3 className="text-2xl font-bold text-gray-800 mb-3">AI Script Generation</h3>
+                <p className="text-purple-600 font-medium mb-6 text-lg">Powered by your knowledge base</p>
 
                 {/* Description */}
-                <div className="space-y-3 mb-6">
-                  <div className="flex items-start gap-3">
-                    <BookOpen className="w-5 h-5 text-purple-500 mt-1 flex-shrink-0" />
+                <div className="space-y-4 mb-8">
+                  <div className="flex items-start gap-4">
+                    <BookOpen className="w-6 h-6 text-purple-500 mt-1 flex-shrink-0" />
                     <div>
-                      <p className="text-sm font-medium text-gray-800">Based on:</p>
-                      <p className="text-sm text-purple-700 font-semibold">{documentName}</p>
+                      <p className="text-base font-medium text-gray-800">Based on:</p>
+                      <p className="text-base text-purple-700 font-semibold">{documentName}</p>
                     </div>
                   </div>
-                  <div className="flex items-start gap-3">
-                    <Zap className="w-5 h-5 text-indigo-500 mt-1 flex-shrink-0" />
+                  <div className="flex items-start gap-4">
+                    <Zap className="w-6 h-6 text-indigo-500 mt-1 flex-shrink-0" />
                     <div>
-                      <p className="text-sm font-medium text-gray-800">Available in:</p>
-                      <p className="text-sm text-gray-700">Recording panel's Script tab</p>
+                      <p className="text-base font-medium text-gray-800">Available in:</p>
+                      <p className="text-base text-gray-700">Recording panel's Script tab</p>
                     </div>
                   </div>
-                  <div className="flex items-start gap-3">
-                    <Clock className="w-5 h-5 text-green-500 mt-1 flex-shrink-0" />
+                  <div className="flex items-start gap-4">
+                    <Clock className="w-6 h-6 text-green-500 mt-1 flex-shrink-0" />
                     <div>
-                      <p className="text-sm font-medium text-gray-800">Generation time:</p>
-                      <p className="text-sm text-gray-700">10-15 seconds</p>
+                      <p className="text-base font-medium text-gray-800">Generation time:</p>
+                      <p className="text-base text-gray-700">10-15 seconds</p>
                     </div>
                   </div>
                 </div>
@@ -128,55 +128,55 @@ const ScriptGeneration = ({ formData, goNext, goBack }) => {
                 <button
                   onClick={handleGenerateScript}
                   disabled={isGenerating || scriptGenerated}
-                  className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-6 py-3 rounded-xl shadow-lg hover:shadow-xl hover:from-purple-700 hover:to-indigo-700 transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-semibold"
+                  className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-8 py-4 rounded-xl shadow-lg hover:shadow-xl hover:from-purple-700 hover:to-indigo-700 transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-3 font-semibold text-lg"
                 >
                   {isGenerating ? (
                     <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                       <span>Generating...</span>
                     </>
                   ) : scriptGenerated ? (
                     <>
-                      <CheckCircle className="w-4 h-4" />
+                      <CheckCircle className="w-5 h-5" />
                       <span>Script Generated!</span>
                     </>
                   ) : (
                     <>
-                      <Sparkles className="w-4 h-4" />
+                      <Sparkles className="w-5 h-5" />
                       <span>Generate Script</span>
                     </>
                   )}
                 </button>
               </div>
 
-              {/* Right Column - Info & Skip */}
-              <div className="space-y-4">
+              {/* Right Column - Info & Skip (1/3 width) */}
+              <div className="space-y-6">
                 {/* Info Card */}
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
-                  <h4 className="font-semibold text-gray-800 mb-2">About Script Generation</h4>
-                  <div className="space-y-2">
-                    <div className="flex items-start gap-2">
-                      <FileText className="w-3 h-3 text-blue-500 mt-1 flex-shrink-0" />
-                      <p className="text-xs text-gray-700">Creates structured conversation flow</p>
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200">
+                  <h4 className="font-semibold text-gray-800 mb-4 text-lg">About Script Generation</h4>
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-3">
+                      <FileText className="w-4 h-4 text-blue-500 mt-1 flex-shrink-0" />
+                      <p className="text-sm text-gray-700">Creates structured conversation flow</p>
                     </div>
-                    <div className="flex items-start gap-2">
-                      <Zap className="w-3 h-3 text-indigo-500 mt-1 flex-shrink-0" />
-                      <p className="text-xs text-gray-700">Based on your knowledge base content</p>
+                    <div className="flex items-start gap-3">
+                      <Zap className="w-4 h-4 text-indigo-500 mt-1 flex-shrink-0" />
+                      <p className="text-sm text-gray-700">Based on your knowledge base content</p>
                     </div>
-                    <div className="flex items-start gap-2">
-                      <CheckCircle className="w-3 h-3 text-green-500 mt-1 flex-shrink-0" />
-                      <p className="text-xs text-gray-700">Professional podcast quality</p>
+                    <div className="flex items-start gap-3">
+                      <CheckCircle className="w-4 h-4 text-green-500 mt-1 flex-shrink-0" />
+                      <p className="text-sm text-gray-700">Professional podcast quality</p>
                     </div>
                   </div>
                 </div>
 
                 {/* Skip Option */}
-                <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 text-center">
-                  <h4 className="font-semibold text-gray-800 mb-1">Skip Script Generation</h4>
-                  <p className="text-xs text-gray-600 mb-3">You can always generate a script later during recording</p>
+                <div className="bg-gray-50 rounded-xl p-6 border border-gray-200 text-center">
+                  <h4 className="font-semibold text-gray-800 mb-2 text-lg">Skip Script Generation</h4>
+                  <p className="text-sm text-gray-600 mb-4">You can always generate a script later during recording</p>
                   <button
                     onClick={handleSkipScript}
-                    className="text-gray-600 hover:text-gray-800 font-medium underline transition-colors text-sm"
+                    className="text-gray-600 hover:text-gray-800 font-medium underline transition-colors text-base"
                   >
                     Continue Without Script
                   </button>

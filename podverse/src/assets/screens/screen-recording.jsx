@@ -1,7 +1,11 @@
 import React from 'react';
+import { useLocation } from 'react-router-dom';
 import BaseLayout from "../components/layouts/BaseLayout"
 import NewPanelsRecording from "../components/comp-recording/new-panel-recording"
 function ScreenRecording () {
+  const location = useLocation();
+  const podcastConfig = location.state?.podcastConfig || {};
+  
   return (
     <BaseLayout homeScreen={false} autoCollapse={true}>
       <div className="w-full h-full p-4">
@@ -12,7 +16,7 @@ function ScreenRecording () {
         </div>
         
         <div className="border-2 rounded-lg shadow-sm overflow-hidden h-[calc(100vh-180px)]">
-          <NewPanelsRecording />
+          <NewPanelsRecording podcastConfig={podcastConfig} />
         </div>
       </div>
     </BaseLayout>
