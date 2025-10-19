@@ -389,6 +389,15 @@ const fetchLiveKitToken = async () => {
     const agentType = sessionStorage.getItem('selected_agent_type') || 'host';
     formData.append("agent_type", agentType);
     console.log("🎯 Using agent type:", agentType);
+    
+    // Get guest persona data if AI Guest is selected
+    if (agentType === "guest") {
+      const guestPersona = sessionStorage.getItem('guest_persona');
+      if (guestPersona) {
+        formData.append("guest_persona", guestPersona);
+        console.log("🎭 Sending guest persona to backend:", JSON.parse(guestPersona));
+      }
+    }
 
     console.log("🎟️ Fetching LiveKit token for:", user);
 
@@ -588,23 +597,25 @@ const fetchLiveKitToken = async () => {
       setRecordingStatus('recording');
       setConversationStarted(true);
       
-      // Start audio egress (recording)
-      const formData = new FormData();
-      formData.append('room_name', roomName); // Use the actual room name
-      formData.append('user_id', user?.id || '');
-      formData.append('kb_id', podcastConfig?.selectedKnowledgeBase || '');
+      // Start audio egress (recording) - COMMENTED OUT FOR TESTING
+      // const formData = new FormData();
+      // formData.append('room_name', roomName); // Use the actual room name
+      // formData.append('user_id', user?.id || '');
+      // formData.append('kb_id', podcastConfig?.selectedKnowledgeBase || '');
 
-      const response = await fetch('http://localhost:8000/livekit/start-audio-egress', {
-        method: 'POST',
-        body: formData,
-      });
+      // const response = await fetch('http://localhost:8000/livekit/start-audio-egress', {
+      //   method: 'POST',
+      //   body: formData,
+      // });
 
-      if (response.ok) {
-        showToast('🎙️ Recording started!', 'success');
-      } else {
-        console.error('Failed to start recording');
-        showToast('Failed to start recording', 'error');
-      }
+      // if (response.ok) {
+      //   showToast('🎙️ Recording started!', 'success');
+      // } else {
+      //   console.error('Failed to start recording');
+      //   showToast('Failed to start recording', 'error');
+      // }
+      
+      showToast('🎙️ Recording started! (Egress disabled for testing)', 'success');
     } catch (error) {
       console.error('❌ Failed to start recording session:', error);
       showToast('Failed to start recording session', 'error');
@@ -618,21 +629,23 @@ const fetchLiveKitToken = async () => {
       setIsRecording(false);
       setRecordingStatus('stopped');
       
-      // Stop audio egress (recording)
-      const response = await fetch('http://localhost:8000/livekit/stop-audio-egress', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ room_name: roomName }),
-      });
+      // Stop audio egress (recording) - COMMENTED OUT FOR TESTING
+      // const response = await fetch('http://localhost:8000/livekit/stop-audio-egress', {
+      //   method: 'POST',
+      //   headers: {
+      //     'Content-Type': 'application/json',
+      //   },
+      //   body: JSON.stringify({ room_name: roomName }),
+      // });
 
-      if (response.ok) {
-        showToast('⏹️ Recording stopped!', 'info');
-      } else {
-        console.error('Failed to stop recording');
-        showToast('Failed to stop recording', 'error');
-      }
+      // if (response.ok) {
+      //   showToast('⏹️ Recording stopped!', 'info');
+      // } else {
+      //   console.error('Failed to stop recording');
+      //   showToast('Failed to stop recording', 'error');
+      // }
+      
+      showToast('⏹️ Recording stopped! (Egress disabled for testing)', 'info');
     } catch (error) {
       console.error('❌ Failed to stop recording session:', error);
       showToast('Failed to stop recording session', 'error');

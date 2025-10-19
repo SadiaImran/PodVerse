@@ -37,14 +37,38 @@ load_dotenv()
 
 # ---------- Guest Agent class ----------
 class GuestAgent(Agent):
-    def __init__(self) -> None:
+    def __init__(self, persona=None) -> None:
         llm_model = google.beta.realtime.RealtimeModel(
             model="models/gemini-2.0-flash-exp",
             temperature=0.8,
+            voice="Charon",  # Professional voice suitable for podcasting
         )
 
+        # Create dynamic instructions based on persona
+        dynamic_instructions = AGENT_INSTRUCTION
+        if persona:
+            persona_info = f"""
+**YOUR PERSONA:**
+- Name: {persona.get('name', 'Unknown')}
+- Role: {persona.get('role', 'Unknown')}
+- Background: {persona.get('background', 'Unknown')}
+- Tone: {persona.get('tone', 'friendly')}
+- Expertise: {', '.join(persona.get('expertise', []))}
+
+**CRITICAL PERSONA RULES:**
+- You must embody this persona completely
+- Respond as {persona.get('name', 'this person')} would, using their tone, background, and expertise
+- **NEVER make up stories, anecdotes, or experiences about {persona.get('name', 'this person')}**
+- **ALWAYS query the knowledge base before sharing any specific information about {persona.get('name', 'this person')}**
+- **If asked for stories or experiences, query your knowledge base first**
+- **If the knowledge base doesn't have the information, respond naturally: "I don't recall that" or "That's not something I remember"**
+- **NEVER say "my records" or "let me consult" - sound like a natural human guest**
+"""
+            dynamic_instructions += persona_info
+            print(f"🎭 Initializing Guest Agent with persona: {persona.get('name', 'Unknown')}")
+
         super().__init__(
-            instructions=AGENT_INSTRUCTION + "\n\nIMPORTANT: Always respond in English only.",
+            instructions=dynamic_instructions + "\n\nIMPORTANT: Always respond in English only. NEVER make up fictional content. SOUND LIKE A NATURAL HUMAN GUEST, NOT A ROBOT ASSISTANT.",
             llm=llm_model,
             tools=[],
         )
@@ -53,11 +77,60 @@ class GuestAgent(Agent):
         self.selected_kb_id = None  
         self._room = None
         self._paused = False
+        self.persona = persona  # Store guest persona
+        self._updated_instructions = None  # Will be set when persona is updated
+
+    def update_persona(self, persona_data):
+        """Update the agent's persona and instructions"""
+        self.persona = persona_data
+        if persona_data:
+            persona_info = f"""
+**YOUR PERSONA:**
+- Name: {persona_data.get('name', 'Unknown')}
+- Role: {persona_data.get('role', 'Unknown')}
+- Background: {persona_data.get('background', 'Unknown')}
+- Tone: {persona_data.get('tone', 'friendly')}
+- Expertise: {', '.join(persona_data.get('expertise', []))}
+
+**IMPORTANT: You must embody this persona completely. Respond as {persona_data.get('name', 'this person')} would, using their tone, background, and expertise.**
+"""
+            # Store the updated instructions for use in responses
+            self._updated_instructions = AGENT_INSTRUCTION + persona_info + "\n\nIMPORTANT: Always respond in English only."
+            print(f"🎭 Updated guest agent with persona: {persona_data.get('name', 'Unknown')}")
+            print(f"🎭 Persona details: {persona_data.get('role', 'Unknown')} - {persona_data.get('background', 'Unknown')[:100]}...")
+            
+            # Override the agent's response behavior
+            self._persona_override = True
 
     @function_tool()
     async def query_knowledge_base(self, query: str) -> str:
         """Call backend /internal/respond to get context chunks for user."""
         return await query_knowledge_base(query, self.user_id, self.selected_kb_id)
+
+    def get_effective_instructions(self):
+        """Get the effective instructions including persona if available"""
+        if hasattr(self, '_updated_instructions') and self._updated_instructions:
+            return self._updated_instructions
+        return self.instructions
+
+    async def generate_reply_with_persona(self, session, text=None, instructions=None):
+        """Generate reply with persona context"""
+        if hasattr(self, '_updated_instructions') and self._updated_instructions:
+            # Use persona-specific instructions
+            effective_instructions = self._updated_instructions
+            if instructions:
+                effective_instructions = f"{self._updated_instructions}\n\n{instructions}"
+            
+            if text:
+                return await session.generate_reply(text=text, instructions=effective_instructions)
+            else:
+                return await session.generate_reply(instructions=effective_instructions)
+        else:
+            # Use default behavior
+            if text:
+                return await session.generate_reply(text=text, instructions=instructions)
+            else:
+                return await session.generate_reply(instructions=instructions)
 
 
 # ---------- Entrypoint ----------
@@ -65,12 +138,35 @@ async def entrypoint_guest(ctx: agents.JobContext):
     print("🚀 Starting AI Guest Agent...")
 
     session = AgentSession()
-    agent = GuestAgent()
+    agent = GuestAgent()  # Will be updated with persona later
+    global_agent = agent  # Store reference for updates
+    session_started = False
 
     # connect to LiveKit
     await ctx.connect()
     room = ctx.room
     agent._room = room
+
+    async def start_agent_session():
+        """Start the agent session with the current agent"""
+        nonlocal session_started
+        try:
+            await session.start(
+                room=room,
+                agent=agent,
+                room_input_options=RoomInputOptions(
+                    video_enabled=False,
+                    noise_cancellation=noise_cancellation.BVC(),
+                ),
+            )
+            session_started = True
+            print("🎤 AI Guest Session Started Successfully!")
+            print("📝 Transcript will be automatically generated by egress")
+            return True
+        except Exception as e:
+            print(f"❌ Failed to start agent session: {e}")
+            traceback.print_exc()
+            return False
 
     print(f"🏠 Connected to room: {getattr(room, 'name', 'unknown')}")
     await asyncio.sleep(0.6)
@@ -103,6 +199,21 @@ async def entrypoint_guest(ctx: agents.JobContext):
                             agent.user_id = parsed["user_id"]
                         if "selectedKbId" in parsed:
                             agent.selected_kb_id = parsed["selectedKbId"]
+                        if "guest_persona" in parsed:
+                            # Create new agent with persona
+                            new_agent = GuestAgent(persona=parsed["guest_persona"])
+                            new_agent.user_id = agent.user_id
+                            new_agent.selected_kb_id = agent.selected_kb_id
+                            new_agent._room = agent._room
+                            agent = new_agent
+                            global_agent = agent
+                            print(f"🔄 Created new agent with persona: {parsed['guest_persona'].get('name', 'Unknown')}")
+                            
+                            # Restart session with new agent if session was already started
+                            if session_started:
+                                print("🔄 Restarting session with new persona...")
+                                asyncio.create_task(session.stop())
+                                asyncio.create_task(start_agent_session())
                         print(f"✅ user_id from metadata: {agent.user_id}, kb_id: {agent.selected_kb_id}")
                     except Exception as e:
                         print(f"⚠️ participant metadata parse error: {e}")
@@ -194,6 +305,15 @@ async def entrypoint_guest(ctx: agents.JobContext):
                                 agent.user_id = parsed["userId"]
                             if "selectedKbId" in parsed:
                                 agent.selected_kb_id = parsed["selectedKbId"]
+                            if "guest_persona" in parsed:
+                                # Create new agent with persona
+                                new_agent = GuestAgent(persona=parsed["guest_persona"])
+                                new_agent.user_id = agent.user_id
+                                new_agent.selected_kb_id = agent.selected_kb_id
+                                new_agent._room = agent._room
+                                agent = new_agent
+                                global_agent = agent
+                                print(f"🔄 Created new agent with persona: {parsed['guest_persona'].get('name', 'Unknown')}")
                                 break
                         except Exception as e:
                             print(f"⚠️ Startup metadata parse error: {e}")
@@ -227,24 +347,7 @@ async def entrypoint_guest(ctx: agents.JobContext):
     topic = "the topic you shared"  # Default topic
 
     # ---------- start the agent session ----------
-    try:
-        await session.start(
-            room=room,
-            agent=agent,
-            room_input_options=RoomInputOptions(
-                video_enabled=False,
-                noise_cancellation=noise_cancellation.BVC(),
-            ),
-        )
-        print("🎤 AI Guest Session Started Successfully!")
-        
-        # Transcript will be automatically generated by LiveKit egress
-        print(f"📝 Transcript will be automatically generated by egress")
-        
-    except Exception as e:
-        print(f"❌ Failed to start agent session: {e}")
-        traceback.print_exc()
-        return
+    await start_agent_session()
 
     # send initial greeting using SESSION_INSTRUCTION
     try:
@@ -279,20 +382,9 @@ async def entrypoint_guest(ctx: agents.JobContext):
         traceback.print_exc()
         print(f"⚠️ Continuing without initial context...")
 
-    # craft initial greeting instruction using SESSION_INSTRUCTION
-    init_instruction = SESSION_INSTRUCTION.format(topic=topic)
-
-    try:
-        # Use generate_reply only with instructions (no text=)
-        await session.generate_reply(instructions=init_instruction)
-        
-        print("💬 Initial greeting/instruction sent.")
-    except Exception as e:
-        print(f"⚠️ generate_reply(initial) error: {e}")
-        traceback.print_exc()
-        print("⚠️ Continuing without initial greeting...")
-
-    print("🎤 AI Guest Session is ready! The agent will respond to user messages using RAG.")
+    # AI Guest should NOT initiate conversation - wait for host to start
+    print("🎤 AI Guest Session is ready! Waiting for host to start the conversation...")
+    print("👤 AI Guest will respond when the host asks questions.")
 
 
 if __name__ == "__main__":

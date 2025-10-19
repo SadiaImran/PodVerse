@@ -35,6 +35,7 @@ def get_token(
     user_id: str = Form(...),
     selected_kb_id: str = Form(None),
     agent_type: str = Form("host"),  # NEW: Agent type (host/guest)
+    guest_persona: str = Form(None),  # NEW: Guest persona data
     auth_data: dict = Depends(get_authenticated_supabase_client)
 ):
     """Generate LiveKit token and embed user_id and selected KB as metadata."""
@@ -45,12 +46,25 @@ def get_token(
     user_id_final = user_id or current_user_id
 
     print(f"🎟️ Token request: identity={identity}, room={room_name}, user_id={user_id_final}, kb_id={selected_kb_id}, agent_type={agent_type}")
+    
+    # Parse guest persona if provided
+    guest_persona_data = None
+    if guest_persona and agent_type == "guest":
+        try:
+            guest_persona_data = json.loads(guest_persona)
+            print(f"🎭 Guest persona received: {guest_persona_data}")
+        except json.JSONDecodeError as e:
+            print(f"⚠️ Failed to parse guest persona: {e}")
 
     metadata_dict = {
         "userId": user_id_final,
         "selectedKbId": selected_kb_id,
         "agent_type": agent_type
     }
+    
+    # Add guest persona to metadata if available
+    if guest_persona_data:
+        metadata_dict["guest_persona"] = guest_persona_data
     metadata = json.dumps(metadata_dict)
     print("🧩 Token metadata dict:", metadata_dict)
     print("🧩 Token metadata JSON:", metadata)

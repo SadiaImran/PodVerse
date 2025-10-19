@@ -45,7 +45,7 @@ class HostAgent(Agent):
         )
 
         super().__init__(
-            instructions=AGENT_INSTRUCTION + "\n\nIMPORTANT: Always respond in English only.",
+            instructions=AGENT_INSTRUCTION + "\n\nIMPORTANT: Always respond in English only.\n\n**VOICE INSTRUCTION: Use a professional, informative voice tone that matches a podcast host personality.**",
             llm=llm_model,
             tools=[],
         )

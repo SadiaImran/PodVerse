@@ -4,7 +4,13 @@ import requests
 from gradio_client import Client as GradioClient
 
 # ========= TTS CONFIGURATION =========
-PERSONA_TO_VOICE = {"host": "m-us-1", "guest": "f-us-1"}
+PERSONA_TO_VOICE = {"host": "m-uk-1", "guest": "f-uk-1"}  # Changed to UK voices
+
+# Available voice options:
+# US Voices: m-us-1, f-us-1, m-us-2, f-us-2
+# UK Voices: m-uk-1, f-uk-1, m-uk-2, f-uk-2  
+# Australian: m-au-1, f-au-1, m-au-2, f-au-2
+# Canadian: m-ca-1, f-ca-1, m-ca-2, f-ca-2
 
 # ========= TTS FUNCTIONS =========
 _tts_client = None
