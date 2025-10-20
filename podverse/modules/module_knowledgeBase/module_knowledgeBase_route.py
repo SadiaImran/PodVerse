@@ -19,6 +19,7 @@ import re
 from typing import Dict, Optional, List
 from dotenv import load_dotenv
 from gradio_client import Client
+import requests
 
 from connection_supabase_client import (
     get_authenticated_supabase_client,
@@ -30,6 +31,10 @@ router = APIRouter()
 
 # ========= CONFIGURATION =========
 load_dotenv()
+
+TOGETHER_API_KEY = os.environ.get("TOGETHER_API_KEY")
+TOGETHER_API_URL = "https://api.together.xyz/v1/chat/completions"
+TOGETHER_MODEL = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
 
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 CHUNK_SIZE = 500
@@ -60,6 +65,40 @@ def make_llm_hf(query: str, temperature=0.1, max_tokens=512):
     except Exception as e:
         print(f"❌ Hugging Face LLM Error: {e}")
         return "I'm sorry, I couldn't process your request right now."
+
+def make_llm_together(query: str, temperature=0.1, max_tokens=512):
+    """Use Together API for generating responses"""
+    if not TOGETHER_API_KEY:
+        print("❌ TOGETHER_API_KEY not found in environment")
+        return "I'm sorry, I couldn't process your request right now."
+    
+    try:
+        response = requests.post(
+            TOGETHER_API_URL,
+            headers={
+                "Authorization": f"Bearer {TOGETHER_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": TOGETHER_MODEL,
+                "messages": [{"role": "user", "content": query}],
+                "max_tokens": max_tokens,
+                "temperature": temperature
+            },
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            return result["choices"][0]["message"]["content"]
+        else:
+            print(f"❌ Together API Error: {response.status_code} - {response.text}")
+            return "I'm sorry, I couldn't process your request right now."
+            
+    except Exception as e:
+        print(f"❌ Together API Error: {e}")
+        return "I'm sorry, I couldn't process your request right now."
+
 
 # Standard Q&A prompt
 SAFE_PROMPT = PromptTemplate(
@@ -977,6 +1016,280 @@ async def get_document_summary(
         print(f"⚠️ Error fetching document summary for kb_id {kb_id}: {e}")
         return {"summary": "Error fetching document content."}
 
+
+@router.post("/internal/get-conversation-flow")
+async def get_conversation_flow(
+    user_id: str = Form(...),
+    kb_id: str = Form(...)
+):
+    """
+    Generate a structured conversation flow with topics and questions
+    based on the user's knowledge base content.
+    ADAPTIVE: More topics for longer documents, covering content sequentially.
+    Uses only togther LLM.
+    """
+    try:
+        service_client = get_service_role_client()
+        
+        # Fetch ALL document chunks in order
+        docs = (
+            service_client.table("documents")
+            .select("content, metadata")
+            .eq("kb_id", kb_id)
+            .eq("user_id", user_id)
+            .order("id")  # Maintain document order
+            .execute()
+        )
+        
+        if not docs.data:
+            return {"flow": [], "error": "No documents found", "success": False}
+        
+        # Calculate document size metrics
+        total_chunks = len(docs.data)
+        total_chars = sum(len(d.get("content", "")) for d in docs.data)
+        total_words = total_chars // 5  # Rough word estimate
+        
+        print(f"📊 Document stats: {total_chunks} chunks, ~{total_words} words, {total_chars} chars")
+        
+        # ADAPTIVE TOPIC COUNT based ONLY on document size
+        if total_words < 1000:
+            num_topics = 3
+        elif total_words < 3000:
+            num_topics = 5
+        elif total_words < 5000:
+            num_topics = 7
+        elif total_words < 10000:
+            num_topics = 10
+        elif total_words < 20000:
+            num_topics = 15
+        else:
+            num_topics = 20  # Cap at 20 topics for very long documents
+        
+        print(f"📋 Generating {num_topics} topics to cover {total_chunks} chunks sequentially")
+        
+        # Divide chunks evenly among topics to ensure full coverage
+        chunks_per_topic = max(1, total_chunks // num_topics)
+        
+        # Get document title from metadata
+        doc_title = "the document"
+        if docs.data and docs.data[0].get("metadata"):
+            raw_title = docs.data[0]["metadata"].get("title", "the document")
+            doc_title = os.path.splitext(raw_title)[0] 
+        
+        print(f"📋 Generating flow for: {doc_title} ({chunks_per_topic} chunks per topic)")
+        
+        # Build sections of content for each topic
+        topic_contents = []
+        for i in range(num_topics):
+            start_idx = i * chunks_per_topic
+            end_idx = min((i + 1) * chunks_per_topic, total_chunks)
+            
+            # Handle last topic - include any remaining chunks
+            if i == num_topics - 1:
+                end_idx = total_chunks
+            
+            section_content = "\n\n".join([
+                docs.data[j]["content"] 
+                for j in range(start_idx, end_idx)
+            ])
+            
+            topic_contents.append({
+                "section_num": i + 1,
+                "content": section_content[:3000],  # Limit each section for prompt
+                "chunk_range": f"{start_idx+1}-{end_idx}"
+            })
+        
+        # Create comprehensive prompt
+        sections_preview = "\n\n".join([
+            f"SECTION {t['section_num']} (chunks {t['chunk_range']}):\n{t['content'][:800]}..."
+            for t in topic_contents[:8]  # Show first 8 sections as examples
+        ])
+        
+        flow_prompt = f"""You are creating a podcast conversation plan STRICTLY about "{doc_title}".
+
+RULES FOR QUESTION GENERATION:
+1. Questions MUST reference specific content from the document
+2. Questions MUST ask about topics that are actually in the document
+3. Questions MUST NOT assume external knowledge
+4. Questions MUST NOT ask "why" broadly - ask specifically about what's in the content
+5. Questions MUST build on what's actually written, not what might be implied
+
+Example GOOD questions:
+- "You mention X in the document - can you expand on that?"
+- "This section discusses Y - how does that work?"
+
+Example BAD questions (DO NOT USE):
+- "What do you think about Z?" (if Z isn't in document)
+- "How would you approach..." (generic question)
+- "Why did you decide..." (assumes external motivation)
+
+You are to OUTPUT STRICTLY VALID JSON ONLY — nothing else, no text before or after.
+The JSON must follow this exact schema:
+{{
+  "topics": [
+    {{"title": "string", "questions": ["string", "string", "string"]}}
+  ]
+}}
+Do not include explanations, numbering, or Markdown fences.
+
+Generate {num_topics} topics with 2-3 questions each. Every question must be traceable to actual content in the document.
+
+Here's the content:
+{sections_preview}
+
+Create podcast questions that explore ONLY what's in this content. Be specific and reference the actual material.
+"""
+        
+        # Try Together LLM
+        try:
+            print("🤖 Using Together LLM for flow generation...")
+            response = make_llm_together(flow_prompt, temperature=0.3, max_tokens=3000)
+            
+            # Clean up response
+            cleaned = response.strip()
+            if cleaned.startswith("```json"):
+                cleaned = cleaned[7:]
+            if cleaned.startswith("```"):
+                cleaned = cleaned[3:]
+            if cleaned.endswith("```"):
+                cleaned = cleaned[:-3]
+            cleaned = cleaned.strip()
+            
+            # Try to parse
+            flow_data = json.loads(cleaned)
+            
+            # Validate structure
+            if "topics" in flow_data and len(flow_data["topics"]) >= num_topics - 2:
+                print(f"✅ Flow generated via Together: {len(flow_data['topics'])} topics")
+                return {
+                    "flow": flow_data, 
+                    "success": True, 
+                    "method": "together", 
+                    "doc_size": total_words,
+                    "coverage": f"{len(flow_data['topics'])} topics covering {total_chunks} chunks"
+                }
+            else:
+                print(f"⚠️ Together response has {len(flow_data.get('topics', []))} topics, expected {num_topics}")
+                raise ValueError("Insufficient topics generated")
+                
+        except Exception as together_error:
+            print(f"⚠️ Together flow generation failed: {together_error}")
+            print(f"   Raw response: {response[:500] if 'response' in locals() else 'No response'}")
+        
+        # SEQUENTIAL FALLBACK - Divide document into equal sections
+        print(f"📋 Using sequential fallback: dividing document into {num_topics} sections")
+        
+        topics = []
+        
+        # Always start with introduction
+        intro_content = "\n".join([docs.data[i]["content"][:500] for i in range(min(3, total_chunks))])
+        topics.append({
+            "title": "Introduction & Overview",
+            "questions": [
+                f"Tell us about {doc_title} - what are we diving into today?",
+                "What's the main purpose of this work?",
+                "Who should care about this and why?"
+            ]
+        })
+        
+        # Create topics for middle sections sequentially
+        for i in range(1, num_topics - 1):
+            start_idx = i * chunks_per_topic
+            end_idx = min((i + 1) * chunks_per_topic, total_chunks)
+            
+            # Get content snippet for this section
+            section_snippet = ""
+            for j in range(start_idx, min(end_idx, start_idx + 2)):
+                if j < len(docs.data):
+                    section_snippet += docs.data[j]["content"][:300] + " "
+            
+            # Extract a topic hint from the content (first sentence or heading-like text)
+            topic_hint = "Discussion"
+            lines = [l.strip() for l in section_snippet.split('\n') if l.strip()]
+            if lines:
+                first_line = lines[0][:60]
+                # Clean it up
+                first_line = re.sub(r'[^\w\s-]', '', first_line).strip()
+                if len(first_line) > 10:
+                    topic_hint = first_line
+            
+            topics.append({
+                "title": f"Part {i}: {topic_hint}",
+                "questions": [
+                    f"Walk us through this section - what's happening here?",
+                    f"What are the key points in this part?",
+                    f"Can you elaborate on the details?"
+                ]
+            })
+        
+        # Always end with conclusion/wrap-up
+        conclusion_content = "\n".join([docs.data[i]["content"][:500] for i in range(max(0, total_chunks - 3), total_chunks)])
+        topics.append({
+            "title": "Conclusions & Final Thoughts",
+            "questions": [
+                "What are the main takeaways from all of this?",
+                "How does everything come together?",
+                "What should listeners remember most?"
+            ]
+        })
+        
+        fallback_flow = {
+            "doc_title": doc_title,
+            "topics": topics
+        }
+        
+        print(f"✅ Sequential fallback flow created with {len(topics)} topics covering chunks 1-{total_chunks}")
+        return {
+            "flow": fallback_flow, 
+            "success": True, 
+            "fallback": True, 
+            "method": "sequential_division",
+            "doc_size": total_words,
+            "total_chunks": total_chunks,
+            "chunks_per_topic": chunks_per_topic
+        }
+        
+    except Exception as e:
+        print(f"❌ Error generating conversation flow: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        # Emergency fallback
+        emergency_flow = {
+            "doc_title": "your work",
+            "topics": [
+                {
+                    "title": "Introduction",
+                    "questions": [
+                        "Tell us what we're exploring today",
+                        "What's the overview?"
+                    ]
+                },
+                {
+                    "title": "Main Content - Part 1",
+                    "questions": [
+                        "Walk us through the first part",
+                        "What's important here?"
+                    ]
+                },
+                {
+                    "title": "Main Content - Part 2",
+                    "questions": [
+                        "What comes next?",
+                        "Tell us more about this section"
+                    ]
+                },
+                {
+                    "title": "Conclusions",
+                    "questions": [
+                        "What are the key takeaways?",
+                        "Final thoughts?"
+                    ]
+                }
+            ]
+        }
+        
+        return {"flow": emergency_flow, "success": True, "fallback": True, "emergency": True}
 
 # ========= PODCAST SCRIPT GENERATION =========
 @router.post("/generate-podcast-script/")

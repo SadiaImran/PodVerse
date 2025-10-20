@@ -1,8 +1,5 @@
-"""
-AI Host Agent - Refactored from agent.py
-Contains all Host-specific logic with shared utilities imported from base_agent.py
-"""
 from dotenv import load_dotenv
+import aiohttp
 import asyncio
 import traceback
 import json
@@ -21,7 +18,6 @@ try:
         restart_egress_with_delay
     )
 except ImportError:
-    # Fallback for when running directly
     import sys
     import os
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -35,6 +31,18 @@ except ImportError:
     )
 
 load_dotenv()
+
+# ========== DEFINE KB STRICT PREFIX AT MODULE LEVEL ==========
+KB_STRICT_PREFIX = """CRITICAL RULES FOR THIS RESPONSE:
+- You ONLY discuss content from the uploaded knowledge base
+- Do NOT add external examples, knowledge, or assumptions
+- Do NOT ask about things not mentioned in the document
+- Reference specific parts of what they've shared
+- If something isn't covered in their KB, do NOT ask about it
+- Stay focused on THEIR content only
+
+Now continue the conversation naturally:
+"""
 
 # ---------- Host Agent class ----------
 class HostAgent(Agent):
@@ -54,21 +62,218 @@ class HostAgent(Agent):
         self.selected_kb_id = None  
         self._room = None
         self._paused = False
+        self._session = None
+
+        # Conversation flow tracking
+        self.conversation_flow = None 
+        self.current_topic_index = 0   
+        self.questions_asked = set()  
+        self.topics_covered = set()
+        self._closing_triggered = False
 
     @function_tool()
     async def query_knowledge_base(self, query: str) -> str:
         """Call backend /internal/respond to get context chunks for user."""
-        return await query_knowledge_base(query, self.user_id, self.selected_kb_id)
+        try:
+            uid = self.user_id or "default-user"
+            kb_id = self.selected_kb_id
+            
+            if not kb_id:
+                print(f"⚠️ No knowledge base selected (kb_id=None) for user {uid}")
+                return "I don't have access to your knowledge base yet. Please make sure you've selected a knowledge base for this session."
+            
+            flow_context = self.get_current_topic_context()
+            enhanced_query = query
+            if flow_context:
+                enhanced_query = f"{query}\n\n[Internal context: {flow_context}]"
+            
+            print(f"🔍 RAG query for user_id={uid}, kb_id={kb_id}")
+            print(f"   Query: {query[:80]}...")
+            
+            async with aiohttp.ClientSession() as session:
+                form = aiohttp.FormData()
+                form.add_field("query", enhanced_query)
+                form.add_field("user_id", uid)
+                form.add_field("kb_id", kb_id)
+                async with session.post(
+                    "http://localhost:8000/internal/respond", data=form,
+                    timeout=aiohttp.ClientTimeout(total=120)
+                ) as resp:
+                    if resp.status == 200:
+                        j = await resp.json()
+                        context = j.get("answer_text", "No relevant information was found in your notes.")
+                        
+                        if self.conversation_flow:
+                            next_q = self.get_next_question()
+                            if next_q:
+                                context += f"\n\n[Consider naturally transitioning to: {next_q}]"
+                            elif not self._closing_triggered:
+                                context += "\n\n[INTERNAL: All planned topics covered. After answering this naturally, smoothly transition to closing remarks in your next response.]"
+                        
+                        print(f"📄 RAG result received ({len(context)} chars)")
+                        print(f"📄 Context preview: {context[:200]}...")
+                        return context
+                    else:
+                        txt = await resp.text()
+                        print(f"⚠️ RAG backend error: {txt}")
+                        return "I couldn't find relevant information in your documents."
+        except asyncio.TimeoutError:
+            print(f"❌ query_knowledge_base timed out after 120 seconds")
+            return "I'm having trouble accessing your documents right now. Please try again."
+        except Exception as e:
+            print(f"❌ query_knowledge_base exception: {e}")
+            traceback.print_exc()
+            return "Error querying knowledge base."
+
+    async def fetch_conversation_flow(self) -> dict:
+        """Fetch conversation flow from backend."""
+        try:
+            if not self.selected_kb_id:
+                print("⚠️ No kb_id for flow fetch")
+                return None
+                
+            print(f"📋 Fetching conversation flow for kb_id={self.selected_kb_id}")
+            async with aiohttp.ClientSession() as session:
+                form = aiohttp.FormData()
+                form.add_field("user_id", self.user_id)
+                form.add_field("kb_id", self.selected_kb_id)
+                
+                async with session.post(
+                    "http://localhost:8000/internal/get-conversation-flow",
+                    data=form,
+                    timeout=aiohttp.ClientTimeout(total=30)
+                ) as resp:
+                    if resp.status == 200:
+                        result = await resp.json()
+                        if result.get("success") and result.get("flow"):
+                            self.conversation_flow = result["flow"]
+                            print(f"✅ Flow loaded: {len(self.conversation_flow.get('topics', []))} topics")
+                            return self.conversation_flow
+                        else:
+                            print(f"⚠️ Flow generation failed or empty")
+                            return None
+                    else:
+                        print(f"⚠️ Flow fetch failed: {resp.status}")
+                        return None
+                        
+        except Exception as e:
+            print(f"❌ fetch_conversation_flow error: {e}")
+            traceback.print_exc()
+            return None
+
+    def get_next_question(self) -> str:
+        """Get the next question to ask based on conversation flow."""
+        if not self.conversation_flow or "topics" not in self.conversation_flow:
+            return None
+        
+        topics = self.conversation_flow["topics"]
+        
+        if self.current_topic_index < len(topics):
+            current_topic = topics[self.current_topic_index]
+            topic_title = current_topic["title"]
+            
+            for question in current_topic["questions"]:
+                if question not in self.questions_asked:
+                    self.questions_asked.add(question)
+                    return question
+            
+            self.topics_covered.add(topic_title)
+            self.current_topic_index += 1
+            
+            if self.current_topic_index < len(topics):
+                next_topic = topics[self.current_topic_index]
+                first_question = next_topic["questions"][0]
+                self.questions_asked.add(first_question)
+                return first_question
+        
+        return None
+
+    def get_current_topic_context(self) -> str:
+        """Get context about current topic and remaining topics."""
+        if not self.conversation_flow or "topics" not in self.conversation_flow:
+            return ""
+        
+        topics = self.conversation_flow["topics"]
+        
+        if self.current_topic_index >= len(topics):
+            return "All topics have been covered. Prepare to wrap up the conversation gracefully."
+        
+        current_topic = topics[self.current_topic_index]
+        remaining_topics = [t["title"] for t in topics[self.current_topic_index + 1:]]
+        
+        context = f"Current topic: {current_topic['title']}\n"
+        if remaining_topics:
+            context += f"Remaining topics to cover: {', '.join(remaining_topics)}\n"
+        
+        return context
+
+    def should_transition_topic(self, user_response_length: int) -> bool:
+        """Decide if it's a good time to move to next topic."""
+        if not self.conversation_flow:
+            return False
+        
+        if user_response_length < 50:
+            return False
+        
+        current_topic_questions = len([q for q in self.questions_asked 
+                                    if any(q in topic["questions"] 
+                                            for topic in [self.conversation_flow["topics"][self.current_topic_index]])])
+        
+        return current_topic_questions >= 2
+
+    async def check_and_close_if_complete(self) -> bool:
+        """
+        Check if all topics are covered and generate closing if so.
+        Returns True if closing was triggered, False otherwise.
+        """
+        if not self.conversation_flow or self._closing_triggered:
+            return False
+        
+        topics = self.conversation_flow.get("topics", [])
+        
+        if self.current_topic_index >= len(topics):
+            print("🎬 All topics covered - generating closing remarks...")
+            self._closing_triggered = True
+            
+            doc_title = self.conversation_flow.get("doc_title", "your work")
+            
+            # ========== USE KB_STRICT_PREFIX HERE ==========
+            closing_instruction = f"""{KB_STRICT_PREFIX}
+The interview is complete! You've covered all the planned topics about "{doc_title}".
+
+Now deliver a warm, authentic podcast closing based ONLY on what was discussed from their document:
+
+1. Thank the guest enthusiastically (one sentence)
+2. Briefly recap 2-3 key highlights from the conversation (2-3 sentences)
+3. Give a memorable final thought or takeaway (one sentence)
+4. End with a friendly sign-off like "Thanks for joining us today!" or "Until next time!"
+
+Make it feel like a real podcast ending - genuine, warm, and leaving the audience satisfied.
+DO NOT ask any more questions. DO NOT introduce external knowledge.
+This is the FINAL closing statement."""
+
+            try:
+                if self._session:
+                    await self._session.generate_reply(instructions=closing_instruction)
+                    print("✅ Closing remarks delivered")
+                    return True
+                else:
+                    print("⚠️ No session available for closing")
+            except Exception as e:
+                print(f"⚠️ Error generating closing: {e}")
+                traceback.print_exc()
+        
+        return False
 
 
 # ---------- Entrypoint ----------
 async def entrypoint_host(ctx: agents.JobContext):
-    print("🚀 Starting AI Host Agent (improved host behavior)...")
+    print("🚀 Starting AI Host Agent (KB-strict mode)...")
 
     session = AgentSession()
     agent = HostAgent()
+    agent._session = session
 
-    # connect to LiveKit
     await ctx.connect()
     room = ctx.room
     agent._room = room
@@ -76,11 +281,9 @@ async def entrypoint_host(ctx: agents.JobContext):
     print(f"🏠 Connected to room: {getattr(room, 'name', 'unknown')}")
     await asyncio.sleep(0.6)
 
-    # Don't start egress immediately - wait for participant metadata
     room_name_str = getattr(room, 'name', 'my-room')
     print(f"🎬 Will start recording after participant connects with metadata...")
 
-    # safe on helper
     def safe_on(event_name, handler):
         try:
             room.on(event_name, handler)
@@ -105,29 +308,17 @@ async def entrypoint_host(ctx: agents.JobContext):
                         if "selectedKbId" in parsed:
                             agent.selected_kb_id = parsed["selectedKbId"]
                         print(f"✅ user_id from metadata: {agent.user_id}, kb_id: {agent.selected_kb_id}")
-                        
-                        # Start egress now that we have proper user_id and kb_id
-                        # if agent.user_id != "default-user" and room_name_str:
-                        #     print(f"🎬 Starting egress with proper metadata...")
-                        #     asyncio.create_task(trigger_audio_egress(room_name_str, agent.user_id, agent.selected_kb_id))
-                            
                     except Exception as e:
                         print(f"⚠️ participant metadata parse error: {e}")
                 if agent.user_id == "default-user":
                     agent.user_id = ident
                     print(f"ℹ️ fallback user_id = identity: {agent.user_id}")
-                    
-                    # Start egress with fallback user_id
-                    # if room_name_str:
-                    #     print(f"🎬 Starting egress with fallback user_id...")
-                    #     asyncio.create_task(trigger_audio_egress(room_name_str, agent.user_id, agent.selected_kb_id))
         except Exception as e:
             print(f"⚠️ on_participant_connected error: {e}")
 
     def on_participant_disconnected(participant):
         try:
             print(f"👋 participantDisconnected: {getattr(participant, 'identity', None)}")
-            # If this was the last user participant, stop egress and save transcript
             remaining_participants = [p for p in room.remote_participants.values() 
                                     if not getattr(p, 'identity', '').startswith('agent')]
             if len(remaining_participants) == 0:
@@ -140,7 +331,6 @@ async def entrypoint_host(ctx: agents.JobContext):
         print(f"📝 roomMetadataChanged: {metadata}")
 
     def on_data_received(payload, participant):
-        # supports JSON control messages from frontend
         try:
             if isinstance(payload, (bytes, bytearray)):
                 payload = payload.decode("utf-8", errors="replace")
@@ -166,16 +356,9 @@ async def entrypoint_host(ctx: agents.JobContext):
                     if kb_id:
                         agent.selected_kb_id = kb_id
                         print(f"✅ Received KB ID from data channel: {kb_id}")
-                        # Restart egress with new KB ID for proper file naming
-                        # if room_name_str and agent.user_id != "default-user":
-                        #     print(f"🔄 Restarting egress with new KB ID: {kb_id}")
-                        #     # First stop the current egress, then start new one
-                        #     asyncio.create_task(stop_audio_egress(room_name_str))
-                        #     asyncio.create_task(restart_egress_with_delay(room_name_str, agent.user_id, kb_id))
         except Exception as e:
             print(f"⚠️ on_data_received: {e}")
 
-    # register events
     safe_on("participantConnected", on_participant_connected)
     safe_on("participantDisconnected", on_participant_disconnected)
     safe_on("roomMetadataChanged", on_room_metadata_changed)
@@ -206,19 +389,11 @@ async def entrypoint_host(ctx: agents.JobContext):
                                 agent.user_id = parsed["userId"]
                             if "selectedKbId" in parsed:
                                 agent.selected_kb_id = parsed["selectedKbId"]
-                                # Start egress if we have proper metadata
-                                # if agent.user_id != "default-user" and room_name_str:
-                                #     print(f"🎬 Starting egress from startup discovery...")
-                                #     asyncio.create_task(trigger_audio_egress(room_name_str, agent.user_id, agent.selected_kb_id))
                                 break
                         except Exception as e:
                             print(f"⚠️ Startup metadata parse error: {e}")
                     if agent.user_id == "default-user":
                         agent.user_id = p.identity
-                        # Start egress with fallback user_id
-                        # if room_name_str:
-                        #     print(f"🎬 Starting egress from startup fallback...")
-                        #     asyncio.create_task(trigger_audio_egress(room_name_str, agent.user_id, agent.selected_kb_id))
                         break
             except Exception:
                 continue
@@ -227,7 +402,6 @@ async def entrypoint_host(ctx: agents.JobContext):
 
     print(f"🧩 Final user_id: {agent.user_id}, selected_kb_id: {agent.selected_kb_id}")
 
-    # ---------- Simple transcription handler ----------
     def on_transcript_received(participant, text):
         try:
             speaker = getattr(participant, "identity", "unknown")
@@ -236,17 +410,10 @@ async def entrypoint_host(ctx: agents.JobContext):
         except Exception as e:
             print(f"⚠️ transcript handler error: {e}")
 
-    # Register transcript events
     safe_on("transcriptionReceived", on_transcript_received)
 
-    # ---------- initial RAG context & topic ----------
-    # Wait a bit for data channel messages to arrive
     await asyncio.sleep(1)
-    
-    initial_context = ""
-    topic = "the topic you shared"  # Default topic
 
-    # ---------- start the agent session ----------
     try:
         await session.start(
             room=room,
@@ -257,8 +424,6 @@ async def entrypoint_host(ctx: agents.JobContext):
             ),
         )
         print("🎤 AI Host Session Started Successfully!")
-        
-        # Transcript will be automatically generated by LiveKit egress
         print(f"📝 Transcript will be automatically generated by egress")
         
     except Exception as e:
@@ -266,53 +431,144 @@ async def entrypoint_host(ctx: agents.JobContext):
         traceback.print_exc()
         return
 
-    # send initial greeting using SESSION_INSTRUCTION
+    print(f"📋 Fetching conversation flow...")
     try:
-        # fetch initial chunk context from backend
-        print(f"🔍 Attempting initial context fetch for user_id: {agent.user_id}")
-        import aiohttp
-        async with aiohttp.ClientSession() as s:
-            form = aiohttp.FormData()
-            form.add_field("query", "What is this document about?")
-            form.add_field("user_id", agent.user_id)
-            if agent.selected_kb_id:
-                form.add_field("kb_id", agent.selected_kb_id)
-                print(f"🔍 Initial fetch with kb_id: {agent.selected_kb_id}")
-            else:
-                print(f"⚠️ No kb_id available for initial fetch")
-            async with s.post("http://localhost:8000/internal/respond", data=form, timeout=aiohttp.ClientTimeout(total=60)) as resp:
-                if resp.status == 200:
-                    j = await resp.json()
-                    initial_context = j.get("answer_text", "") or ""
-                    print(f"📄 Initial chunks fetched ({len(initial_context)} chars)")
-                    topic = extract_topic_from_context(initial_context) if initial_context else "the topic you shared"
-                else:
-                    txt = await resp.text()
-                    print(f"⚠️ initial fetch failed: {txt}")
-    except asyncio.TimeoutError:
-        print(f"⏰ Initial context fetch timed out after 60 seconds")
-        print(f"⚠️ Continuing without initial context - agent will fetch context on first user message...")
+        await agent.fetch_conversation_flow()
     except Exception as e:
-        print(f"⚠️ initial chunks exception: {e}")
-        print(f"⚠️ Exception type: {type(e)}")
-        import traceback
+        print(f"⚠️ Flow fetch failed: {e}")
         traceback.print_exc()
-        print(f"⚠️ Continuing without initial context...")
 
-    # craft initial greeting instruction using SESSION_INSTRUCTION
-    init_instruction = SESSION_INSTRUCTION.format(topic=topic)
+    initial_context = ""
+    doc_title = "your uploaded content"
+
+    if agent.conversation_flow:
+        doc_title = agent.conversation_flow.get("doc_title", doc_title)
+        print(f"✅ Using flow with document: {doc_title}")
+        
+        first_question = agent.get_next_question()
+        
+        if first_question:
+            print(f"❓ First question from flow: {first_question}")
+            
+            try:
+                print(f"🔍 Fetching context for opening question...")
+                async with aiohttp.ClientSession() as s:
+                    form = aiohttp.FormData()
+                    form.add_field("query", first_question)
+                    form.add_field("user_id", agent.user_id)
+                    if agent.selected_kb_id:
+                        form.add_field("kb_id", agent.selected_kb_id)
+                        
+                    async with s.post(
+                        "http://localhost:8000/internal/respond",
+                        data=form,
+                        timeout=aiohttp.ClientTimeout(total=60)
+                    ) as resp:
+                        if resp.status == 200:
+                            j = await resp.json()
+                            initial_context = j.get("answer_text", "")
+                            print(f"📄 Context fetched for opening ({len(initial_context)} chars)")
+                        else:
+                            txt = await resp.text()
+                            print(f"⚠️ Context fetch failed: {txt}")
+            except asyncio.TimeoutError:
+                print(f"⏰ Initial context fetch timed out - proceeding without context")
+            except Exception as e:
+                print(f"⚠️ Initial context fetch error: {e}")
+                traceback.print_exc()
+            
+            # ========== USE KB_STRICT_PREFIX IN INITIAL GREETING ==========
+            init_instruction = f"""{KB_STRICT_PREFIX}
+You are PODHOST starting a podcast interview about "{doc_title}".
+
+Context from the document:
+{initial_context[:1000] if initial_context else "Opening the conversation..."}
+
+Your opening should:
+1. Greet the guest warmly (one sentence)
+2. Briefly mention you'll be exploring "{doc_title}" (one sentence)
+3. Give a 1-2 sentence teaser based on the context above
+4. Ask this opening question naturally: "{first_question}"
+
+Make it sound like a real podcast opening - enthusiastic but not over the top.
+DO NOT mention "documents", "uploads", or "chunks" - just reference "your work" or "your project".
+REMEMBER: Only ask about content that's in their document. Do not speculate or add external knowledge."""
+
+        else:
+            print("⚠️ Flow exists but no questions found")
+            init_instruction = f"""{KB_STRICT_PREFIX}
+You are PODHOST starting a podcast interview about "{doc_title}".
+
+Greet the guest warmly, mention you're excited to discuss their work, 
+and ask an opening question naturally based on what they've shared.
+
+Keep it natural and conversational. ONLY discuss their document content."""
+    else:
+        print("⚠️ No conversation flow available, using fallback greeting")
+        
+        try:
+            print(f"🔍 Attempting fallback context fetch...")
+            async with aiohttp.ClientSession() as s:
+                form = aiohttp.FormData()
+                form.add_field("query", "Tell me about the main topics covered in this content")
+                form.add_field("user_id", agent.user_id)
+                if agent.selected_kb_id:
+                    form.add_field("kb_id", agent.selected_kb_id)
+                    
+                async with s.post(
+                    "http://localhost:8000/internal/respond",
+                    data=form,
+                    timeout=aiohttp.ClientTimeout(total=60)
+                ) as resp:
+                    if resp.status == 200:
+                        j = await resp.json()
+                        initial_context = j.get("answer_text", "")
+                        print(f"📄 Fallback context fetched ({len(initial_context)} chars)")
+        except asyncio.TimeoutError:
+            print(f"⏰ Fallback context fetch timed out")
+        except Exception as e:
+            print(f"⚠️ Fallback context exception: {e}")
+            traceback.print_exc()
+        
+        # ========== USE KB_STRICT_PREFIX IN FALLBACK ==========
+        init_instruction = f"""{KB_STRICT_PREFIX}
+You are PODHOST starting a podcast interview.
+
+{f'Context from their work: {initial_context[:800]}' if initial_context else 'You are about to have a conversation with a guest about their work.'}
+
+Greet the guest warmly, mention you're excited to explore their work together,
+and ask a natural opening question.
+
+Keep it warm and conversational. ONLY discuss content from their uploaded material.
+DO NOT mention "documents" or "uploads" - refer to "your work" or "your project"."""
 
     try:
-        # Use generate_reply only with instructions (no text=)
         await session.generate_reply(instructions=init_instruction)
-        
-        print("💬 Initial greeting/instruction sent.")
+        print("💬 Initial greeting sent with KB-strict opening")
     except Exception as e:
         print(f"⚠️ generate_reply(initial) error: {e}")
         traceback.print_exc()
-        print("⚠️ Continuing without initial greeting...")
 
-    print("🎤 AI Host Session is ready! The agent will respond to user messages using RAG.")
+    async def monitor_conversation_completion():
+        """Background task to check if conversation should end"""
+        try:
+            await asyncio.sleep(30)
+            
+            while True:
+                await asyncio.sleep(20)
+                
+                if await agent.check_and_close_if_complete():
+                    print("🎬 Conversation completed - closing triggered")
+                    break
+                    
+        except Exception as e:
+            print(f"⚠️ Monitor task error: {e}")
+            traceback.print_exc()
+
+    asyncio.create_task(monitor_conversation_completion())
+    print("🔍 Started background monitor for conversation completion")
+
+    print("🎤 AI Host Session is ready! The agent will respond to user messages using RAG (KB-strict mode).")
 
 
 if __name__ == "__main__":
