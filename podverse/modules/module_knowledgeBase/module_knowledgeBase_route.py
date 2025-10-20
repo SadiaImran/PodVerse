@@ -1416,7 +1416,7 @@ Create the conversation now, discussing ONLY what is covered in the knowledge ba
         # ------------------------------------------------ #
 
         print(f"[script-gen] Calling LLM with {config['max_tokens']} max tokens (STRICT RAG mode)")
-        script_text = make_llm_hf(prompt, temperature=0.3, max_tokens=config['max_tokens'])  # Lower temp for more factual
+        script_text = make_llm_together(prompt, temperature=0.3, max_tokens=config['max_tokens'])  # Lower temp for more factual
         
         if not script_text or len(script_text) < 50:
             return {
