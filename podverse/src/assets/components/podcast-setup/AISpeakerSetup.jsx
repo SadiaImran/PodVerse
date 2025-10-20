@@ -1,19 +1,61 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { RiRobot3Fill, RiUserLine, RiAddLine, RiCloseLine } from "react-icons/ri";
 import { IoMdArrowRoundBack } from "react-icons/io";
 import ProfileJeena from '../../images/icon-profile-jeena.png';
 import ProfileOlive from '../../images/icon-profile-olive.png';
 import ProfileSally from '../../images/icon-profile-sally.png';
 
-const avatarOptions = [ProfileJeena, ProfileOlive, ProfileSally];
+const defaultAvatarOptions = [ProfileJeena, ProfileOlive, ProfileSally];
 
 const AISpeakerSetup = ({ formData, setFormData, goNext, goBack }) => {
   const [selectedAvatar, setSelectedAvatar] = useState(formData.avatar || "");
   const [newExpertise, setNewExpertise] = useState("");
+  const [uploadedAvatars, setUploadedAvatars] = useState([]);
+  const fileInputRef = useRef(null);
 
   const handleAvatarSelect = (avatar) => {
     setSelectedAvatar(avatar);
     setFormData({ ...formData, avatar });
+  };
+
+  const handleImageUpload = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        alert('Please select an image file');
+        return;
+      }
+      
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        alert('Image size should be less than 5MB');
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const imageDataUrl = e.target.result;
+        const newAvatar = {
+          id: Date.now(),
+          src: imageDataUrl,
+          name: file.name
+        };
+        
+        setUploadedAvatars(prev => [...prev, newAvatar]);
+        handleAvatarSelect(imageDataUrl);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeUploadedAvatar = (avatarId) => {
+    setUploadedAvatars(prev => prev.filter(avatar => avatar.id !== avatarId));
+    // If the removed avatar was selected, clear selection
+    if (selectedAvatar && uploadedAvatars.find(avatar => avatar.id === avatarId)?.src === selectedAvatar) {
+      setSelectedAvatar("");
+      setFormData({ ...formData, avatar: "" });
+    }
   };
 
   const addExpertise = () => {
@@ -48,12 +90,12 @@ const AISpeakerSetup = ({ formData, setFormData, goNext, goBack }) => {
 
   const isFormValid = () => {
     if (formData.speakerType === "ai-host") {
-      return formData.agentName.trim() && formData.avatar;
+      return formData.agentName.trim() && (formData.avatar || selectedAvatar);
     } else {
       return formData.guestPersona.name.trim() && 
              formData.guestPersona.role.trim() && 
              formData.guestPersona.background.trim() &&
-             formData.avatar;
+             (formData.avatar || selectedAvatar);
     }
   };
 
@@ -61,12 +103,17 @@ const AISpeakerSetup = ({ formData, setFormData, goNext, goBack }) => {
     // Determine which configuration to use based on what's filled
     let finalConfig = { ...formData };
     
+    // Ensure avatar is set (either default or uploaded)
+    if (selectedAvatar && !finalConfig.avatar) {
+      finalConfig.avatar = selectedAvatar;
+    }
+    
     // If both AI host and guest are configured, prioritize based on completeness
-    const hostConfigured = formData.agentName.trim() && formData.avatar;
+    const hostConfigured = formData.agentName.trim() && (formData.avatar || selectedAvatar);
     const guestConfigured = formData.guestPersona.name.trim() && 
                            formData.guestPersona.role.trim() && 
                            formData.guestPersona.background.trim() &&
-                           formData.avatar;
+                           (formData.avatar || selectedAvatar);
     
     if (hostConfigured && guestConfigured) {
       // Both are configured - use the currently selected speaker type
@@ -88,6 +135,19 @@ const AISpeakerSetup = ({ formData, setFormData, goNext, goBack }) => {
     const agentType = finalConfig.speakerType === "ai-host" ? "host" : "guest";
     sessionStorage.setItem('selected_agent_type', agentType);
     console.log(`🎯 Stored agent type in sessionStorage: ${agentType}`);
+    
+    // Store guest persona data if AI Guest is selected
+    if (agentType === "guest") {
+      const guestPersona = {
+        name: finalConfig.guestPersona.name,
+        role: finalConfig.guestPersona.role,
+        tone: finalConfig.guestPersona.tone,
+        background: finalConfig.guestPersona.background,
+        expertise: finalConfig.guestPersona.expertise
+      };
+      sessionStorage.setItem('guest_persona', JSON.stringify(guestPersona));
+      console.log(`🎭 Stored guest persona:`, guestPersona);
+    }
     
     goNext();
   };
@@ -186,13 +246,26 @@ const AISpeakerSetup = ({ formData, setFormData, goNext, goBack }) => {
             <label className="block text-lg font-semibold text-gray-700 mb-3">
               Choose Avatar *
             </label>
-            <div className="flex gap-4">
-              <div className="cursor-pointer w-20 h-20 border-2 border-dashed border-gray-400 rounded-full flex items-center justify-center hover:border-light-purple transition-colors">
+            <div className="flex flex-wrap gap-4">
+              {/* Upload Button */}
+              <div 
+                className="cursor-pointer w-20 h-20 border-2 border-dashed border-gray-400 rounded-full flex items-center justify-center hover:border-light-purple transition-colors"
+                onClick={() => fileInputRef.current?.click()}
+              >
                 <RiAddLine className="w-8 h-8 text-gray-400" />
               </div>
-              {avatarOptions.map((avatar, idx) => (
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleImageUpload}
+                className="hidden"
+              />
+              
+              {/* Default Avatars */}
+              {defaultAvatarOptions.map((avatar, idx) => (
                 <div
-                  key={idx}
+                  key={`default-${idx}`}
                   onClick={() => handleAvatarSelect(avatar)}
                   className={`cursor-pointer w-20 h-20 rounded-full overflow-hidden transition ${
                     selectedAvatar === avatar
@@ -202,12 +275,44 @@ const AISpeakerSetup = ({ formData, setFormData, goNext, goBack }) => {
                 >
                   <img
                     src={avatar}
-                    alt={`Avatar ${idx + 1}`}
+                    alt={`Default Avatar ${idx + 1}`}
                     className="w-full h-full object-cover"
                   />
                 </div>
               ))}
+              
+              {/* Uploaded Avatars */}
+              {uploadedAvatars.map((avatar) => (
+                <div
+                  key={avatar.id}
+                  className={`relative cursor-pointer w-20 h-20 rounded-full overflow-hidden transition ${
+                    selectedAvatar === avatar.src
+                      ? "ring-4 ring-light-purple"
+                      : "hover:ring-2 hover:ring-gray-300"
+                  }`}
+                >
+                  <img
+                    src={avatar.src}
+                    alt={avatar.name}
+                    className="w-full h-full object-cover"
+                    onClick={() => handleAvatarSelect(avatar.src)}
+                  />
+                  {/* Remove button */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeUploadedAvatar(avatar.id);
+                    }}
+                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 transition-colors"
+                  >
+                    <RiCloseLine className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
             </div>
+            <p className="text-sm text-gray-500 mt-2">
+              Click the + icon to upload your own image (max 5MB)
+            </p>
           </div>
 
           {/* Tone Selection */}

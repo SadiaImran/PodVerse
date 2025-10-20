@@ -24,13 +24,41 @@ async def entrypoint(ctx: agents.JobContext):
     """
     print("🚀 Starting Dynamic Agent Selector...")
     
+    # Connect to LiveKit first
+    await ctx.connect()
+    room = ctx.room
+    
     # Get agent type from job context or default to host
     agent_type = getattr(ctx, 'agent_type', 'host')
     
-    # Check participant metadata for agent type (from token)
+    # Set up participant connection handler to detect agent type
+    def on_participant_connected(participant):
+        nonlocal agent_type
+        try:
+            ident = getattr(participant, "identity", None)
+            print(f"🎉 participantConnected: {ident}")
+            if ident and not str(ident).startswith("agent"):
+                meta = getattr(participant, "metadata", None)
+                if meta:
+                    try:
+                        parsed = json.loads(meta)
+                        if "agent_type" in parsed:
+                            agent_type = parsed["agent_type"]
+                            print(f"📋 Agent type detected from participant: {agent_type}")
+                    except Exception as e:
+                        print(f"⚠️ participant metadata parse error: {e}")
+        except Exception as e:
+            print(f"⚠️ on_participant_connected error: {e}")
+    
+    # Register the event handler
+    room.on("participantConnected", on_participant_connected)
+    
+    # Wait a bit for participants to connect
+    print("⏳ Waiting for participants to connect...")
+    await asyncio.sleep(2)
+    
+    # Check existing participants
     try:
-        room = ctx.room
-        # Look for agent type in participant metadata
         participants = []
         try:
             participants = list(getattr(room, "remote_participants", {}).values())
@@ -42,16 +70,18 @@ async def entrypoint(ctx: agents.JobContext):
             elif hasattr(room, "participants"):
                 participants = list(room.participants.values())
 
+        print(f"🔍 Checking {len(participants)} existing participants for agent type...")
         for p in participants:
             try:
                 if getattr(p, "identity", None) and not p.identity.startswith("agent"):
                     meta = getattr(p, "metadata", None)
+                    print(f"🔍 Checking participant {p.identity} metadata: {meta}")
                     if meta:
                         try:
                             parsed = json.loads(meta)
                             if "agent_type" in parsed:
                                 agent_type = parsed["agent_type"]
-                                print(f"📋 Agent type from participant metadata: {agent_type}")
+                                print(f"📋 Agent type from existing participant: {agent_type}")
                                 break
                         except Exception as e:
                             print(f"⚠️ Participant metadata parse error: {e}")
@@ -60,7 +90,7 @@ async def entrypoint(ctx: agents.JobContext):
     except Exception as e:
         print(f"⚠️ Could not parse participant metadata: {e}")
     
-    print(f"🎯 Selected agent type: {agent_type}")
+    print(f"🎯 Final selected agent type: {agent_type}")
     
     # Route to appropriate agent
     if agent_type.lower() in ['host', 'ai-host', 'ai_host']:
