@@ -25,11 +25,26 @@ function AvatarVideoGenerator() {
   const [isCustomAvatar, setIsCustomAvatar] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isCreatingAvatar, setIsCreatingAvatar] = useState(false);
+  const [videoPlaybackError, setVideoPlaybackError] = useState(false);
+  const [errorLogged, setErrorLogged] = useState(false); // Prevent multiple error logs
+  const [currentPlayingAudio, setCurrentPlayingAudio] = useState(null); // Track currently playing audio URL
 
   // Load avatars and voices on component mount
   useEffect(() => {
     loadAvatars();
     loadVoices();
+  }, []);
+
+  // Cleanup: Remove audio element when component unmounts
+  useEffect(() => {
+    return () => {
+      const audio = document.getElementById('voice-preview-audio');
+      if (audio) {
+        audio.pause();
+        audio.src = '';
+        audio.remove();
+      }
+    };
   }, []);
 
   const loadAvatars = async () => {
@@ -88,19 +103,49 @@ function AvatarVideoGenerator() {
   const playVoicePreview = (audioUrl, voiceId) => {
     if (playingAudio === voiceId) {
       // Stop playing
-      const audio = document.getElementById(`audio-${voiceId}`);
+      const audio = document.getElementById('voice-preview-audio');
       if (audio) {
         audio.pause();
         audio.currentTime = 0;
+        audio.src = '';
       }
       setPlayingAudio(null);
+      setCurrentPlayingAudio(null);
     } else {
-      // Start playing
-      const audio = document.getElementById(`audio-${voiceId}`);
-      if (audio) {
-        audio.play();
-        setPlayingAudio(voiceId);
+      // Stop any currently playing audio first
+      const existingAudio = document.getElementById('voice-preview-audio');
+      if (existingAudio) {
+        existingAudio.pause();
+        existingAudio.currentTime = 0;
       }
+      
+      // Create or reuse single audio element
+      let audio = document.getElementById('voice-preview-audio');
+      if (!audio) {
+        audio = document.createElement('audio');
+        audio.id = 'voice-preview-audio';
+        audio.onended = () => {
+          setPlayingAudio(null);
+          setCurrentPlayingAudio(null);
+        };
+        audio.onerror = () => {
+          console.error('Audio playback error for voice:', voiceId);
+          setPlayingAudio(null);
+          setCurrentPlayingAudio(null);
+        };
+        document.body.appendChild(audio);
+      }
+      
+      // Set new source and play
+      audio.src = audioUrl;
+      audio.play().then(() => {
+        setPlayingAudio(voiceId);
+        setCurrentPlayingAudio(audioUrl);
+      }).catch((err) => {
+        console.error('Error playing audio:', err);
+        setPlayingAudio(null);
+        setCurrentPlayingAudio(null);
+      });
     }
   };
 
@@ -269,6 +314,8 @@ function AvatarVideoGenerator() {
         setVideoUrl(video_url);
         setIsLoading(false);
         setError("");
+        setVideoPlaybackError(false); // Reset error state when new video is ready
+        setErrorLogged(false); // Reset error log flag
         console.log("Video completed:", video_url);
       } else if (videoStatus === "failed") {
         setIsLoading(false);
@@ -276,7 +323,12 @@ function AvatarVideoGenerator() {
         setError("Video generation failed");
       } else {
         // Status check every 15 seconds (changed from 3 seconds)
-        setTimeout(() => pollStatus(vid), 15000);
+        // Use requestAnimationFrame to avoid blocking and reduce violations
+        setTimeout(() => {
+          requestAnimationFrame(() => {
+            pollStatus(vid);
+          });
+        }, 15000);
       }
     } catch (err) {
       console.error("Status check error:", err);
@@ -532,22 +584,16 @@ function AvatarVideoGenerator() {
                         </div>
                         <div className="flex items-center gap-2">
                           {voice.preview_audio && (
-                            <>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  playVoicePreview(voice.preview_audio, voice.voice_id);
-                                }}
-                                className="p-2 bg-purple-500/30 hover:bg-purple-500/50 rounded-lg transition-all"
-                              >
-                                <Volume2 className={`w-4 h-4 ${playingAudio === voice.voice_id ? 'text-green-400' : 'text-purple-300'}`} />
-                              </button>
-                              <audio
-                                id={`audio-${voice.voice_id}`}
-                                src={voice.preview_audio}
-                                onEnded={() => setPlayingAudio(null)}
-                              />
-                            </>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                playVoicePreview(voice.preview_audio, voice.voice_id);
+                              }}
+                              className="p-2 bg-purple-500/30 hover:bg-purple-500/50 rounded-lg transition-all"
+                              title="Play preview"
+                            >
+                              <Volume2 className={`w-4 h-4 ${playingAudio === voice.voice_id ? 'text-green-400' : 'text-purple-300'}`} />
+                            </button>
                           )}
                           {selectedVoice?.voice_id === voice.voice_id && (
                             <CheckCircle2 className="w-5 h-5 text-purple-400" />
@@ -645,25 +691,87 @@ function AvatarVideoGenerator() {
               
               {videoUrl ? (
                 <div className="space-y-4">
-                  <div className="relative w-full rounded-xl overflow-hidden bg-black">
-                    <video
-                      src={videoUrl}
-                      controls
-                      className="w-full rounded-xl shadow-lg"
-                      poster={selectedAvatar?.preview_image_url}
-                      crossOrigin="anonymous"
-                      preload="metadata"
-                      onError={(e) => {
-                        console.error("Video playback error:", e);
-                        setError("Video playback failed. Please try downloading the video.");
-                      }}
-                      onLoadedData={() => {
-                        console.log("Video loaded successfully");
-                      }}
-                    >
-                      Your browser does not support the video tag.
-                    </video>
-                  </div>
+                  {!videoPlaybackError ? (
+                    <div className="relative w-full rounded-xl overflow-hidden bg-black">
+                      <video
+                        key={videoUrl} // Force re-render when URL changes
+                        src={videoUrl}
+                        controls
+                        className="w-full rounded-xl shadow-lg"
+                        poster={selectedAvatar?.preview_image_url}
+                        preload="auto"
+                        playsInline
+                        onError={(e) => {
+                          // Prevent multiple error logs
+                          if (errorLogged) return;
+                          
+                          const video = e.target;
+                          const error = video.error;
+                          
+                          // Only log once
+                          if (error) {
+                            console.error("Video playback error (logged once):", {
+                              code: error.code,
+                              message: error.message,
+                              networkState: video.networkState,
+                              readyState: video.readyState
+                            });
+                            setErrorLogged(true);
+                          }
+                          
+                          // Set error state to show fallback UI (only once)
+                          setVideoPlaybackError(true);
+                        }}
+                        onLoadedData={() => {
+                          console.log("✅ Video loaded successfully");
+                          setVideoPlaybackError(false);
+                          setErrorLogged(false);
+                        }}
+                        onCanPlay={() => {
+                          console.log("✅ Video can play");
+                          setVideoPlaybackError(false);
+                          setErrorLogged(false);
+                        }}
+                        onLoadStart={() => {
+                          // Reset error state when new load starts
+                          setErrorLogged(false);
+                        }}
+                      >
+                        Your browser does not support the video tag.
+                      </video>
+                    </div>
+                  ) : (
+                    <div className="relative w-full rounded-xl overflow-hidden bg-black min-h-[400px] flex items-center justify-center">
+                      <div className="text-center p-8">
+                        <Video className="w-16 h-16 text-purple-400 mx-auto mb-4" />
+                        <p className="text-white font-semibold mb-2">Video Playback Not Available</p>
+                        <p className="text-purple-300 text-sm mb-4">
+                          Due to browser security restrictions, the video cannot be played directly.
+                          <br />
+                          Please use the options below to view or download your video.
+                        </p>
+                        <div className="flex gap-2 justify-center">
+                          <a
+                            href={videoUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg transition-all flex items-center gap-2"
+                          >
+                            <Play className="w-4 h-4" />
+                            Open in New Tab
+                          </a>
+                          <button 
+                            onClick={handleDownload}
+                            className="bg-purple-500 hover:bg-purple-600 text-white font-semibold py-2 px-4 rounded-lg transition-all flex items-center gap-2"
+                          >
+                            <Download className="w-4 h-4" />
+                            Download
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
                   <div className="flex gap-2">
                     <button 
                       onClick={handleDownload}
@@ -682,6 +790,13 @@ function AvatarVideoGenerator() {
                       Open in New Tab
                     </a>
                   </div>
+                  {videoPlaybackError && (
+                    <div className="bg-yellow-500/20 border border-yellow-400/50 rounded-lg p-3">
+                      <p className="text-yellow-200 text-sm text-center">
+                        ⚠️ Video playback is restricted. Use "Open in New Tab" or "Download" to view your video.
+                      </p>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed border-purple-300 rounded-xl bg-white/5">
@@ -709,7 +824,7 @@ function AvatarVideoGenerator() {
         </div>
       </div>
 
-      <style jsx>{`
+      <style>{`
         .custom-scrollbar::-webkit-scrollbar {
           width: 6px;
         }
