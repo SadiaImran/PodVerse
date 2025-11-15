@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Upload, Video, Mic, FileText, Loader2, CheckCircle2, XCircle, Play, Download, Users, Search, Volume2 } from "lucide-react";
+import { Upload, Video, Mic, FileText, Loader2, CheckCircle2, XCircle, Play, Download, Users, Search, Volume2, Image as ImageIcon, X } from "lucide-react";
 import { getSupabaseAuthorizedtoken } from '../../supabaseClient';
 import axios from 'axios';
 
@@ -20,6 +20,11 @@ function AvatarVideoGenerator() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [playingAudio, setPlayingAudio] = useState(null);
+  const [uploadedImage, setUploadedImage] = useState(null);
+  const [uploadedImagePreview, setUploadedImagePreview] = useState(null);
+  const [isCustomAvatar, setIsCustomAvatar] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [isCreatingAvatar, setIsCreatingAvatar] = useState(false);
 
   // Load avatars and voices on component mount
   useEffect(() => {
@@ -99,8 +104,120 @@ function AvatarVideoGenerator() {
     }
   };
 
+  const handleImageUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      setError("Please upload an image file");
+      return;
+    }
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setUploadedImagePreview(reader.result);
+    };
+    reader.readAsDataURL(file);
+
+    setUploadedImage(file);
+    setError("");
+    setIsCustomAvatar(true);
+    setSelectedAvatar(null); // Clear selected predefined avatar
+  };
+
+  const handleRemoveUploadedImage = () => {
+    setUploadedImage(null);
+    setUploadedImagePreview(null);
+    setIsCustomAvatar(false);
+    setSelectedAvatar(null);
+  };
+
+  const handleCreateCustomAvatar = async () => {
+    if (!uploadedImage) {
+      setError("Please upload an image first");
+      return null;
+    }
+
+    setIsCreatingAvatar(true);
+    setError("");
+
+    try {
+      const token = await getSupabaseAuthorizedtoken();
+
+      // Step 1: Upload image
+      const formData = new FormData();
+      formData.append('file', uploadedImage);
+
+      const uploadResponse = await axios.post(
+        "http://localhost:8000/video/api/upload-image",
+        formData,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+
+      const imageKey = uploadResponse.data.image_key;
+      console.log("Image uploaded, image_key:", imageKey);
+
+      // Step 2: Create photo avatar
+      const avatarName = `Custom Avatar ${Date.now()}`;
+      const createResponse = await axios.post(
+        "http://localhost:8000/video/api/create-photo-avatar",
+        {
+          name: avatarName,
+          image_key: imageKey
+        },
+        {
+          headers: {
+            "Content-Type": "application/json",
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+
+      const { avatar_id, preview_image_url } = createResponse.data;
+      console.log("Photo avatar created, ID:", avatar_id);
+
+      // Create avatar object
+      const createdAvatar = {
+        avatar_id: avatar_id,
+        avatar_name: avatarName,
+        preview_image_url: preview_image_url || uploadedImagePreview
+      };
+
+      // Set the created avatar as selected
+      setSelectedAvatar(createdAvatar);
+      setIsCustomAvatar(true);
+      setIsCreatingAvatar(false);
+
+      return createdAvatar;
+
+    } catch (err) {
+      console.error("Create avatar error:", err);
+      setError(err.response?.data?.detail || "Error creating custom avatar");
+      setIsCreatingAvatar(false);
+      return null;
+    }
+  };
+
   const handleGenerate = async () => {
-    if (!selectedAvatar || !selectedVoice || !inputText) {
+    let avatarToUse = selectedAvatar;
+
+    // If custom avatar is selected but not yet created, create it first
+    if (isCustomAvatar && uploadedImage && (!selectedAvatar || !selectedAvatar.avatar_id)) {
+      avatarToUse = await handleCreateCustomAvatar();
+      if (!avatarToUse) {
+        // Error already handled in handleCreateCustomAvatar
+        return;
+      }
+    }
+
+    if (!avatarToUse || !selectedVoice || !inputText) {
       setError("Please select an avatar, voice, and enter text");
       return;
     }
@@ -112,9 +229,10 @@ function AvatarVideoGenerator() {
     try {
       const token = await getSupabaseAuthorizedtoken();
       const response = await axios.post("http://localhost:8000/video/api/generate-video", {
-        avatar_id: selectedAvatar.avatar_id,
+        avatar_id: avatarToUse.avatar_id,
         voice_id: selectedVoice.voice_id,
         input_text: inputText,
+        is_custom_avatar: isCustomAvatar,
       }, {
         headers: {
           "Content-Type": "application/json",
@@ -157,7 +275,8 @@ function AvatarVideoGenerator() {
         setStatus("failed");
         setError("Video generation failed");
       } else {
-        setTimeout(() => pollStatus(vid), 3000);
+        // Status check every 15 seconds (changed from 3 seconds)
+        setTimeout(() => pollStatus(vid), 15000);
       }
     } catch (err) {
       console.error("Status check error:", err);
@@ -222,7 +341,69 @@ function AvatarVideoGenerator() {
                 <Users className="w-5 h-5" />
                 Select Avatar
               </label>
-              
+
+              {/* Upload Custom Photo Section */}
+              <div className="mb-4 p-4 bg-purple-500/10 border border-purple-400/30 rounded-lg">
+                <label className="flex items-center gap-2 text-purple-200 font-medium mb-2">
+                  <ImageIcon className="w-4 h-4" />
+                  Upload Your Photo
+                </label>
+                <p className="text-purple-300 text-xs mb-3">
+                  Upload a front-facing portrait photo to create a custom avatar
+                </p>
+                
+                {uploadedImagePreview ? (
+                  <div className="relative">
+                    <img 
+                      src={uploadedImagePreview} 
+                      alt="Uploaded preview" 
+                      className="w-full h-32 object-cover rounded-lg mb-2"
+                    />
+                    <button
+                      onClick={handleRemoveUploadedImage}
+                      className="absolute top-2 right-2 p-1 bg-red-500/80 hover:bg-red-500 rounded-full text-white"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                    {isCustomAvatar && !selectedAvatar?.avatar_id && (
+                      <button
+                        onClick={handleCreateCustomAvatar}
+                        disabled={isCreatingAvatar}
+                        className="w-full mt-2 bg-purple-500 hover:bg-purple-600 disabled:bg-gray-500 disabled:cursor-not-allowed text-white font-semibold py-2 px-4 rounded-lg transition-all flex items-center justify-center gap-2"
+                      >
+                        {isCreatingAvatar ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Creating Avatar...
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="w-4 h-4" />
+                            Create Avatar
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-purple-300 rounded-lg cursor-pointer bg-white/5 hover:bg-white/10 transition-all">
+                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                      <Upload className="w-8 h-8 mb-2 text-purple-300" />
+                      <p className="mb-2 text-sm text-purple-200">
+                        <span className="font-semibold">Click to upload</span> or drag and drop
+                      </p>
+                      <p className="text-xs text-purple-300">PNG, JPG, JPEG (MAX. 10MB)</p>
+                    </div>
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                    />
+                  </label>
+                )}
+              </div>
+
               <div className="relative mb-4">
                 <Search className="absolute left-3 top-3 w-5 h-5 text-purple-300" />
                 <input
@@ -230,11 +411,12 @@ function AvatarVideoGenerator() {
                   placeholder="Search avatars..."
                   value={avatarSearchQuery}
                   onChange={(e) => setAvatarSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 bg-white/10 border border-purple-300 rounded-lg text-white placeholder-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                  disabled={isCustomAvatar}
+                  className="w-full pl-10 pr-4 py-2 bg-white/10 border border-purple-300 rounded-lg text-white placeholder-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-400 disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
 
-              <div className="max-h-96 overflow-y-auto space-y-2 custom-scrollbar">
+              <div className={`max-h-96 overflow-y-auto space-y-2 custom-scrollbar ${isCustomAvatar ? 'opacity-50' : ''}`}>
                 {loadingAvatars ? (
                   <div className="flex items-center justify-center py-8">
                     <Loader2 className="w-8 h-8 text-purple-400 animate-spin" />
@@ -245,11 +427,20 @@ function AvatarVideoGenerator() {
                   filteredAvatars.map((avatar) => (
                     <div
                       key={avatar.avatar_id}
-                      onClick={() => setSelectedAvatar(avatar)}
-                      className={`cursor-pointer rounded-lg p-3 transition-all ${
-                        selectedAvatar?.avatar_id === avatar.avatar_id
+                      onClick={() => {
+                        if (!isCustomAvatar) {
+                          setSelectedAvatar(avatar);
+                          setIsCustomAvatar(false);
+                        }
+                      }}
+                      className={`rounded-lg p-3 transition-all ${
+                        isCustomAvatar 
+                          ? 'opacity-50 cursor-not-allowed' 
+                          : 'cursor-pointer hover:bg-white/10'
+                      } ${
+                        selectedAvatar?.avatar_id === avatar.avatar_id && !isCustomAvatar
                           ? 'bg-purple-500/40 border-2 border-purple-400'
-                          : 'bg-white/5 border border-white/10 hover:bg-white/10'
+                          : 'bg-white/5 border border-white/10'
                       }`}
                     >
                       <div className="flex items-center gap-3">
@@ -266,7 +457,7 @@ function AvatarVideoGenerator() {
                             <p className="text-purple-300 text-xs">{avatar.gender}</p>
                           )}
                         </div>
-                        {selectedAvatar?.avatar_id === avatar.avatar_id && (
+                        {selectedAvatar?.avatar_id === avatar.avatar_id && !isCustomAvatar && (
                           <CheckCircle2 className="w-5 h-5 text-purple-400 flex-shrink-0" />
                         )}
                       </div>
@@ -280,6 +471,7 @@ function AvatarVideoGenerator() {
                   <p className="text-green-200 text-sm flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4" />
                     Selected: {selectedAvatar.avatar_name}
+                    {isCustomAvatar && <span className="text-xs text-green-300">(Custom)</span>}
                   </p>
                 </div>
               )}
@@ -398,13 +590,13 @@ function AvatarVideoGenerator() {
             {/* Generate Button */}
             <button
               onClick={handleGenerate}
-              disabled={isLoading || !selectedAvatar || !selectedVoice || !inputText}
+              disabled={isLoading || isCreatingAvatar || isUploadingImage || !selectedVoice || !inputText || (!selectedAvatar && !uploadedImage)}
               className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 disabled:from-gray-500 disabled:to-gray-600 disabled:cursor-not-allowed text-white font-bold py-4 px-6 rounded-xl transition-all transform hover:scale-105 disabled:hover:scale-100 shadow-lg flex items-center justify-center gap-2"
             >
-              {isLoading ? (
+              {isLoading || isCreatingAvatar || isUploadingImage ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  Generating...
+                  {isCreatingAvatar ? "Creating Avatar..." : isUploadingImage ? "Uploading..." : "Generating..."}
                 </>
               ) : (
                 <>
@@ -453,19 +645,43 @@ function AvatarVideoGenerator() {
               
               {videoUrl ? (
                 <div className="space-y-4">
-                  <video
-                    src={videoUrl}
-                    controls
-                    className="w-full rounded-xl shadow-lg"
-                    poster={selectedAvatar?.preview_image_url}
-                  />
-                  <button 
-                    onClick={handleDownload}
-                    className="w-full bg-purple-500 hover:bg-purple-600 text-white font-semibold py-3 px-6 rounded-xl transition-all flex items-center justify-center gap-2"
-                  >
-                    <Download className="w-5 h-5" />
-                    Download Video
-                  </button>
+                  <div className="relative w-full rounded-xl overflow-hidden bg-black">
+                    <video
+                      src={videoUrl}
+                      controls
+                      className="w-full rounded-xl shadow-lg"
+                      poster={selectedAvatar?.preview_image_url}
+                      crossOrigin="anonymous"
+                      preload="metadata"
+                      onError={(e) => {
+                        console.error("Video playback error:", e);
+                        setError("Video playback failed. Please try downloading the video.");
+                      }}
+                      onLoadedData={() => {
+                        console.log("Video loaded successfully");
+                      }}
+                    >
+                      Your browser does not support the video tag.
+                    </video>
+                  </div>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={handleDownload}
+                      className="flex-1 bg-purple-500 hover:bg-purple-600 text-white font-semibold py-3 px-6 rounded-xl transition-all flex items-center justify-center gap-2"
+                    >
+                      <Download className="w-5 h-5" />
+                      Download Video
+                    </button>
+                    <a
+                      href={videoUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-3 px-6 rounded-xl transition-all flex items-center justify-center gap-2"
+                    >
+                      <Play className="w-5 h-5" />
+                      Open in New Tab
+                    </a>
+                  </div>
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed border-purple-300 rounded-xl bg-white/5">

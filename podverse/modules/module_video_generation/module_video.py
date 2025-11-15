@@ -1,6 +1,6 @@
 import time
 import requests
-from fastapi import APIRouter, HTTPException, Depends, Header
+from fastapi import APIRouter, HTTPException, Depends, Header, File, UploadFile
 from pydantic import BaseModel
 import os
 from typing import Optional, List
@@ -8,11 +8,19 @@ from typing import Optional, List
 # Configuration
 HEYGEN_API_KEY = os.environ.get("HEYGEN_API_KEY")
 HEYGEN_BASE = "https://api.heygen.com"
+HEYGEN_UPLOAD_BASE = "https://upload.heygen.com"  # Different base URL for uploads
 
 HEADERS = {
     "X-Api-Key": HEYGEN_API_KEY,
     "Content-Type": "application/json"
 }
+
+def get_upload_headers(content_type: str):
+    """Get headers for file upload with proper Content-Type"""
+    return {
+        "X-Api-Key": HEYGEN_API_KEY,
+        "Content-Type": content_type
+    }
 
 router = APIRouter()
 
@@ -20,6 +28,11 @@ class GenerateRequest(BaseModel):
     avatar_id: str
     voice_id: str
     input_text: str
+    is_custom_avatar: Optional[bool] = False
+
+class CreateAvatarRequest(BaseModel):
+    name: str
+    image_key: str
 
 class StatusResponse(BaseModel):
     video_id: str
@@ -147,31 +160,186 @@ async def list_voices(authorization: str = Depends(verify_token)):
         raise HTTPException(status_code=500, detail=f"Failed to fetch voices: {str(e)}")
 
 
+@router.post("/api/upload-image")
+async def upload_image(
+    file: UploadFile = File(...),
+    authorization: str = Depends(verify_token)
+):
+    """
+    Upload a user's image file to HeyGen platform.
+    Returns an image_key (asset_id) that can be used to create a photo avatar.
+    
+    Reference: https://docs.heygen.com/reference/upload-asset
+    Endpoint: POST https://upload.heygen.com/v1/asset
+    The file is sent as raw binary data in the request body.
+    """
+    if not HEYGEN_API_KEY:
+        raise HTTPException(status_code=500, detail="HEYGEN_API_KEY is not set.")
+    
+    # Read file content as binary
+    file_content = await file.read()
+    
+    # Determine Content-Type based on file type
+    # Map common image MIME types
+    content_type = file.content_type
+    if not content_type:
+        # Try to infer from filename
+        if file.filename:
+            if file.filename.lower().endswith('.png'):
+                content_type = 'image/png'
+            elif file.filename.lower().endswith(('.jpg', '.jpeg')):
+                content_type = 'image/jpeg'
+            else:
+                content_type = 'image/jpeg'  # Default
+        else:
+            content_type = 'image/jpeg'  # Default
+    
+    # Validate that it's an image
+    if not content_type.startswith('image/'):
+        raise HTTPException(status_code=400, detail=f"Invalid file type: {content_type}. Only image files are supported.")
+    
+    # Prepare headers with Content-Type and API key
+    # Reference: https://docs.heygen.com/reference/upload-asset
+    upload_headers = get_upload_headers(content_type)
+    
+    # Upload endpoint: https://upload.heygen.com/v1/asset
+    # File is sent as raw binary data in the request body
+    upload_url = f"{HEYGEN_UPLOAD_BASE}/v1/asset"
+    
+    try:
+        print(f"📤 Uploading image to: {upload_url}")
+        print(f"📝 Content-Type: {content_type}, File size: {len(file_content)} bytes")
+        
+        # Send file as raw binary data in the request body
+        resp = requests.post(
+            upload_url,
+            headers=upload_headers,
+            data=file_content,  # Raw binary data, not multipart/form-data
+            timeout=60  # Longer timeout for file uploads
+        )
+        
+        print(f"📊 Response status: {resp.status_code}")
+        
+        if resp.status_code != 200:
+            print(f"📊 Response body: {resp.text[:500]}")
+            resp.raise_for_status()
+        
+        resp_data = resp.json()
+        
+        # The response should contain the asset_id (which is the image_key)
+        # Check different possible response formats
+        image_key = (
+            resp_data.get("data", {}).get("asset_id") or
+            resp_data.get("data", {}).get("image_key") or
+            resp_data.get("asset_id") or
+            resp_data.get("image_key") or
+            resp_data.get("data", {}).get("id")
+        )
+        
+        if not image_key:
+            print(f"⚠️  Response data: {resp_data}")
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Asset ID not found in HeyGen response. Response: {resp_data}"
+            )
+        
+        print(f"✅ Image uploaded successfully, asset_id (image_key): {image_key}")
+        return {"image_key": image_key}
+        
+    except requests.exceptions.RequestException as e:
+        print(f"❌ HeyGen Upload Asset error: {e}")
+        error_detail = resp.text if 'resp' in locals() else str(e)
+        status_code = resp.status_code if 'resp' in locals() else 500
+        print(f"📊 Response status: {status_code}")
+        print(f"📊 Response body: {error_detail[:500]}")
+        raise HTTPException(
+            status_code=status_code, 
+            detail=f"HeyGen upload error: {error_detail[:200]}"
+        )
+    except Exception as e:
+        print(f"❌ Error during upload: {e}")
+        raise HTTPException(status_code=500, detail=f"Error uploading image: {str(e)}")
+
+
+@router.post("/api/create-photo-avatar")
+def create_photo_avatar(
+    request: CreateAvatarRequest,
+    authorization: str = Depends(verify_token)
+):
+    """
+    Create a photo avatar from an uploaded image using HeyGen's Avatar IV (Single Photo) method.
+    Returns the avatar_id (talking_photo_id) that can be used for video generation.
+    """
+    if not HEYGEN_API_KEY:
+        raise HTTPException(status_code=500, detail="HEYGEN_API_KEY is not set.")
+        
+    create_url = f"{HEYGEN_BASE}/v2/photo_avatar/avatar_group/create"
+    
+    payload = {
+        "name": request.name,
+        "image_key": request.image_key
+    }
+    
+    try:
+        resp = requests.post(create_url, headers=HEADERS, json=payload)
+        resp.raise_for_status()
+        
+        resp_data = resp.json()
+        
+        # The ID returned here is the avatar/look ID (talking_photo_id)
+        # for use in the video generation API call.
+        avatar_id = resp_data.get("data", {}).get("id")
+        preview_image_url = resp_data.get("data", {}).get("image_url")
+        
+        if not avatar_id:
+            raise HTTPException(status_code=500, detail="Avatar ID not found in HeyGen response.")
+            
+        print(f"✅ Photo Avatar created, ID: {avatar_id}")
+        return {"avatar_id": avatar_id, "preview_image_url": preview_image_url}
+        
+    except requests.exceptions.RequestException as e:
+        print(f"❌ HeyGen Create Avatar error: {e}")
+        raise HTTPException(
+            status_code=resp.status_code if 'resp' in locals() else 500, 
+            detail=f"HeyGen create error: {resp.text if 'resp' in locals() else str(e)}"
+        )
+
+
 @router.post("/api/generate-video")
 def generate_video(
     req: GenerateRequest,
     authorization: str = Depends(verify_token)
 ):
     """
-    Generates a video using predefined HeyGen avatar and voice.
-    Both avatar_id and voice_id should be from their respective list endpoints.
+    Generates a video using HeyGen avatar and voice.
+    Supports both predefined avatars and custom photo avatars.
     """
-    print(f"🎬 Generating video with avatar: {req.avatar_id}, voice: {req.voice_id}")
+    print(f"🎬 Generating video with avatar: {req.avatar_id}, voice: {req.voice_id}, is_custom: {req.is_custom_avatar}")
     
     if not HEYGEN_API_KEY:
         raise HTTPException(status_code=500, detail="HEYGEN_API_KEY not configured")
     
     generate_url = f"{HEYGEN_BASE}/v2/video/generate"
     
-    # Use regular avatar type with predefined voice
+    # Determine character settings based on avatar type
+    if req.is_custom_avatar:
+        # If it's a custom photo avatar, use 'talking_photo' type and 'talking_photo_id'
+        character_settings = {
+            "type": "talking_photo",
+            "talking_photo_id": req.avatar_id  # The ID from create-photo-avatar step
+        }
+    else:
+        # Otherwise, use the standard 'avatar' type and 'avatar_id'
+        character_settings = {
+            "type": "avatar",
+            "avatar_id": req.avatar_id,
+            "avatar_style": "normal"
+        }
+    
     payload = {
         "video_inputs": [
             {
-                "character": {
-                    "type": "avatar",
-                    "avatar_id": req.avatar_id,
-                    "avatar_style": "normal"
-                },
+                "character": character_settings,  # Use the dynamic settings
                 "voice": {
                     "type": "text",
                     "input_text": req.input_text,
