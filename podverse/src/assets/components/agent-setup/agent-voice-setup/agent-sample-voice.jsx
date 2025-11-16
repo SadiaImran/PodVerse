@@ -1,24 +1,21 @@
 import { useState, useRef, useEffect } from "react";
 import { FaPlay, FaPause, FaCheckCircle } from "react-icons/fa";
-import { RiLoopLeftLine } from "react-icons/ri";
-import { CgDetailsMore } from "react-icons/cg";
 import axios from "axios";
 import { getSupabaseAuthorizedtoken } from "../../../supabaseClient";
 
 const SampleVoices = ({ onVoiceSelect }) => {
   const [selectedVoice, setSelectedVoice] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [hoveredVoice, setHoveredVoice] = useState(null);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
-  const [visibleCategoryDropdowns, setVisibleCategoryDropdowns] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [voices, setVoices] = useState([]);
   
   const audioRef = useRef(null);
   const progressInterval = useRef(null);
+  const durationsLoadedRef = useRef(false);
 
   // Fetch voices from backend API
   useEffect(() => {
@@ -64,11 +61,12 @@ const SampleVoices = ({ onVoiceSelect }) => {
               ...voice,
               color: getVoiceColor(index),
               textColor: 'text-white',
-              duration: 30 // Will be updated when audio loads
+              duration: 0 // Will be updated when audio loads
             };
           });
           
           setVoices(transformedVoices);
+          durationsLoadedRef.current = false; // Reset to load durations for new voices
           console.log("✅ Transformed voices:", transformedVoices);
           
           // Set first voice as selected if none selected
@@ -98,13 +96,19 @@ const SampleVoices = ({ onVoiceSelect }) => {
     fetchVoices();
   }, []);
 
-  // Helper function to get voice colors (cycling through predefined colors)
+  // Helper function to get voice colors (gradient like audio edit sounds)
   const getVoiceColor = (index) => {
-    const colors = [
-      'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-pink-500',
-      'bg-yellow-500', 'bg-red-500', 'bg-indigo-500', 'bg-orange-500'
+    const gradients = [
+      'bg-gradient-to-br from-blue-800 to-blue-300',
+      'bg-gradient-to-br from-purple-600 to-purple-300',
+      'bg-gradient-to-br from-indigo-600 to-indigo-300',
+      'bg-gradient-to-br from-violet-600 to-violet-300',
+      'bg-gradient-to-br from-blue-700 to-blue-400',
+      'bg-gradient-to-br from-purple-700 to-purple-400',
+      'bg-gradient-to-br from-indigo-700 to-indigo-400',
+      'bg-gradient-to-br from-violet-700 to-violet-400',
     ];
-    return colors[index % colors.length];
+    return gradients[index % gradients.length];
   };
 
   // Update audio source when selected voice changes
@@ -182,14 +186,14 @@ const SampleVoices = ({ onVoiceSelect }) => {
     }
   };
 
-  // Handle audio metadata loaded
+  // Handle audio metadata loaded - update duration for the voice
   const handleLoadedMetadata = (e) => {
     const audioDuration = e.target.duration;
     console.log("✅ Audio metadata loaded, duration:", audioDuration);
-    if (audioDuration && !isNaN(audioDuration)) {
+    if (audioDuration && !isNaN(audioDuration) && selectedVoice) {
       setDuration(audioDuration);
       
-      // Update the duration in voices state
+      // Update the duration in voices state for the selected voice
       setVoices(prev => prev.map(v => 
         v.id === selectedVoice 
           ? { ...v, duration: audioDuration }
@@ -197,6 +201,48 @@ const SampleVoices = ({ onVoiceSelect }) => {
       ));
     }
   };
+
+  // Load metadata for all voices to get their durations
+  useEffect(() => {
+    if (voices.length === 0 || durationsLoadedRef.current) return;
+    
+    const loadAllVoiceDurations = async () => {
+      durationsLoadedRef.current = true;
+      
+      const audioPromises = voices.map((voice) => {
+        return new Promise((resolve) => {
+          if (!voice.audioSrc) {
+            resolve({ id: voice.id, duration: 0 });
+            return;
+          }
+          
+          const audio = new Audio(voice.audioSrc);
+          audio.addEventListener('loadedmetadata', () => {
+            const duration = audio.duration;
+            resolve({ id: voice.id, duration: isNaN(duration) ? 0 : duration });
+            audio.remove();
+          });
+          audio.addEventListener('error', () => {
+            resolve({ id: voice.id, duration: 0 });
+            audio.remove();
+          });
+          audio.load();
+        });
+      });
+
+      const durations = await Promise.all(audioPromises);
+      
+      setVoices(prev => prev.map(voice => {
+        const durationData = durations.find(d => d.id === voice.id);
+        return {
+          ...voice,
+          duration: durationData?.duration || voice.duration || 0
+        };
+      }));
+    };
+
+    loadAllVoiceDurations();
+  }, [voices]);
 
   // Toggle play/pause for a voice
   const togglePlay = (voiceId) => {
@@ -239,24 +285,13 @@ const SampleVoices = ({ onVoiceSelect }) => {
       if (onVoiceSelect) {
         onVoiceSelect(voice);
       }
+      // Save voice name to sessionStorage
+      if (voice.name) {
+        sessionStorage.setItem('selected_voice_name', voice.name);
+        console.log("🎤 Voice name saved to sessionStorage:", voice.name);
+      }
       console.log("✅ Selected voice:", voice);
     }
-  };
-
-  // Handle view voice details
-  const handleViewVoice = (voiceId) => {
-    const voice = voices.find(v => v.id === voiceId);
-    if (onVoiceSelect && voice) {
-      onVoiceSelect(voice);
-    }
-  };
-
-  // Toggle category dropdown visibility
-  const toggleCategoryDropdown = (voiceId) => {
-    setVisibleCategoryDropdowns(prev => ({
-      ...prev,
-      [voiceId]: !prev[voiceId]
-    }));
   };
 
   // Loading state
@@ -327,137 +362,72 @@ const SampleVoices = ({ onVoiceSelect }) => {
         style={{ display: "none" }}
       />
       
-      <div className="space-y-2">
+      {/* Voice List - Single Column with Scroll */}
+      <div className="max-h-[600px] overflow-y-auto pr-2 space-y-3">
         {voices.map((voice, idx) => (
-          <div 
-            key={voice.id} 
-            className={`flex items-center justify-between p-2 border-b border-gray-200 hover:bg-gray-50 transition-colors ${
-              selectedVoice === voice.id ? 'bg-green-50 border-green-200' : ''
+          <div
+            key={voice.id}
+            className={`flex items-center gap-4 p-4 rounded-lg border-2 transition-all cursor-pointer ${
+              selectedVoice === voice.id
+                ? 'border-[#6057C7] bg-[#6057C7]/10'
+                : 'border-gray-200 bg-white hover:border-[#A388E7] hover:bg-gray-50'
             }`}
+            onClick={() => togglePlay(voice.id)}
           >
-            <div className="flex items-center gap-3">
-              {/* Active voice indicator (green tick) */}
-              {selectedVoice === voice.id && (
-                <div className="flex-shrink-0">
-                  <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center text-white">
-                    <FaCheckCircle size={12} />
-                  </div>
-                </div>
-              )}
-              
-              {/* Voice avatar circle with pause/play button */}
-              <div 
-                className="relative"
-                onMouseEnter={() => setHoveredVoice(voice.id)}
-                onMouseLeave={() => setHoveredVoice(null)}
-              >
-                <div className={`w-12 h-12 rounded-full ${voice.color} ${voice.textColor} flex items-center justify-center cursor-pointer`}>
-                  {(hoveredVoice === voice.id || (isPlaying && selectedVoice === voice.id)) ? (
-                    <button 
-                      onClick={() => togglePlay(voice.id)}
-                      className="w-full h-full rounded-full flex items-center justify-center bg-black bg-opacity-30 text-white"
-                    >
-                      {isPlaying && selectedVoice === voice.id ? (
-                        <FaPause />
-                      ) : (
-                        <FaPlay className="ml-1" />
-                      )}
-                    </button>
-                  ) : (
-                    <span className="font-semibold text-xl">{voice.name[0]}</span>
-                  )}
-                </div>
-              </div>
-              
-              {/* Voice name and info */}
-              <div>
-                <div className="font-medium">{voice.name}</div>
-                <div className="text-xs text-gray-500">
-                  Voice preview • {formatTime(voice.duration)}
-                </div>
-              </div>
+            {/* Avatar - No click functionality */}
+            <div className={`flex-shrink-0 w-14 h-14 rounded-full ${voice.color} ${voice.textColor} flex items-center justify-center shadow-md relative overflow-hidden`}>
+              <span className="font-bold text-xl relative z-10">{voice.name[0]}</span>
             </div>
-            
-            <div className="flex items-center space-x-4">
-              {/* Category tags */}
-              <div className="relative">
-                {voice.category && voice.category.length > 0 && (
+
+            {/* Voice Info */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-base font-semibold text-gray-900 truncate">
+                  {voice.name}
+                </h3>
+                {selectedVoice === voice.id && (
+                  <FaCheckCircle className="text-[#6057C7] flex-shrink-0 ml-2" size={18} />
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-gray-500">
+                  {formatTime(voice.duration)}
+                </span>
+                {/* Progress Bar (when playing this voice) */}
+                {isPlaying && selectedVoice === voice.id && (
                   <>
-                    <span className="px-3 py-1 bg-gray-100 text-gray-800 text-xs rounded-full mr-4">
-                      {voice.category[0]}
+                    <div className="flex-1 h-1 bg-gray-200 rounded-full overflow-hidden max-w-[200px]">
+                      <div
+                        className="h-full bg-[#6057C7] rounded-full transition-all duration-100"
+                        style={{ width: `${progress}%` }}
+                      ></div>
+                    </div>
+                    <span className="text-xs text-gray-500">
+                      {formatTime(currentTime)} / {formatTime(duration)}
                     </span>
-                    
-                    {voice.category.length > 1 && (
-                      <>
-                        <span 
-                          className="px-3 py-1 bg-gray-100 text-gray-800 text-xs rounded-full cursor-pointer hover:bg-gray-200"
-                          onClick={() => toggleCategoryDropdown(voice.id)}
-                          onMouseEnter={() => toggleCategoryDropdown(voice.id)}
-                          onMouseLeave={() => toggleCategoryDropdown(voice.id)}
-                        >
-                          +{voice.category.length - 1} more...
-                        </span>
-                        
-                        {visibleCategoryDropdowns[voice.id] && (
-                          <div className="absolute z-10 mt-1 right-0 bg-white border border-gray-200 rounded-lg shadow-lg p-2 w-40">
-                            <div className="text-xs font-medium text-gray-700 mb-1">All Categories</div>
-                            <div className="space-y-1">
-                              {voice.category.map((cat, idx) => (
-                                <div key={idx} className="px-2 py-1 text-sm text-gray-800 hover:bg-gray-50 rounded">
-                                  {cat}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </>
-                    )}
                   </>
                 )}
               </div>
-              
-              {/* Action buttons */}
-              <div className="flex space-x-1">
-                <button 
-                  onClick={() => handleUseVoice(voice.id)}
-                  className="px-2 inline-flex items-center gap-2 py-1 border border-gray-300 rounded-md text-sm hover:bg-gray-50 transition-colors"
-                >
-                  <RiLoopLeftLine /> <span>Use</span>
-                </button>
-                <button 
-                  onClick={() => handleViewVoice(voice.id)}
-                  className="px-2 inline-flex items-center gap-2 py-1 border border-gray-300 rounded-md text-sm hover:bg-gray-50 transition-colors"
-                >
-                  <CgDetailsMore className="text-xl" /> <span>View</span>
-                </button>
-              </div>
             </div>
+
+            {/* Select Button */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleUseVoice(voice.id);
+              }}
+              className={`flex-shrink-0 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                selectedVoice === voice.id
+                  ? 'bg-[#6057C7] text-white hover:bg-[#2F2867]'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {selectedVoice === voice.id ? 'Selected' : 'Use'}
+            </button>
           </div>
         ))}
       </div>
 
-      {/* Audio Progress Bar (optional - shows when playing) */}
-      {isPlaying && selectedVoice && (
-        <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-gray-700">
-              {voices.find(v => v.id === selectedVoice)?.name}
-            </span>
-            <span className="text-xs text-gray-500">
-              {formatTime(currentTime)} / {formatTime(duration)}
-            </span>
-          </div>
-          <div 
-            className="w-full h-2 bg-gray-200 rounded-full cursor-pointer overflow-hidden"
-            onClick={handleSeek}
-          >
-            <div 
-              className="h-full bg-blue-500 rounded-full transition-all duration-100"
-              style={{ width: `${progress}%` }}
-            ></div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

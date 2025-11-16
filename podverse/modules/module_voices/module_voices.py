@@ -109,38 +109,100 @@ router = APIRouter()
 @router.get("/sample-voices/")
 async def get_sample_voices(auth_data: dict = Depends(get_authenticated_supabase_client)):
     """
-    Fetch all sample voice files from the sample_voices table
+    Fetch all Gemini voice files from the voices/voices_gemini bucket folder
     """
     user_id = auth_data["user_id"]
 
     try:
         service_client = get_service_role_client()
-        response = service_client.table("sample_voices").select("*").execute()
-
-        if not response.data:
+        bucket_name = "voices"
+        folder_path = "voices_gemini"
+        
+        # List all files in the voices_gemini folder
+        try:
+            response = service_client.storage.from_(bucket_name).list(folder_path)
+        except Exception as list_error:
+            print(f"Error listing files from bucket: {list_error}")
+            # Try listing from root if folder_path doesn't work
+            try:
+                response = service_client.storage.from_(bucket_name).list()
+                # Filter files that are in the voices_gemini folder
+                response = [f for f in response if f.get("name", "").startswith(f"{folder_path}/") or (folder_path in f.get("name", ""))]
+            except Exception as fallback_error:
+                print(f"Fallback list also failed: {fallback_error}")
+                raise HTTPException(status_code=500, detail=f"Failed to list files from bucket: {str(list_error)}")
+        
+        if not response or len(response) == 0:
             return JSONResponse(
-                content={"error": "No sample voices found.", "user_id": user_id},
+                content={"error": "No voices found in bucket.", "user_id": user_id},
                 status_code=404
             )
 
-        voices_list = [
-            {
-                "id": voice["id"],
-                "name": voice["name"],
-                "category": voice.get("category", []),
-                "description": voice.get("description", ""),
-                "audioSrc": voice.get("audiourl", ""),
-                "created_at": voice.get("created_at", "")
-            }
-            for voice in response.data
-        ]
+        voices_list = []
+        
+        # Process each file in the folder
+        for file_info in response:
+            # Handle both dict and string responses
+            if isinstance(file_info, str):
+                filename = file_info
+                file_metadata = {}
+            elif isinstance(file_info, dict):
+                filename = file_info.get("name", "")
+                file_metadata = file_info
+            else:
+                continue
+            
+            # Skip if no filename or if it's a directory (no extension)
+            if not filename or "." not in filename:
+                continue
+            
+            # Only process audio files (wav, mp3, etc.)
+            if filename.endswith((".wav", ".mp3", ".m4a", ".ogg", ".flac")):
+                
+                # Extract voice name from filename
+                # Format: preview_Achernar.wav -> Achernar
+                voice_name = filename
+                if filename.startswith("preview_"):
+                    voice_name = filename.replace("preview_", "").replace("_", " ")
+                if filename.endswith(".wav"):
+                    voice_name = voice_name.replace(".wav", "")
+                elif filename.endswith(".mp3"):
+                    voice_name = voice_name.replace(".mp3", "")
+                elif filename.endswith(".m4a"):
+                    voice_name = voice_name.replace(".m4a", "")
+                
+                # Capitalize first letter of each word
+                voice_name = " ".join(word.capitalize() for word in voice_name.split())
+                
+                # Generate public URL for the file
+                file_path = f"{folder_path}/{filename}"
+                public_url = service_client.storage.from_(bucket_name).get_public_url(file_path)
+                
+                # Create voice object
+                voice_data = {
+                    "id": filename,  # Use filename as ID since we don't have database IDs
+                    "name": voice_name,
+                    "category": ["Gemini", "AI Voice"],  # Default categories
+                    "description": f"Gemini AI voice: {voice_name}",
+                    "audioSrc": public_url,
+                    "filename": filename,
+                    "created_at": file_metadata.get("created_at", ""),
+                    "updated_at": file_metadata.get("updated_at", "")
+                }
+                
+                voices_list.append(voice_data)
+        
+        # Sort voices by name
+        voices_list.sort(key=lambda x: x["name"])
 
         return JSONResponse(
             content={"success": True, "data": voices_list, "total_voices": len(voices_list)}
         )
 
     except Exception as e:
-        print(f"Error fetching sample voices: {e}")
+        print(f"Error fetching voices from bucket: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -150,28 +212,69 @@ async def get_sample_voice_by_id(
     auth_data: dict = Depends(get_authenticated_supabase_client)
 ):
     """
-    Fetch a specific sample voice by ID
+    Fetch a specific voice by filename (voice_id is the filename)
     """
     try:
         service_client = get_service_role_client()
-        response = service_client.table("sample_voices").select("*").eq("id", voice_id).execute()
+        bucket_name = "voices"
+        folder_path = "voices_gemini"
+        
+        # List all files and find the matching one
+        response = service_client.storage.from_(bucket_name).list(folder_path)
+        
+        if not response:
+            raise HTTPException(status_code=404, detail=f"Voice folder not found")
+        
+        # Find the file matching the voice_id (filename)
+        for file_info in response:
+            # Handle both dict and string responses
+            if isinstance(file_info, str):
+                filename = file_info
+            elif isinstance(file_info, dict):
+                filename = file_info.get("name", "")
+            else:
+                continue
+            
+            if filename == voice_id:
+                
+                # Extract voice name from filename
+                voice_name = filename
+                if filename.startswith("preview_"):
+                    voice_name = filename.replace("preview_", "").replace("_", " ")
+                if filename.endswith(".wav"):
+                    voice_name = voice_name.replace(".wav", "")
+                elif filename.endswith(".mp3"):
+                    voice_name = voice_name.replace(".mp3", "")
+                elif filename.endswith(".m4a"):
+                    voice_name = voice_name.replace(".m4a", "")
+                
+                # Capitalize first letter of each word
+                voice_name = " ".join(word.capitalize() for word in voice_name.split())
+                
+                # Generate public URL
+                file_path = f"{folder_path}/{filename}"
+                public_url = service_client.storage.from_(bucket_name).get_public_url(file_path)
+                
+                # Get metadata
+                file_metadata = file_info if isinstance(file_info, dict) else {}
+                
+                voice_data = {
+                    "id": filename,
+                    "name": voice_name,
+                    "category": ["Gemini", "AI Voice"],
+                    "description": f"Gemini AI voice: {voice_name}",
+                    "audioSrc": public_url,
+                    "filename": filename,
+                    "created_at": file_metadata.get("created_at", ""),
+                    "updated_at": file_metadata.get("updated_at", "")
+                }
+                
+                return JSONResponse(content={"success": True, "data": voice_data})
+        
+        raise HTTPException(status_code=404, detail=f"Voice with ID {voice_id} not found")
 
-        if not response.data:
-            raise HTTPException(status_code=404, detail=f"Voice with ID {voice_id} not found")
-
-        voice = response.data[0]
-
-        voice_data = {
-            "id": voice["id"],
-            "name": voice["name"],
-            "category": voice.get("category", []),
-            "description": voice.get("description", ""),
-            "audioSrc": voice.get("audiourl", ""), 
-            "created_at": voice.get("created_at", "")
-        }
-
-        return JSONResponse(content={"success": True, "data": voice_data})
-
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Error fetching voice by ID: {e}")
         raise HTTPException(status_code=500, detail=str(e))

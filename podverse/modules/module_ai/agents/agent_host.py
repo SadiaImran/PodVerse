@@ -46,10 +46,11 @@ Now continue the conversation naturally:
 
 # ---------- Host Agent class ----------
 class HostAgent(Agent):
-    def __init__(self) -> None:
+    def __init__(self, voice_name=None) -> None:
         llm_model = google.beta.realtime.RealtimeModel(
             model="models/gemini-2.0-flash-exp",
             temperature=0.8,
+            voice=voice_name if voice_name else None,  # Use provided voice or default
         )
 
         super().__init__(

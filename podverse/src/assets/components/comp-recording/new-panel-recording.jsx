@@ -399,6 +399,13 @@ const fetchLiveKitToken = async () => {
       }
     }
 
+    // Get selected voice name from sessionStorage
+    const selectedVoiceName = sessionStorage.getItem('selected_voice_name');
+    if (selectedVoiceName) {
+      formData.append("voice_name", selectedVoiceName);
+      console.log("🎤 Using selected voice name:", selectedVoiceName);
+    }
+
     console.log("🎟️ Fetching LiveKit token for:", user);
 
     const response = await axios.post(
