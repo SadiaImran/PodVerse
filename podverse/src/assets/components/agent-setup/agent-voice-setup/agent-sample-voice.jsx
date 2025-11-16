@@ -40,23 +40,11 @@ const SampleVoices = ({ onVoiceSelect }) => {
           }
         );
 
-        console.log("🔍 Full API Response:", response.data);
-
         if (response.data.success) {
           const fetchedVoices = response.data.data;
           
-          console.log("🔍 Fetched Voices Raw:", fetchedVoices);
-          
           // Add UI properties to each voice
           const transformedVoices = fetchedVoices.map((voice, index) => {
-            console.log(`🔍 Voice ${index}:`, {
-              id: voice.id,
-              name: voice.name,
-              audioSrc: voice.audioSrc,
-              audioSrcType: typeof voice.audioSrc,
-              audioSrcLength: voice.audioSrc?.length
-            });
-            
             return {
               ...voice,
               color: getVoiceColor(index),
@@ -67,7 +55,6 @@ const SampleVoices = ({ onVoiceSelect }) => {
           
           setVoices(transformedVoices);
           durationsLoadedRef.current = false; // Reset to load durations for new voices
-          console.log("✅ Transformed voices:", transformedVoices);
           
           // Set first voice as selected if none selected
           if (transformedVoices.length > 0 && !selectedVoice) {
@@ -75,7 +62,6 @@ const SampleVoices = ({ onVoiceSelect }) => {
             if (onVoiceSelect) {
               onVoiceSelect(transformedVoices[0]);
             }
-            console.log("🎯 Selected first voice:", transformedVoices[0]);
           }
         } else {
           throw new Error(response.data.error || 'Failed to fetch voices');
@@ -111,35 +97,27 @@ const SampleVoices = ({ onVoiceSelect }) => {
     return gradients[index % gradients.length];
   };
 
-  // Update audio source when selected voice changes
+  // Update audio source when selected voice changes (only when voice actually changes)
   useEffect(() => {
-    if (audioRef.current && selectedVoice) {
+    if (audioRef.current && selectedVoice && voices.length > 0) {
       const selectedVoiceData = voices.find(v => v.id === selectedVoice);
-      if (selectedVoiceData) {
-        console.log("🔊 Loading audio for voice:", {
-          id: selectedVoiceData.id,
-          name: selectedVoiceData.name,
-          audioSrc: selectedVoiceData.audioSrc,
-          audioSrcValid: !!selectedVoiceData.audioSrc,
-          audioSrcStartsWith: selectedVoiceData.audioSrc?.substring(0, 50)
-        });
-        
-        if (selectedVoiceData.audioSrc) {
+      if (selectedVoiceData && selectedVoiceData.audioSrc) {
+        // Only load if the src is different
+        if (audioRef.current.src !== selectedVoiceData.audioSrc) {
           audioRef.current.src = selectedVoiceData.audioSrc;
           audioRef.current.load();
-          
-          if (isPlaying) {
-            audioRef.current.play().catch(err => {
-              console.error('❌ Error playing audio:', err);
-              setIsPlaying(false);
-            });
-          }
-        } else {
-          console.error("❌ No audioSrc found for voice:", selectedVoiceData);
+        }
+        
+        if (isPlaying) {
+          audioRef.current.play().catch(err => {
+            console.error('❌ Error playing audio:', err);
+            setIsPlaying(false);
+          });
         }
       }
     }
-  }, [selectedVoice, voices, isPlaying]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedVoice, isPlaying]); // Removed 'voices' to prevent loop
 
   // Handle play/pause
   useEffect(() => {
@@ -189,64 +167,94 @@ const SampleVoices = ({ onVoiceSelect }) => {
   // Handle audio metadata loaded - update duration for the voice
   const handleLoadedMetadata = (e) => {
     const audioDuration = e.target.duration;
-    console.log("✅ Audio metadata loaded, duration:", audioDuration);
     if (audioDuration && !isNaN(audioDuration) && selectedVoice) {
       setDuration(audioDuration);
       
-      // Update the duration in voices state for the selected voice
-      setVoices(prev => prev.map(v => 
-        v.id === selectedVoice 
-          ? { ...v, duration: audioDuration }
-          : v
-      ));
+      // Update the duration in voices state for the selected voice only
+      setVoices(prev => {
+        const voiceExists = prev.find(v => v.id === selectedVoice && v.duration === audioDuration);
+        if (voiceExists) return prev; // Already updated, prevent re-render
+        
+        return prev.map(v => 
+          v.id === selectedVoice && (!v.duration || v.duration === 0)
+            ? { ...v, duration: audioDuration }
+            : v
+        );
+      });
     }
   };
 
-  // Load metadata for all voices to get their durations
+  // Load durations for all voices (only once, in batches to prevent excessive loading)
   useEffect(() => {
     if (voices.length === 0 || durationsLoadedRef.current) return;
     
-    const loadAllVoiceDurations = async () => {
+    // Check if any voice already has duration loaded
+    const hasAnyDuration = voices.some(v => v.duration && v.duration > 0);
+    if (hasAnyDuration) {
       durationsLoadedRef.current = true;
+      return;
+    }
+    
+    durationsLoadedRef.current = true;
+    
+    // Load durations in small batches with delay to prevent excessive API calls
+    const loadDurationsInBatches = async () => {
+      const voicesToLoad = voices.filter(v => v.audioSrc && (!v.duration || v.duration === 0));
+      const batchSize = 3; // Load 3 at a time
       
-      const audioPromises = voices.map((voice) => {
-        return new Promise((resolve) => {
-          if (!voice.audioSrc) {
-            resolve({ id: voice.id, duration: 0 });
-            return;
-          }
-          
-          const audio = new Audio(voice.audioSrc);
-          audio.addEventListener('loadedmetadata', () => {
-            const duration = audio.duration;
-            resolve({ id: voice.id, duration: isNaN(duration) ? 0 : duration });
-            audio.remove();
+      for (let i = 0; i < voicesToLoad.length; i += batchSize) {
+        const batch = voicesToLoad.slice(i, i + batchSize);
+        
+        const batchPromises = batch.map((voice) => {
+          return new Promise((resolve) => {
+            const audio = new Audio(voice.audioSrc);
+            const timeout = setTimeout(() => {
+              resolve({ id: voice.id, duration: 0 });
+              audio.remove();
+            }, 3000); // 3 second timeout
+            
+            audio.addEventListener('loadedmetadata', () => {
+              clearTimeout(timeout);
+              const duration = audio.duration;
+              resolve({ id: voice.id, duration: isNaN(duration) ? 0 : duration });
+              audio.remove();
+            });
+            audio.addEventListener('error', () => {
+              clearTimeout(timeout);
+              resolve({ id: voice.id, duration: 0 });
+              audio.remove();
+            });
+            audio.load();
           });
-          audio.addEventListener('error', () => {
-            resolve({ id: voice.id, duration: 0 });
-            audio.remove();
-          });
-          audio.load();
         });
-      });
 
-      const durations = await Promise.all(audioPromises);
-      
-      setVoices(prev => prev.map(voice => {
-        const durationData = durations.find(d => d.id === voice.id);
-        return {
-          ...voice,
-          duration: durationData?.duration || voice.duration || 0
-        };
-      }));
+        const batchDurations = await Promise.all(batchPromises);
+        
+        // Update voices state with batch results
+        setVoices(prev => prev.map(voice => {
+          const durationData = batchDurations.find(d => d.id === voice.id);
+          if (durationData && durationData.duration > 0) {
+            return { ...voice, duration: durationData.duration };
+          }
+          return voice;
+        }));
+        
+        // Small delay between batches to prevent overwhelming the browser
+        if (i + batchSize < voicesToLoad.length) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
     };
 
-    loadAllVoiceDurations();
-  }, [voices]);
+    // Start loading after a small delay
+    setTimeout(() => {
+      loadDurationsInBatches();
+    }, 1000);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voices.length]); // Only run when voices count changes
 
   // Toggle play/pause for a voice
   const togglePlay = (voiceId) => {
-    console.log("🎵 Toggle play for voice:", voiceId);
     if (selectedVoice !== voiceId) {
       setSelectedVoice(voiceId);
       setIsPlaying(true);
@@ -288,9 +296,7 @@ const SampleVoices = ({ onVoiceSelect }) => {
       // Save voice name to sessionStorage
       if (voice.name) {
         sessionStorage.setItem('selected_voice_name', voice.name);
-        console.log("🎤 Voice name saved to sessionStorage:", voice.name);
       }
-      console.log("✅ Selected voice:", voice);
     }
   };
 
