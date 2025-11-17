@@ -13,6 +13,7 @@ import PrivateRoute from './assets/components/PrivateRoute';
 import AudioEditor from './assets/screens/screen-audio-edit';
 import ScreenFAQ from './assets/screens/screen-faq-chatbot';
 import VideoGeneratorPage from './assets/screens/screen-video-generation';
+import VideoEditorV7Screen from './assets/screens/screen-video-editor-v7';
 
 function App() {
   return (
@@ -95,6 +96,14 @@ function App() {
             element={
               <PrivateRoute>
                 <VideoGeneratorPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/video-editor"
+            element={
+              <PrivateRoute>
+                <VideoEditorV7Screen />
               </PrivateRoute>
             }
           />
