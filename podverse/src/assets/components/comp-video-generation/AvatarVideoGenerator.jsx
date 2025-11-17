@@ -676,18 +676,26 @@ function AvatarVideoGenerator() {
                         <h4 className="text-green-400 font-semibold">✅ Videos Ready!</h4>
                         
                         {/* Show merged video if available */}
-                        {jobStatus.merged_video && (
-                        <div className="bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-lg p-4 border-2 border-purple-400">
+                        {jobStatus.merged_video_url && (
+                          <div className="bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-lg p-4 border-2 border-purple-400">
                             <p className="text-white font-bold mb-2 flex items-center gap-2">
-                            <Video className="w-5 h-5" />
-                            🎙️ Dynamic Podcast Video
+                              <Video className="w-5 h-5" />
+                              🎙️ Dynamic Podcast Video
                             </p>
                             <video
-                            src={jobStatus.merged_video}
-                            controls
-                            className="w-full rounded-lg"
+                              src={`http://localhost:8000${jobStatus.merged_video_url}`}
+                              controls
+                              className="w-full rounded-lg"
+                              controlsList="nodownload"
                             />
-                        </div>
+                            <a
+                              href={`http://localhost:8000${jobStatus.merged_video_url}`}
+                              download={`podcast_${jobId}.mp4`}
+                              className="mt-2 inline-block bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm"
+                            >
+                              📥 Download Merged Video
+                            </a>
+                          </div>
                         )}
                         
                         {/* Individual videos */}

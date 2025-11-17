@@ -1,13 +1,3 @@
-"""
-module_podcast_processing.py - WITH AUDIO INPUT SUPPORT
-
-Key features:
-1. Uses original speaker audio by default (preserves real voices)
-2. Optionally override with HeyGen TTS voices
-3. Uploads speaker audio files to HeyGen
-4. Supports custom photo avatars
-"""
-
 import os
 import json
 import tempfile
@@ -16,12 +6,12 @@ from dotenv import load_dotenv
 from pydub import AudioSegment
 import assemblyai as aai
 from fastapi import APIRouter, HTTPException, BackgroundTasks, File, UploadFile, Form, Depends
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import requests
 import time
 import subprocess 
 
-# Import functions from your existing module_video.py
 from .module_video import (
     HEYGEN_API_KEY,
     HEYGEN_BASE,
@@ -33,19 +23,12 @@ from .module_video import (
     get_upload_headers
 )
 
-# Load environment variables
 load_dotenv()
 aai.settings.api_key = os.environ.get("ASSEMBLYAI_API_KEY")
 
 router = APIRouter()
 
 # MODELS
-
-class PodcastProcessRequest(BaseModel):
-    """Request for processing podcast (when audio is separate)"""
-    conversation_id: Optional[str] = None
-
-
 class ProcessingStatus(BaseModel):
     """Status of podcast processing"""
     job_id: str
@@ -54,91 +37,20 @@ class ProcessingStatus(BaseModel):
     message: str
     speaker_a_video: Optional[str] = None
     speaker_b_video: Optional[str] = None
-    merged_video: Optional[str] = None  # Add this
+    merged_video_url: Optional[str] = None 
     speaker_a_video_id: Optional[str] = None
     speaker_b_video_id: Optional[str] = None
     transcript: Optional[List[Dict]] = None
     error: Optional[str] = None
 
-
 # In-memory job tracking
 processing_jobs: Dict[str, ProcessingStatus] = {}
+# Store merged video paths
+merged_video_files: Dict[str, str] = {}
 
 
-import subprocess
-from pathlib import Path
-
-def create_dynamic_podcast_video(
-    video_a_url: str,
-    video_b_url: str,
-    utterances: List[Dict],
-    output_path: str
-) -> str:
-    """
-    Create a dynamic podcast video that switches between speakers.
-    
-    Args:
-        video_a_url: URL to Speaker A's video
-        video_b_url: URL to Speaker B's video
-        utterances: List of transcript utterances with timing
-        output_path: Path to save the merged video
-    
-    Returns:
-        Path to the merged video file
-    """
-    import tempfile
-    import requests
-    
-    # Download both videos
-    temp_dir = tempfile.gettempdir()
-    video_a_path = os.path.join(temp_dir, "speaker_a_video.mp4")
-    video_b_path = os.path.join(temp_dir, "speaker_b_video.mp4")
-    
-    print("📥 Downloading Speaker A video...")
-    with open(video_a_path, 'wb') as f:
-        f.write(requests.get(video_a_url).content)
-    
-    print("📥 Downloading Speaker B video...")
-    with open(video_b_path, 'wb') as f:
-        f.write(requests.get(video_b_url).content)
-    
-    # Build FFmpeg filter for switching between videos
-    filter_complex = build_speaker_switch_filter(utterances, video_a_path, video_b_path)
-    
-    # Merge videos with FFmpeg
-    print("🎬 Creating dynamic podcast video...")
-    merged_path = os.path.join(temp_dir, f"podcast_merged_{int(time.time())}.mp4")
-    
-    ffmpeg_cmd = [
-        'ffmpeg',
-        '-i', video_a_path,
-        '-i', video_b_path,
-        '-filter_complex', filter_complex,
-        '-map', '[outv]',
-        '-map', '[outa]',
-        '-c:v', 'libx264',
-        '-c:a', 'aac',
-        '-y',
-        merged_path
-    ]
-    
-    subprocess.run(ffmpeg_cmd, check=True, capture_output=True)
-    
-    print(f"✅ Merged video created: {merged_path}")
-    
-    # Cleanup
-    os.remove(video_a_path)
-    os.remove(video_b_path)
-    
-    return merged_path
-
-
-def build_speaker_switch_filter(utterances: List[Dict], video_a: str, video_b: str) -> str:
-    """
-    Build FFmpeg filter_complex string for dynamic speaker switching.
-    
-    Creates segments and switches between videos based on who's speaking.
-    """
+def build_speaker_switch_filter(utterances: List[Dict]) -> str:
+    """Build FFmpeg filter_complex string to switch between speaker videos."""
     segments = []
     
     for i, utt in enumerate(utterances):
@@ -153,21 +65,29 @@ def build_speaker_switch_filter(utterances: List[Dict], video_a: str, video_b: s
         segments.append({
             'input': input_idx,
             'start': start_sec,
-            'duration': duration
+            'duration': duration,
+            'speaker': speaker
         })
+        
+        print(f"  Segment {i}: Speaker {speaker} from {start_sec:.2f}s for {duration:.2f}s (input {input_idx})")
     
     # Build filter_complex for concatenation
     filter_parts = []
     
+    # IMPORTANT: We're NOT trimming the input videos by time
+    # because Speaker A's video only contains Speaker A's audio
+    # and Speaker B's video only contains Speaker B's audio
+    # Instead, we split each video into segments and concatenate
+    
     for i, seg in enumerate(segments):
         input_idx = seg['input']
-        start = seg['start']
         duration = seg['duration']
         
-        # Trim video and audio
+        # Select the appropriate input and trim to the duration of this segment
+        # We use the video sequentially, not by timestamp
         filter_parts.append(
-            f"[{input_idx}:v]trim=start={start}:duration={duration},setpts=PTS-STARTPTS[v{i}];"
-            f"[{input_idx}:a]atrim=start={start}:duration={duration},asetpts=PTS-STARTPTS[a{i}]"
+            f"[{input_idx}:v]trim=duration={duration},setpts=PTS-STARTPTS[v{i}];"
+            f"[{input_idx}:a]atrim=duration={duration},asetpts=PTS-STARTPTS[a{i}]"
         )
     
     # Concatenate all segments
@@ -182,23 +102,106 @@ def build_speaker_switch_filter(utterances: List[Dict], video_a: str, video_b: s
     return ";".join(filter_parts) + ";" + concat_filter
 
 
-# SPEAKER DIARIZATION FUNCTIONS
+def create_dynamic_podcast_video(
+    video_a_url: str,
+    video_b_url: str,
+    utterances: List[Dict],
+    output_path: str
+) -> str:
+    """
+    Create a dynamic podcast video that switches between speakers.
+    
+    FIXED: Properly downloads videos and uses correct filter
+    """
+    import tempfile
+    import requests
+    
+    # Download both videos
+    temp_dir = tempfile.gettempdir()
+    video_a_path = os.path.join(temp_dir, f"speaker_a_video_{int(time.time())}.mp4")
+    video_b_path = os.path.join(temp_dir, f"speaker_b_video_{int(time.time())}.mp4")
+    
+    print("📥 Downloading Speaker A video...")
+    try:
+        response = requests.get(video_a_url, timeout=300, stream=True)
+        response.raise_for_status()
+        with open(video_a_path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+        print(f"✅ Downloaded Speaker A: {os.path.getsize(video_a_path)} bytes")
+    except Exception as e:
+        raise Exception(f"Failed to download Speaker A video: {e}")
+    
+    print("📥 Downloading Speaker B video...")
+    try:
+        response = requests.get(video_b_url, timeout=300, stream=True)
+        response.raise_for_status()
+        with open(video_b_path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+        print(f"✅ Downloaded Speaker B: {os.path.getsize(video_b_path)} bytes")
+    except Exception as e:
+        raise Exception(f"Failed to download Speaker B video: {e}")
+    
+    # Build FFmpeg filter for switching between videos
+    print("🎬 Building FFmpeg filter...")
+    filter_complex = build_speaker_switch_filter(utterances)
+    
+    # Save filter to file for debugging
+    filter_file = os.path.join(temp_dir, f"ffmpeg_filter_{int(time.time())}.txt")
+    with open(filter_file, 'w') as f:
+        f.write(filter_complex)
+    print(f"📄 Filter saved to: {filter_file}")
+    
+    # Merge videos with FFmpeg
+    print("🎬 Creating dynamic podcast video...")
+    merged_path = os.path.join(temp_dir, f"podcast_merged_{int(time.time())}.mp4")
+    
+    ffmpeg_cmd = [
+        'ffmpeg',
+        '-i', video_a_path,
+        '-i', video_b_path,
+        '-filter_complex', filter_complex,
+        '-map', '[outv]',
+        '-map', '[outa]',
+        '-c:v', 'libx264',
+        '-c:a', 'aac',
+        '-preset', 'fast',
+        '-y',
+        merged_path
+    ]
+    
+    try:
+        result = subprocess.run(
+            ffmpeg_cmd, 
+            check=True, 
+            capture_output=True,
+            text=True
+        )
+        print(f"✅ Merged video created: {merged_path}")
+        print(f"📊 Output size: {os.path.getsize(merged_path)} bytes")
+    except subprocess.CalledProcessError as e:
+        print(f"❌ FFmpeg failed!")
+        print(f"STDOUT: {e.stdout}")
+        print(f"STDERR: {e.stderr}")
+        raise Exception(f"FFmpeg merge failed: {e.stderr[:500]}")
+    
+    # Cleanup downloaded videos
+    try:
+        os.remove(video_a_path)
+        os.remove(video_b_path)
+        os.remove(filter_file)
+        print("🗑️ Cleaned up temporary video files")
+    except Exception as e:
+        print(f"⚠️ Cleanup warning: {e}")
+    
+    return merged_path
+
 
 def transcribe_and_diarize(audio_file: str) -> Tuple[List[Dict], Dict[str, str]]:
-    """
-    Transcribe audio with speaker diarization and split into separate files.
-    
-    Args:
-        audio_file: Path to audio file
-        
-    Returns:
-        Tuple of (utterances, audio_files)
-        - utterances: List of {speaker, start, end, text}
-        - audio_files: Dict mapping speaker label to audio file path
-    """
+    """Transcribe audio with speaker diarization and split into separate files."""
     print("🎙️ Starting speaker diarization with AssemblyAI...")
     
-    # Transcribe with speaker labels
     transcriber = aai.Transcriber()
     config = aai.TranscriptionConfig(
         speaker_labels=True,
@@ -222,7 +225,7 @@ def transcribe_and_diarize(audio_file: str) -> Tuple[List[Dict], Dict[str, str]]
             "end": utt.end,
             "text": utt.text
         })
-        print(f"  {utt.speaker} ({utt.start//1000}s): {utt.text[:50]}...")
+        print(f"  {utt.speaker} ({utt.start//1000}s-{utt.end//1000}s): {utt.text[:50]}...")
     
     # Split audio by speaker
     print("\n🎧 Splitting audio by speaker...")
@@ -244,7 +247,6 @@ def transcribe_and_diarize(audio_file: str) -> Tuple[List[Dict], Dict[str, str]]
                 speaker_audio += audio[start_ms:end_ms]
         
         if len(speaker_audio) > 0:
-            # Export as WAV for HeyGen
             out_path = os.path.join(tempfile.gettempdir(), f"speaker_{speaker_label}.wav")
             speaker_audio.export(out_path, format="wav")
             audio_files[speaker_label] = out_path
@@ -255,21 +257,12 @@ def transcribe_and_diarize(audio_file: str) -> Tuple[List[Dict], Dict[str, str]]
 
 
 def upload_audio_to_heygen(audio_file_path: str) -> str:
-    """
-    Upload audio file to HeyGen and return asset_id.
-    
-    Args:
-        audio_file_path: Path to audio file
-        
-    Returns:
-        asset_id: HeyGen asset ID for the uploaded audio
-    """
+    """Upload audio file to HeyGen and return asset_id."""
     print(f"📤 Uploading audio to HeyGen: {audio_file_path}")
     
     with open(audio_file_path, 'rb') as f:
         file_content = f.read()
     
-    # WAV files should use audio/x-wav
     content_type = 'audio/x-wav'
     upload_headers = get_upload_headers(content_type)
     upload_url = f"{HEYGEN_UPLOAD_BASE}/v1/asset"
@@ -308,16 +301,12 @@ def upload_audio_to_heygen(audio_file_path: str) -> str:
 
 
 def get_speaker_text(utterances: List[Dict], speaker_label: str, max_chars: int = 800) -> str:
-    """
-    Extract and combine text for a specific speaker.
-    Truncates if exceeds max_chars (for HeyGen free plan).
-    """
+    """Extract and combine text for a specific speaker."""
     texts = [u["text"] for u in utterances if u["speaker"] == speaker_label]
     combined = " ".join(texts)
     
     if len(combined) > max_chars:
         print(f"⚠️ Speaker {speaker_label} text too long ({len(combined)} chars), truncating to {max_chars}")
-        # Truncate at sentence boundary
         sentences = combined[:max_chars].split('. ')
         combined = '. '.join(sentences[:-1]) + '.'
     
@@ -335,26 +324,20 @@ def update_job_status(job_id: str, **kwargs):
             setattr(job, key, value)
 
 
-
-# BACKGROUND PROCESSING
-
 def process_podcast_background(
     job_id: str,
     audio_file_path: str,
     speaker_a_avatar: str,
-    speaker_a_voice: Optional[str],  # Optional now
+    speaker_a_voice: Optional[str],
     speaker_b_avatar: str,
-    speaker_b_voice: Optional[str],  # Optional now
+    speaker_b_voice: Optional[str],
     is_custom_avatar_a: bool,
     is_custom_avatar_b: bool,
-    use_original_voice_a: bool,  # New parameter
-    use_original_voice_b: bool,  # New parameter
+    use_original_voice_a: bool,
+    use_original_voice_b: bool,
     authorization: str
 ):
-    """
-    Background task to process podcast audio into avatar videos.
-    Uses original speaker audio by default, or HeyGen TTS if voice_id provided.
-    """
+    """Background task to process podcast audio into avatar videos."""
     temp_files = [audio_file_path]
     
     try:
@@ -364,7 +347,12 @@ def process_podcast_background(
         utterances, audio_files = transcribe_and_diarize(audio_file_path)
         temp_files.extend(audio_files.values())
         
-        # Step 2: Upload speaker audio files to HeyGen (if using original voices)
+        print(f"\n📊 Diarization Summary:")
+        print(f"  Total utterances: {len(utterances)}")
+        print(f"  Speaker A segments: {len([u for u in utterances if u['speaker'] == 'A'])}")
+        print(f"  Speaker B segments: {len([u for u in utterances if u['speaker'] == 'B'])}")
+        
+        # Step 2: Upload speaker audio files to HeyGen
         update_job_status(job_id, progress=35, message="Uploading speaker audio files...")
         
         audio_asset_id_a = None
@@ -378,7 +366,7 @@ def process_podcast_background(
             audio_asset_id_b = upload_audio_to_heygen(audio_files["B"])
             print(f"✅ Speaker B audio uploaded: {audio_asset_id_b}")
         
-        # Step 3: Extract text (for TTS fallback or reference)
+        # Step 3: Extract text
         update_job_status(job_id, progress=45, message="Processing speaker scripts...")
         
         text_a = get_speaker_text(utterances, "A")
@@ -394,7 +382,6 @@ def process_podcast_background(
         
         # Create request for Speaker A
         if use_original_voice_a and audio_asset_id_a:
-            # Use original audio
             req_a = GenerateRequest(
                 avatar_id=speaker_a_avatar,
                 input_type="audio",
@@ -403,7 +390,6 @@ def process_podcast_background(
             )
             print(f"🎤 Speaker A: Using original voice (audio asset)")
         else:
-            # Use TTS
             req_a = GenerateRequest(
                 avatar_id=speaker_a_avatar,
                 voice_id=speaker_a_voice,
@@ -426,7 +412,6 @@ def process_podcast_background(
         
         # Create request for Speaker B
         if use_original_voice_b and audio_asset_id_b:
-            # Use original audio
             req_b = GenerateRequest(
                 avatar_id=speaker_b_avatar,
                 input_type="audio",
@@ -435,7 +420,6 @@ def process_podcast_background(
             )
             print(f"🎤 Speaker B: Using original voice (audio asset)")
         else:
-            # Use TTS
             req_b = GenerateRequest(
                 avatar_id=speaker_b_avatar,
                 voice_id=speaker_b_voice,
@@ -457,7 +441,6 @@ def process_podcast_background(
         )
         
         # Step 5: Poll for completion
-        import time
         max_wait = 600  # 10 minutes
         start_time = time.time()
         
@@ -465,7 +448,6 @@ def process_podcast_background(
         video_url_b = None
         
         while time.time() - start_time < max_wait:
-            # Check video A
             if not video_url_a:
                 try:
                     status_a = video_status(video_id_a, authorization)
@@ -483,7 +465,6 @@ def process_podcast_background(
                 except Exception as e:
                     print(f"⚠️ Error checking Speaker A status: {e}")
             
-            # Check video B
             if not video_url_b:
                 try:
                     status_b = video_status(video_id_b, authorization)
@@ -499,21 +480,16 @@ def process_podcast_background(
                 except Exception as e:
                     print(f"⚠️ Error checking Speaker B status: {e}")
             
-            # Both ready?
             if video_url_a and video_url_b:
                 break
             
-            # Wait before next check
             time.sleep(10)
         
-        # Check if both succeeded
         if not video_url_a or not video_url_b:
             raise Exception("One or more videos failed to generate or timed out")
         
-        # Success!
-        # In process_podcast_background, after both videos are ready:
+        # Step 6: Merge videos
         if video_url_a and video_url_b:
-            # Create merged podcast video
             update_job_status(
                 job_id,
                 progress=95,
@@ -528,8 +504,11 @@ def process_podcast_background(
                     tempfile.gettempdir()
                 )
                 
-                # Upload merged video (you'll need to implement this)
-                # For now, you can save it locally or upload to your storage
+                # Store the path for serving
+                merged_video_files[job_id] = merged_video_path
+                
+                # Create URL for frontend
+                merged_video_url = f"/video/api/podcast/merged/{job_id}"
                 
                 print(f"✅ Dynamic podcast video created: {merged_video_path}")
                 
@@ -541,11 +520,13 @@ def process_podcast_background(
                     message="Podcast video ready!",
                     speaker_a_video=video_url_a,
                     speaker_b_video=video_url_b,
-                    merged_video=merged_video_path,  # Add this field
+                    merged_video_url=merged_video_url,
                     transcript=utterances
                 )
             except Exception as e:
                 print(f"⚠️ Failed to merge videos: {e}")
+                import traceback
+                traceback.print_exc()
                 # Still return individual videos
                 update_job_status(
                     job_id,
@@ -554,7 +535,8 @@ def process_podcast_background(
                     message="Avatar videos ready! (Merge failed)",
                     speaker_a_video=video_url_a,
                     speaker_b_video=video_url_b,
-                    transcript=utterances
+                    transcript=utterances,
+                    error=f"Merge failed: {str(e)}"
                 )
         
     except Exception as e:
@@ -569,7 +551,7 @@ def process_podcast_background(
         )
     
     finally:
-        # Cleanup temp files
+        # Cleanup temp files (but NOT merged video)
         for temp_file in temp_files:
             try:
                 if os.path.exists(temp_file):
@@ -586,39 +568,28 @@ async def process_podcast(
     background_tasks: BackgroundTasks,
     audio_file: UploadFile = File(...),
     speaker_a_avatar: str = Form(...),
-    speaker_a_voice: Optional[str] = Form(None),  # Optional
+    speaker_a_voice: Optional[str] = Form(None),
     speaker_b_avatar: str = Form(...),
-    speaker_b_voice: Optional[str] = Form(None),  # Optional
+    speaker_b_voice: Optional[str] = Form(None),
     is_custom_avatar_a: bool = Form(False),
     is_custom_avatar_b: bool = Form(False),
-    use_original_voice_a: bool = Form(True),  # Default to original voice
-    use_original_voice_b: bool = Form(True),  # Default to original voice
+    use_original_voice_a: bool = Form(True),
+    use_original_voice_b: bool = Form(True),
     conversation_id: Optional[str] = Form(None),
     authorization: str = Depends(verify_token)
 ):
-    """
-    Process uploaded podcast audio into avatar videos.
-    
-    Voice Options:
-    - use_original_voice_a/b = True: Use the actual speaker's voice from the audio
-    - use_original_voice_a/b = False: Use HeyGen TTS with provided voice_id
-    
-    This allows users to preserve original voices or replace them with AI voices.
-    """
+    """Process uploaded podcast audio into avatar videos."""
     import uuid
     
-    # Validate audio file
     if not audio_file.content_type.startswith('audio/'):
         raise HTTPException(status_code=400, detail="File must be an audio file")
     
-    # Validate voice configuration
     if not use_original_voice_a and not speaker_a_voice:
         raise HTTPException(status_code=400, detail="Speaker A voice_id required when not using original voice")
     
     if not use_original_voice_b and not speaker_b_voice:
         raise HTTPException(status_code=400, detail="Speaker B voice_id required when not using original voice")
     
-    # Save uploaded audio to temp file
     temp_audio = os.path.join(tempfile.gettempdir(), f"{uuid.uuid4()}_{audio_file.filename}")
     
     try:
@@ -630,10 +601,8 @@ async def process_podcast(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save audio file: {str(e)}")
     
-    # Generate unique job ID
     job_id = str(uuid.uuid4())
     
-    # Create job record
     job = ProcessingStatus(
         job_id=job_id,
         status="pending",
@@ -643,7 +612,6 @@ async def process_podcast(
     
     processing_jobs[job_id] = job
     
-    # Start background processing
     background_tasks.add_task(
         process_podcast_background,
         job_id=job_id,
@@ -676,14 +644,42 @@ async def get_job_status(job_id: str):
     return job.dict()
 
 
+@router.get("/api/podcast/merged/{job_id}")
+async def get_merged_video(job_id: str):
+    """Serve the merged video file."""
+    if job_id not in merged_video_files:
+        raise HTTPException(status_code=404, detail="Merged video not found")
+    
+    video_path = merged_video_files[job_id]
+    
+    if not os.path.exists(video_path):
+        raise HTTPException(status_code=404, detail="Video file not found on disk")
+    
+    return FileResponse(
+        video_path,
+        media_type="video/mp4",
+        filename=f"podcast_{job_id}.mp4"
+    )
+
+
 @router.delete("/api/podcast/job/{job_id}")
 async def cleanup_job(job_id: str):
-    """Remove a job from memory (cleanup after completion)."""
+    """Remove a job from memory and delete merged video."""
     if job_id in processing_jobs:
         del processing_jobs[job_id]
-        return {"message": "Job cleaned up"}
     
-    raise HTTPException(status_code=404, detail="Job not found")
+    if job_id in merged_video_files:
+        video_path = merged_video_files[job_id]
+        try:
+            if os.path.exists(video_path):
+                os.remove(video_path)
+                print(f"🗑️ Deleted merged video: {video_path}")
+        except Exception as e:
+            print(f"⚠️ Failed to delete merged video: {e}")
+        
+        del merged_video_files[job_id]
+    
+    return {"message": "Job cleaned up"}
 
 
 @router.get("/api/podcast/jobs")
