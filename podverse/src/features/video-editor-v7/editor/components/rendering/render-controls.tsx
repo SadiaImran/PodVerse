@@ -192,38 +192,38 @@ const RenderControls: React.FC<RenderControlsProps> = ({
             )}
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-60 p-3">
+        <PopoverContent className="w-60 p-3 bg-white dark:bg-gray-800">
           <div className="space-y-1.5">
-            <h4 className="text-sm font-medium">Recent Renders</h4>
+            <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">Recent Renders</h4>
             {renders.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No renders yet</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">No renders yet</p>
             ) : (
               renders.map((render) => (
                 <div
                   key={render.id}
                   className={`flex items-center justify-between rounded-md border p-1.5 ${
                     render.status === "error"
-                      ? "border-destructive/50 bg-destructive/10"
-                      : "border-border"
+                      ? "border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20"
+                      : "border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50"
                   }`}
                 >
                   <div className="flex flex-col">
-                    <div className="text-xs text-zinc-200">
+                    <div className="text-xs text-gray-900 dark:text-gray-100">
                       {render.status === "error" ? (
-                        <span className="text-red-400 font-medium">
+                        <span className="text-red-600 dark:text-red-400 font-medium">
                           Render Failed
                         </span>
                       ) : (
                         getDisplayFileName(render.url!)
                       )}
                     </div>
-                    <div className="text-[11px] text-muted-foreground">
+                    <div className="text-[11px] text-gray-500 dark:text-gray-400">
                       {formatDistanceToNow(render.timestamp, {
                         addSuffix: true,
                       })}
                       {render.error && (
                         <div
-                          className="text-red-400 mt-0.5 truncate max-w-[180px]"
+                          className="text-red-600 dark:text-red-400 mt-0.5 truncate max-w-[180px]"
                           title={render.error}
                         >
                           {render.error}
@@ -235,7 +235,7 @@ const RenderControls: React.FC<RenderControlsProps> = ({
                     <Button
                       size="icon"
                       variant="ghost"
-                      className="text-zinc-200 hover:text-gray-800 h-6 w-6"
+                      className="text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-600 h-6 w-6"
                       onClick={() => handleDownload(render.url!)}
                     >
                       <Download className="w-3.5 h-3.5" />

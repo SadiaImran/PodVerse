@@ -57,19 +57,24 @@ export async function startRendering(
       const bundleLocation = await bundle(
         path.join(
           process.cwd(),
-          "components",
+          "src",
+          "features",
+          "video-editor-v7",
           "editor",
-          "version-7.0.0",
           "remotion",
           "index.ts"
         ),
         undefined,
         {
-          // Disable all platform-specific compositors
+          // Disable all platform-specific compositors and configure path aliases
           webpackOverride: (config) => ({
             ...config,
             resolve: {
               ...config.resolve,
+              alias: {
+                ...config.resolve?.alias,
+                "@": path.join(process.cwd(), "src"),
+              },
               fallback: {
                 ...config.resolve?.fallback,
                 // Explicitly disable ALL compositor packages

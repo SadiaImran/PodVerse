@@ -9,8 +9,13 @@
  * Get the base URL from environment variables or default to localhost:3000
  */
 export const getBaseUrl = (): string => {
-  // Use environment variable if available, otherwise default to localhost:3000
-  return import.meta.env.VITE_BASE_URL || "http://localhost:5173";
+  const viteEnv =
+    typeof import.meta !== "undefined" &&
+    (import.meta as { env?: Record<string, string> }).env?.VITE_BASE_URL;
+  const nodeEnv = typeof process !== "undefined" ? process.env.VITE_BASE_URL : undefined;
+
+  // Use environment variable if available, otherwise default to localhost:5173
+  return viteEnv || nodeEnv || "http://localhost:5173";
 };
 
 /**
