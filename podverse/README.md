@@ -187,12 +187,58 @@ npm install
 npm run dev
 ```
 
+### 7. Start Remotion Render Server (For Video Editor)
+
+The video editor requires a separate Remotion render server to generate final MP4 videos from the timeline.
+
+```bash
+# In a separate terminal, start the Remotion render server
+npm run render-server
+```
+
+**Important Notes:**
+- The render server runs on **port 4000** by default
+- It must be running alongside the frontend dev server for video rendering to work
+- The first time you run it, Chrome Headless Shell (~85MB) will be downloaded automatically
+- Rendered videos are saved in `public/rendered-videos/` directory
+- Render state files are stored in `tmp/render-state/` directory
+
+**What the Render Server Does:**
+- Receives render requests from the video editor
+- Bundles React components into a video composition
+- Renders frames using Chrome Headless Shell
+- Encodes frames into MP4 format
+- Provides progress updates during rendering
+- Serves completed videos for download
+
+**Running Both Servers Together:**
+
+You can run both servers in separate terminals:
+
+**Terminal 1:**
+```bash
+npm run dev
+```
+
+**Terminal 2:**
+```bash
+npm run render-server
+```
+
+Or use a process manager like `concurrently` to run both together (optional):
+```bash
+npm install -D concurrently
+# Then add to package.json scripts:
+# "dev:all": "concurrently \"npm run dev\" \"npm run render-server\""
+```
+
 ## 🎯 Usage Guide
 
 ### 1. Access the Application
 
 - **Frontend**: http://localhost:5173
 - **Backend API**: http://localhost:8000
+- **Remotion Render Server**: http://localhost:4000
 - **LiveKit Server**: ws://localhost:7880
 - **Egress Service**: http://localhost:8081
 
@@ -226,8 +272,19 @@ podverse/
 │   ├── module_knowledgeBase/   # Knowledge base management
 │   ├── module_audios/          # Audio processing
 │   └── requirements.txt        # Python dependencies
+├── server/                     # Node.js servers
+│   └── remotion/               # Remotion render server
+│       └── index.ts            # Express server for video rendering
 ├── src/                        # Frontend React application
+│   └── features/
+│       └── video-editor-v7/    # Video editor with Remotion
+│           └── editor/
+│               ├── remotion/   # Remotion composition files
+│               └── ssr-helpers/# Render server helpers
 ├── public/                     # Static assets
+│   └── rendered-videos/        # Generated video files
+├── tmp/                        # Temporary files
+│   └── render-state/           # Render progress tracking
 └── README.md                   # This file
 ```
 
@@ -248,6 +305,13 @@ podverse/
 - **React Components**: Modern UI for podcast creation
 - **LiveKit Integration**: Real-time audio communication
 - **Supabase Integration**: User authentication and data management
+- **Video Editor**: Timeline-based video editing with Remotion
+
+#### Video Rendering
+- **Remotion Render Server**: Express server for video generation
+- **Chrome Headless Shell**: Browser-based frame rendering
+- **MP4 Encoding**: Frame-by-frame video composition
+- **Progress Tracking**: Real-time render status updates
 
 ## 🐛 Troubleshooting
 
@@ -294,6 +358,45 @@ docker-compose logs egress
 # Check file permissions in egress_temp directory
 ```
 
+#### 5. Video Render Server Issues
+
+**Render server not starting:**
+```bash
+# Make sure tsx is installed
+npm install -D tsx
+
+# Check if port 4000 is already in use
+netstat -an | findstr :4000
+
+# Verify the server file exists
+ls server/remotion/index.ts
+```
+
+**Render requests failing (404/500 errors):**
+```bash
+# Ensure render server is running
+# Check server terminal for error messages
+
+# Verify Vite proxy configuration in vite.config.js
+# Should proxy /api/latest/ssr/* to http://localhost:4000
+
+# Check browser console for detailed error messages
+```
+
+**Module resolution errors:**
+```bash
+# If you see "Can't resolve '@/components/ui/...'" errors:
+# The webpack alias should be configured in custom-renderer.ts
+# Verify the alias points to the correct src/ directory
+```
+
+**Chrome Headless Shell download issues:**
+```bash
+# First render will download Chrome (~85MB)
+# If download fails, check internet connection
+# Chrome is cached after first download
+```
+
 ### Port Conflicts
 
 If you encounter port conflicts:
@@ -302,9 +405,14 @@ If you encounter port conflicts:
 # Check what's using the ports
 netstat -an | findstr :7880
 netstat -an | findstr :8000
+netstat -an | findstr :4000
 netstat -an | findstr :6379
+netstat -an | findstr :5173
 
-# Stop conflicting services or change ports in docker-compose.yaml
+# Stop conflicting services or change ports in:
+# - docker-compose.yaml (for Docker services)
+# - server/remotion/index.ts (for render server, set REMOTION_SERVER_PORT env var)
+# - vite.config.js (for frontend dev server)
 ```
 
 ## 📝 API Endpoints
@@ -322,6 +430,12 @@ netstat -an | findstr :6379
 ### Audio Processing
 - `POST /voice-clone/` - Create voice clone
 - `POST /audio-edit/` - Edit audio files
+
+### Video Rendering (Remotion Server)
+- `POST /api/latest/ssr/render` - Start video rendering job
+- `POST /api/latest/ssr/progress` - Check rendering progress
+- `GET /api/latest/ssr/download/:id` - Download rendered video
+- `GET /health` - Check render server health
 
 ## 🤝 Contributing
 
