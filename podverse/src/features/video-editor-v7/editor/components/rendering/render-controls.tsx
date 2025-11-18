@@ -7,6 +7,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { formatDistanceToNow } from "date-fns";
+import { getSupabaseAuthorizedtoken } from "@/assets/supabaseClient";
+import { useEditorContext } from "../../contexts/editor-context";
 
 /**
  * Interface representing a single video render attempt
@@ -18,10 +20,12 @@ import { formatDistanceToNow } from "date-fns";
  */
 interface RenderItem {
   url?: string;
+  supabaseUrl?: string; // URL after uploading to Supabase
   timestamp: Date;
   id: string;
   status: "success" | "error";
   error?: string;
+  isUploading?: boolean; // Track upload status
 }
 
 /**
@@ -56,6 +60,9 @@ const RenderControls: React.FC<RenderControlsProps> = ({
   saveProject,
   renderType = "ssr",
 }) => {
+  // Get projectId from editor context
+  const { projectId } = useEditorContext();
+  
   // Store multiple renders
   const [renders, setRenders] = React.useState<RenderItem[]>([]);
   // Track if there are new renders
@@ -63,24 +70,171 @@ const RenderControls: React.FC<RenderControlsProps> = ({
   const [isProjectSaved, setIsProjectSaved] = React.useState(false);
   const [isSavingProject, setIsSavingProject] = React.useState(false);
   const [autoDownloadPending, setAutoDownloadPending] = React.useState(false);
+  // Track upload in progress to prevent double uploads
+  const uploadInProgressRef = React.useRef<Set<string>>(new Set());
 
   // Check if rendering is disabled via environment variable
-  const isRenderDisabled = import.meta.env.VITE_DISABLE_RENDER === "true";
+  const isRenderDisabled = (import.meta as any).env?.VITE_DISABLE_RENDER === "true";
 
-  // Add new render to the list when completed
-  React.useEffect(() => {
-    if (state.status === "done") {
-      setRenders((prev) => [
-        {
-          url: state.url,
-          timestamp: new Date(),
-          id: crypto.randomUUID(),
-          status: "success",
+  /**
+   * Upload rendered video to Supabase Storage
+   */
+  const uploadVideoToSupabase = React.useCallback(async (videoUrl: string, renderId: string, projectName?: string): Promise<string | null> => {
+    try {
+      console.log("[Video Upload] Starting upload to Supabase...", { videoUrl, renderId });
+      
+      // Get authentication token
+      const token = await getSupabaseAuthorizedtoken();
+      if (!token) {
+        console.error("[Video Upload] No authentication token found");
+        return null;
+      }
+
+      // Download the video file
+      const response = await fetch(videoUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to download video: ${response.statusText}`);
+      }
+      
+      const blob = await response.blob();
+      console.log("[Video Upload] Video downloaded", { size: blob.size });
+
+      // Create FormData
+      const formData = new FormData();
+      const fileName = projectName 
+        ? `${projectName}_${renderId}.mp4`
+        : `rendered_video_${renderId}.mp4`;
+      
+      formData.append("file", blob, fileName);
+      if (projectName) {
+        formData.append("project_name", projectName);
+      }
+      // Always pass render_id for unique filename
+      if (renderId) {
+        formData.append("render_id", renderId);
+      }
+
+      // Upload to backend
+      const API_BASE_URL ="http://localhost:8000";
+      console.log("[Video Upload] API Base URL:", API_BASE_URL);
+      const uploadUrl = `${API_BASE_URL}/videos/upload-video`;
+      console.log("[Video Upload] Upload URL:", uploadUrl);
+      const uploadResponse = await fetch(uploadUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
         },
-        ...prev,
-      ]);
+        body: formData,
+      });
+
+      if (!uploadResponse.ok) {
+        const errorText = await uploadResponse.text();
+        throw new Error(`Upload failed: ${uploadResponse.status} - ${errorText}`);
+      }
+
+      const result = await uploadResponse.json();
+      console.log("[Video Upload] Upload successful", result);
+      
+      return result.video_url || null;
+    } catch (error) {
+      console.error("[Video Upload] Upload error:", error);
+      return null;
+    }
+  }, [projectId]);
+
+  const handleDownload = React.useCallback((url: string) => {
+    let downloadUrl = url;
+
+    if (renderType === "ssr") {
+      // Convert the video URL to a download URL for SSR
+      downloadUrl = url
+        .replace("/rendered-videos/", "/api/latest/ssr/download/")
+        .replace(".mp4", "");
+    }
+    // Lambda URLs are already in the correct format for download
+
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = "rendered-video.mp4";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }, [renderType]);
+
+  // Add new render to the list when completed and upload to Supabase
+  React.useEffect(() => {
+    if (state.status === "done" && state.url) {
+      // Prevent double uploads - check if this URL is already being uploaded
+      if (uploadInProgressRef.current.has(state.url)) {
+        console.log("[Video Upload] Upload already in progress for this URL, skipping...");
+        return;
+      }
+
+      const renderId = crypto.randomUUID();
+      const newRender: RenderItem = {
+        url: state.url,
+        timestamp: new Date(),
+        id: renderId,
+        status: "success",
+        isUploading: true,
+      };
+
+      // Add render to list immediately
+      setRenders((prev) => [newRender, ...prev]);
       setHasNewRender(true);
-      if (autoDownloadPending && state.url) {
+
+      // Mark this URL as being uploaded
+      uploadInProgressRef.current.add(state.url);
+
+      // Automatically upload to Supabase
+      (async () => {
+        try {
+          // Use projectId from context as project name
+          const projectName = projectId || "podverse-video";
+          
+          const supabaseUrl = await uploadVideoToSupabase(
+            state.url,
+            renderId,
+            projectName
+          );
+
+          // Update render with Supabase URL
+          if (supabaseUrl) {
+            setRenders((prev) =>
+              prev.map((render) =>
+                render.id === renderId
+                  ? { ...render, supabaseUrl, isUploading: false }
+                  : render
+              )
+            );
+            console.log("[Video Upload] Video saved to Supabase:", supabaseUrl);
+          } else {
+            // Upload failed, but keep the render
+            setRenders((prev) =>
+              prev.map((render) =>
+                render.id === renderId
+                  ? { ...render, isUploading: false }
+                  : render
+              )
+            );
+          }
+        } catch (error) {
+          console.error("[Video Upload] Failed to upload to Supabase:", error);
+          setRenders((prev) =>
+            prev.map((render) =>
+              render.id === renderId
+                ? { ...render, isUploading: false }
+                : render
+            )
+          );
+        } finally {
+          // Remove from in-progress set
+          uploadInProgressRef.current.delete(state.url);
+        }
+      })();
+
+      // Auto-download if pending
+      if (autoDownloadPending) {
         handleDownload(state.url);
         setAutoDownloadPending(false);
       }
@@ -98,7 +252,7 @@ const RenderControls: React.FC<RenderControlsProps> = ({
       setHasNewRender(true);
       setAutoDownloadPending(false);
     }
-  }, [state.status, state.url, state.error, autoDownloadPending]);
+  }, [state.status, state.url, state.error, autoDownloadPending, uploadVideoToSupabase, handleDownload]);
 
   const handleSaveProject = React.useCallback(async () => {
     if (!saveProject) {
@@ -129,25 +283,6 @@ const RenderControls: React.FC<RenderControlsProps> = ({
       return false;
     }
     return await handleSaveProject();
-  };
-
-  const handleDownload = (url: string) => {
-    let downloadUrl = url;
-
-    if (renderType === "ssr") {
-      // Convert the video URL to a download URL for SSR
-      downloadUrl = url
-        .replace("/rendered-videos/", "/api/latest/ssr/download/")
-        .replace(".mp4", "");
-    }
-    // Lambda URLs are already in the correct format for download
-
-    const a = document.createElement("a");
-    a.href = downloadUrl;
-    a.download = "rendered-video.mp4";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
   };
 
   const getDisplayFileName = (url: string) => {
@@ -207,20 +342,33 @@ const RenderControls: React.FC<RenderControlsProps> = ({
                       : "border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50"
                   }`}
                 >
-                  <div className="flex flex-col">
-                    <div className="text-xs text-gray-900 dark:text-gray-100">
+                  <div className="flex flex-col flex-1 min-w-0">
+                    <div className="text-xs text-gray-900 dark:text-gray-100 flex items-center gap-1.5">
                       {render.status === "error" ? (
                         <span className="text-red-600 dark:text-red-400 font-medium">
                           Render Failed
                         </span>
                       ) : (
-                        getDisplayFileName(render.url!)
+                        <>
+                          <span className="truncate">{getDisplayFileName(render.url!)}</span>
+                          {render.isUploading && (
+                            <Loader2 className="w-3 h-3 animate-spin text-blue-500 flex-shrink-0" />
+                          )}
+                          {render.supabaseUrl && !render.isUploading && (
+                            <span className="text-green-600 dark:text-green-400 text-[10px] flex-shrink-0" title="Saved to Supabase">
+                              ✓
+                            </span>
+                          )}
+                        </>
                       )}
                     </div>
                     <div className="text-[11px] text-gray-500 dark:text-gray-400">
                       {formatDistanceToNow(render.timestamp, {
                         addSuffix: true,
                       })}
+                      {render.isUploading && (
+                        <span className="ml-1.5 text-blue-600 dark:text-blue-400">Uploading...</span>
+                      )}
                       {render.error && (
                         <div
                           className="text-red-600 dark:text-red-400 mt-0.5 truncate max-w-[180px]"
@@ -235,8 +383,9 @@ const RenderControls: React.FC<RenderControlsProps> = ({
                     <Button
                       size="icon"
                       variant="ghost"
-                      className="text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-600 h-6 w-6"
+                      className="text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-600 h-6 w-6 flex-shrink-0"
                       onClick={() => handleDownload(render.url!)}
+                      title="Download video"
                     >
                       <Download className="w-3.5 h-3.5" />
                     </Button>

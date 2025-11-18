@@ -69,6 +69,9 @@ interface EditorContextProps {
 
   // Add renderType to the context
   renderType: "ssr" | "lambda";
+
+  // Project ID for naming uploaded videos
+  projectId?: string;
 }
 
 // Create the context with undefined as default value

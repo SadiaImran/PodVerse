@@ -233,6 +233,9 @@ export default function ReactVideoEditor({ projectId, hideSidebar = false }: { p
 
     // Autosave
     saveProject: handleManualSave,
+
+    // Project ID
+    projectId,
   };
 
   return (

@@ -46,7 +46,10 @@ app.include_router(audios_router)
 app.include_router(livekit_router, prefix="/livekit", tags=["livekit"])
 # app.include_router(voice_clone_router, prefix="/voice-clone", tags=["voice-clone"])
 app.include_router(audio_edit_router, prefix="/audio-edit", tags=["audio-edit"])
-app.include_router(video_router, prefix="/video", tags=["video"])
+# Video router handles both HeyGen video generation and Supabase video storage
+# Registered with both prefixes for backward compatibility
+app.include_router(video_router, prefix="/video", tags=["video"])  # HeyGen endpoints: /video/api/...
+app.include_router(video_router, prefix="/videos", tags=["video"])  # Supabase endpoints: /videos/upload, /videos/list
 
 app.mount("/output", StaticFiles(directory="module_voice_clone/output"), name="output")
 app.include_router(voices_router)
