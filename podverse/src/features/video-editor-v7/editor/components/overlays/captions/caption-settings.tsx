@@ -1,7 +1,7 @@
 import React from "react";
 import { CaptionOverlay, CaptionStyles, Caption } from "../../../types";
 
-import { AlignLeft, PaintBucket, Mic } from "lucide-react";
+import { AlignLeft, PaintBucket } from "lucide-react";
 
 import { CaptionStylePanel } from "./caption-style-panel";
 import { CaptionTimeline } from "./caption-timeline";
@@ -57,7 +57,6 @@ export const defaultCaptionStyles: CaptionStyles = {
  * Provides a tabbed interface for managing caption settings including:
  * - Caption text and timing management
  * - Visual style customization
- * - Voice settings (planned feature)
  *
  * The component uses a tab-based layout to organize different aspects of caption
  * configuration, making it easier for users to focus on specific settings.
@@ -83,7 +82,7 @@ export const CaptionSettings: React.FC<CaptionSettingsProps> = ({
   return (
     <Tabs defaultValue="captions" className="w-full">
       {/* Tab Navigation */}
-      <TabsList className="w-full grid grid-cols-3 bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm rounded-sm border border-gray-200 dark:border-gray-700 gap-1">
+      <TabsList className="w-full grid grid-cols-2 bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm rounded-sm border border-gray-200 dark:border-gray-700 gap-1">
         {/* Captions Tab */}
         <TabsTrigger
           value="captions"
@@ -105,21 +104,6 @@ export const CaptionSettings: React.FC<CaptionSettingsProps> = ({
           <span className="flex items-center gap-2 text-xs">
             <PaintBucket className="w-3 h-3" />
             Style
-          </span>
-        </TabsTrigger>
-
-        {/* Voice Tab (Coming Soon) */}
-        <TabsTrigger
-          value="voice"
-          disabled
-          className="cursor-not-allowed opacity-50 rounded-sm transition-all duration-200 text-gray-600 dark:text-zinc-400"
-        >
-          <span className="flex items-center gap-2 text-xs">
-            <Mic className="w-3 h-3" />
-            Voice
-            <span className="text-[9px] ml-2 text-amber-700 dark:text-amber-400 font-medium bg-amber-100/50 dark:bg-yellow-800/50 rounded-sm px-1 py-0.5">
-              SOON
-            </span>
           </span>
         </TabsTrigger>
       </TabsList>

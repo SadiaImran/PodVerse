@@ -60,6 +60,9 @@ const RenderControls: React.FC<RenderControlsProps> = ({
   const [renders, setRenders] = React.useState<RenderItem[]>([]);
   // Track if there are new renders
   const [hasNewRender, setHasNewRender] = React.useState(false);
+  const [isProjectSaved, setIsProjectSaved] = React.useState(false);
+  const [isSavingProject, setIsSavingProject] = React.useState(false);
+  const [autoDownloadPending, setAutoDownloadPending] = React.useState(false);
 
   // Check if rendering is disabled via environment variable
   const isRenderDisabled = import.meta.env.VITE_DISABLE_RENDER === "true";
@@ -77,6 +80,10 @@ const RenderControls: React.FC<RenderControlsProps> = ({
         ...prev,
       ]);
       setHasNewRender(true);
+      if (autoDownloadPending && state.url) {
+        handleDownload(state.url);
+        setAutoDownloadPending(false);
+      }
     } else if (state.status === "error") {
       setRenders((prev) => [
         {
@@ -89,8 +96,40 @@ const RenderControls: React.FC<RenderControlsProps> = ({
         ...prev,
       ]);
       setHasNewRender(true);
+      setAutoDownloadPending(false);
     }
-  }, [state.status, state.url, state.error]);
+  }, [state.status, state.url, state.error, autoDownloadPending]);
+
+  const handleSaveProject = React.useCallback(async () => {
+    if (!saveProject) {
+      setIsProjectSaved(true);
+      return true;
+    }
+    try {
+      setIsSavingProject(true);
+      await saveProject();
+      setIsProjectSaved(true);
+      return true;
+    } catch (error) {
+      console.error("Failed to save project before download:", error);
+      return false;
+    } finally {
+      setIsSavingProject(false);
+    }
+  }, [saveProject]);
+
+  const ensureSavedBeforeDownload = async () => {
+    if (isProjectSaved) {
+      return true;
+    }
+    const shouldSave = window.confirm(
+      "Please save your project before downloading the final video. Save now?"
+    );
+    if (!shouldSave) {
+      return false;
+    }
+    return await handleSaveProject();
+  };
 
   const handleDownload = (url: string) => {
     let downloadUrl = url;
@@ -129,9 +168,16 @@ const RenderControls: React.FC<RenderControlsProps> = ({
         variant="ghost"
         size="sm"
         className="relative hover:bg-accent"
-        onClick={saveProject}
+        onClick={async () => {
+          await handleSaveProject();
+        }}
+        disabled={isSavingProject}
       >
-        <Save className="w-3.5 h-3.5" />
+        {isSavingProject ? (
+          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+        ) : (
+          <Save className="w-3.5 h-3.5" />
+        )}
       </Button>
       <Popover onOpenChange={() => setHasNewRender(false)}>
         <PopoverTrigger asChild>
@@ -203,15 +249,31 @@ const RenderControls: React.FC<RenderControlsProps> = ({
       </Popover>
 
       <Button
-        onClick={handleRender}
+        onClick={async () => {
+          const canProceed = await ensureSavedBeforeDownload();
+          if (!canProceed) return;
+          setAutoDownloadPending(true);
+          handleRender();
+        }}
         size="sm"
         variant="outline"
-        disabled={state.status === "rendering" || state.status === "invoking" || isRenderDisabled}
-        className={`bg-gray-800 text-white border-gray-700 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50 ${isRenderDisabled ? "cursor-not-allowed" : ""}`}
-        title={isRenderDisabled ? "Rendering is currently disabled" : undefined}
+        disabled={
+          state.status === "rendering" ||
+          state.status === "invoking" ||
+          isRenderDisabled ||
+          isSavingProject
+        }
+        className={`bg-gray-800 text-white border-gray-700 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50 ${
+          isRenderDisabled ? "cursor-not-allowed" : ""
+        }`}
+        title={
+          isRenderDisabled
+            ? "Rendering is currently disabled"
+            : undefined
+        }
       >
         {isRenderDisabled ? (
-          "Render Video"
+          "Download Video"
         ) : state.status === "rendering" ? (
           <>
             <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
@@ -222,8 +284,13 @@ const RenderControls: React.FC<RenderControlsProps> = ({
             <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
             Preparing...
           </>
+        ) : autoDownloadPending ? (
+          <>
+            <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+            Finalizing...
+          </>
         ) : (
-          `Render Video`
+          `Download Video`
         )}
       </Button>
     </>

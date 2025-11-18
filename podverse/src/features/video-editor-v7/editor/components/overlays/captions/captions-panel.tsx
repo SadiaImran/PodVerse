@@ -6,7 +6,7 @@ import { useTimelinePositioning } from "../../../hooks/use-timeline-positioning"
 import { useTimeline } from "../../../contexts/timeline-context";
 import { CaptionOverlay, OverlayType, Caption } from "../../../types";
 import { CaptionSettings } from "./caption-settings";
-import { Upload, X } from "lucide-react";
+import { Upload } from "lucide-react";
 
 /**
  * Interface for word timing data from uploaded files
@@ -57,7 +57,6 @@ interface WordsFileData {
  */
 export const CaptionsPanel: React.FC = () => {
   const [script, setScript] = useState("");
-  const [isBannerVisible, setIsBannerVisible] = useState(true);
   const {
     addOverlay,
     overlays,
@@ -230,58 +229,13 @@ export const CaptionsPanel: React.FC = () => {
     reader.readAsText(file);
   };
 
+  const canGenerateCaptions = script.trim().length > 0;
+
   return (
     <div className="flex flex-col gap-6 p-4 bg-white dark:bg-gray-900/40">
       {!localOverlay ? (
         <>
           <div className="space-y-4">
-            <div className="flex flex-col gap-2">
-              {isBannerVisible && (
-                <div
-                  className="relative rounded-lg bg-gradient-to-r from-blue-50/80 to-blue-50/40 dark:from-blue-900/10 dark:to-blue-800/5 
-                  border border-blue-300/80 dark:border-blue-800/20 p-3 shadow-[0_1px_3px_0_rgb(0,0,0,0.05)]"
-                >
-                  <button
-                    onClick={() => setIsBannerVisible(false)}
-                    className="absolute top-1.5 right-1.5 text-gray-400 hover:text-gray-600 dark:text-gray-500 
-                      dark:hover:text-gray-300 transition-colors p-1.5 hover:bg-gray-100/70 dark:hover:bg-gray-800/70 rounded-md"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                  <div className="space-y-1.5">
-                    <h3 className="text-xs font-medium text-gray-800 dark:text-gray-200">
-                      How would you like this to work?
-                    </h3>
-                    <p className="text-xs text-gray-600 dark:text-gray-400 pr-4">
-                      We&apos;re actively improving captions support and would
-                      love your feedback!
-                    </p>
-                    <a
-                      href="/docs/captions"
-                      className="inline-flex items-center text-xs text-blue-600 dark:text-blue-400 
-                        hover:text-blue-700 dark:hover:text-blue-300 font-medium transition-colors"
-                    >
-                      Learn more about captions
-                      <svg
-                        className="w-3.5 h-3.5 ml-0.5"
-                        viewBox="0 0 16 16"
-                        fill="none"
-                        xmlns="http://www.w3.org/2000/svg"
-                      >
-                        <path
-                          d="M6.5 3.5L11 8L6.5 12.5"
-                          stroke="currentColor"
-                          strokeWidth="1.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    </a>
-                  </div>
-                </div>
-              )}
-            </div>
-
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
                 <Button
@@ -341,11 +295,14 @@ export const CaptionsPanel: React.FC = () => {
             <div className="flex gap-3 pt-2">
               <Button
                 onClick={generateCaptions}
-                className="flex-1 text-white dark:text-black
-                disabled:bg-gray-200 disabled:text-gray-500 disabled:dark:bg-gray-800 
-                disabled:dark:text-gray-600 disabled:opacity-100 disabled:cursor-not-allowed 
-                transition-colors"
-                disabled={!script.trim()}
+                className={`flex-1 font-medium transition-all duration-200 
+                focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-purple-400
+                ${
+                  canGenerateCaptions
+                    ? "bg-gradient-to-r from-purple-600 via-purple-500 to-blue-500 text-white hover:from-purple-500 hover:via-purple-400 hover:to-blue-400 dark:from-purple-400 dark:via-purple-300 dark:to-blue-300 dark:text-gray-900"
+                    : "bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 text-gray-500 dark:from-gray-800 dark:via-gray-700 dark:to-gray-800 dark:text-gray-400 cursor-not-allowed"
+                }`}
+                disabled={!canGenerateCaptions}
               >
                 Generate Captions
               </Button>

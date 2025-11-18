@@ -196,38 +196,38 @@ export const VideoOverlayPanel: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-white">
+    <div className="flex flex-col h-full overflow-hidden bg-white text-gray-900 dark:bg-gray-950 dark:text-gray-100">
       {!localOverlay ? (
         <>
           {/* Header - Fixed */}
-          <div className="p-3 border-b border-gray-200 flex-shrink-0 bg-white">
+          <div className="p-3 border-b border-gray-200 dark:border-gray-800 flex-shrink-0 bg-white dark:bg-gray-900 space-y-2.5">
             {/* Title with gradient background */}
-            <div className="bg-gradient-to-r from-purple-100 to-blue-100 rounded-lg p-2 mb-3 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-12 h-12 bg-gradient-to-br from-purple-200/30 to-blue-200/30 rounded-full -translate-y-6 translate-x-6"></div>
-              <h1 className="text-base font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent relative z-10">
+            <div className="bg-gradient-to-r from-purple-100 to-blue-100 dark:from-gray-800 dark:to-gray-700 rounded-lg p-2 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-12 h-12 bg-gradient-to-br from-purple-200/30 to-blue-200/30 dark:from-gray-700/30 dark:to-gray-600/20 rounded-full -translate-y-6 translate-x-6"></div>
+              <h1 className="text-base font-bold bg-gradient-to-r from-purple-600 to-blue-600 dark:from-purple-300 dark:to-blue-300 bg-clip-text text-transparent relative z-10">
                 Video Library
               </h1>
             </div>
             
-            <form onSubmit={handleSearch} className="flex gap-2 mb-2">
+            <form onSubmit={handleSearch} className="flex gap-2">
               <Input
                 placeholder="Search videos..."
                 value={searchQuery}
-                className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-500 focus-visible:ring-blue-400 text-sm h-8"
+                className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-500 focus-visible:ring-blue-400 text-sm h-8 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100 dark:placeholder:text-gray-400"
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
               <Button
                 type="submit"
                 variant="default"
                 disabled={isLoading}
-                className="bg-white hover:bg-gray-100 text-gray-900 border-gray-200 h-8 px-3"
+                className="bg-white hover:bg-gray-100 text-gray-900 border-gray-200 h-8 px-3 dark:bg-gray-900 dark:hover:bg-gray-800 dark:text-gray-100 dark:border-gray-700"
               >
                 <Search className="h-3.5 w-3.5" />
               </Button>
             </form>
             <Button
               onClick={() => fileInputRef.current?.click()}
-              className="w-full bg-gradient-to-r from-purple-600 via-purple-500 to-purple-400 hover:from-purple-500 hover:via-purple-400 hover:to-purple-300 text-white shadow-md hover:shadow-lg h-8 px-3 text-sm mb-3"
+              className="w-full bg-gradient-to-r from-purple-600 via-purple-500 to-purple-400 hover:from-purple-500 hover:via-purple-400 hover:to-purple-300 text-white shadow-md hover:shadow-lg h-8 px-3 text-sm"
             >
               <Upload className="h-3.5 w-3.5 mr-1.5" />
               Upload Video
@@ -240,7 +240,7 @@ export const VideoOverlayPanel: React.FC = () => {
               onChange={handleFileUpload}
             />
 
-            <div className="flex gap-1.5 flex-wrap">
+            <div className="flex gap-1.5 flex-wrap pt-1">
               {POPULAR_VIDEO_CATEGORIES.map((category) => (
                 <button
                   key={category}
@@ -251,7 +251,7 @@ export const VideoOverlayPanel: React.FC = () => {
                   className={`px-2 py-0.5 rounded-full text-xs whitespace-nowrap transition-all duration-200 ${
                     currentCategory === category
                       ? "bg-gradient-to-r from-purple-500 to-purple-400 text-white shadow-md"
-                      : "bg-gray-100 text-gray-600 hover:bg-gradient-to-r hover:from-purple-100 hover:to-blue-100 hover:text-purple-600"
+                      : "bg-gray-100 text-gray-600 hover:bg-gradient-to-r hover:from-purple-100 hover:to-blue-100 hover:text-purple-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:text-purple-200"
                   }`}
                 >
                   {category}
@@ -261,13 +261,13 @@ export const VideoOverlayPanel: React.FC = () => {
           </div>
 
           {/* Scrollable Content */}
-          <div className="flex-1 overflow-y-auto p-3 bg-gradient-to-br from-purple-50/40 via-blue-50/20 to-indigo-50/30">
+          <div className="flex-1 overflow-y-auto p-3 bg-gradient-to-br from-purple-50/40 via-blue-50/20 to-indigo-50/30 dark:from-gray-900/70 dark:via-gray-900/40 dark:to-gray-800/50">
             <div className="grid grid-cols-3 gap-2">
               {isLoading ? (
                 Array.from({ length: 12 }).map((_, index) => (
                   <div
                     key={`skeleton-${index}`}
-                    className="relative aspect-video w-full bg-gray-200 animate-pulse rounded"
+                    className="relative aspect-video w-full bg-gray-200 dark:bg-gray-800 animate-pulse rounded"
                   />
                 ))
               ) : videos.length > 0 ? (
@@ -288,7 +288,7 @@ export const VideoOverlayPanel: React.FC = () => {
                   </button>
                 ))
               ) : (
-                <div className="col-span-3 flex flex-col items-center justify-center py-8 text-gray-500 text-xs">
+                <div className="col-span-3 flex flex-col items-center justify-center py-8 text-gray-500 text-xs dark:text-gray-400">
                   No videos found. Try searching or selecting a category.
                 </div>
               )}

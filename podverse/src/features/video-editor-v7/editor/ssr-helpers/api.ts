@@ -24,11 +24,43 @@ const makeRequest = async <Res>(
       "content-type": "application/json",
     },
   });
-  const json = (await result.json()) as ApiResponse<Res>;
+
+  if (!result.ok) {
+    const errorText = await result.text();
+    console.error(
+      `Request to ${endpoint} failed with status ${result.status}: ${errorText}`
+    );
+    throw new Error(
+      `Render service returned ${result.status}. Please ensure the render server is running.`
+    );
+  }
+
+  const rawText = await result.text();
+  if (!rawText) {
+    throw new Error(
+      "Render service returned an empty response. Is the SSR server running?"
+    );
+  }
+
+  let json: ApiResponse<Res>;
+  try {
+    json = JSON.parse(rawText) as ApiResponse<Res>;
+  } catch (error) {
+    console.error(
+      `Failed to parse JSON from ${endpoint}:`,
+      error,
+      "Response text:",
+      rawText
+    );
+    throw new Error(
+      "Unexpected response from render service. Check the server logs."
+    );
+  }
+
   console.log(`Response received from ${endpoint}`, { json });
   if (json.type === "error") {
     console.error(`Error in response from ${endpoint}:`, json.message);
-    throw new Error(json.message);
+    throw new Error(json.message || "Render service reported an error.");
   }
 
   if (!json.data) {

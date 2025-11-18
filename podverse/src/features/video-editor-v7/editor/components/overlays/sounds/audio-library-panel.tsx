@@ -574,13 +574,13 @@ const AudioLibraryPanel: React.FC = () => {
   }
 
   return (
-    <div className="h-full w-full overflow-hidden flex flex-col bg-white">
+    <div className="h-full w-full overflow-hidden flex flex-col bg-white text-gray-900 dark:bg-gray-950 dark:text-gray-100">
       {/* Header - Fixed */}
-      <div className="p-3 border-b border-gray-200 flex-shrink-0 bg-white">
+      <div className="p-3 border-b border-gray-200 flex-shrink-0 bg-white dark:bg-gray-900 dark:border-gray-800">
         {/* Title with gradient background */}
-        <div className="bg-gradient-to-r from-purple-100 to-blue-100 rounded-lg p-2 mb-3 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-12 h-12 bg-gradient-to-br from-purple-200/30 to-blue-200/30 rounded-full -translate-y-6 translate-x-6"></div>
-          <h1 className="text-base font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent relative z-10">
+        <div className="bg-gradient-to-r from-purple-100 to-blue-100 dark:from-gray-800 dark:to-gray-700 rounded-lg p-2 mb-3 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-12 h-12 bg-gradient-to-br from-purple-200/30 to-blue-200/30 dark:from-gray-700/40 dark:to-gray-600/30 rounded-full -translate-y-6 translate-x-6"></div>
+          <h1 className="text-base font-bold bg-gradient-to-r from-purple-600 to-blue-600 dark:from-purple-300 dark:to-blue-300 bg-clip-text text-transparent relative z-10">
             Audio Library
           </h1>
         </div>
@@ -604,7 +604,7 @@ const AudioLibraryPanel: React.FC = () => {
       </div>
 
       {/* Scrollable Content */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto bg-white dark:bg-gray-950">
          {/* Loading State */}
          {loading && (
            <div className="flex items-center justify-center py-8">
@@ -615,11 +615,11 @@ const AudioLibraryPanel: React.FC = () => {
 
         {/* Error State */}
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 m-6">
-            <p className="text-sm text-red-600">Error loading audio files: {error}</p>
+          <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-500/40 rounded-lg p-4 m-6">
+            <p className="text-sm text-red-600 dark:text-red-300">Error loading audio files: {error}</p>
             <button 
               onClick={() => window.location.reload()} 
-              className="text-xs text-red-500 hover:text-red-700 mt-1"
+              className="text-xs text-red-500 hover:text-red-700 dark:text-red-300 dark:hover:text-red-200 mt-1"
             >
               Retry
             </button>
@@ -628,13 +628,13 @@ const AudioLibraryPanel: React.FC = () => {
 
         {/* Stock Music Section */}
         {!loading && !error && (
-          <div className="p-3 border-b border-gray-100 bg-gradient-to-br from-purple-50/40 via-blue-50/20 to-indigo-50/30 relative overflow-hidden">
+          <div className="p-3 border-b border-gray-100 dark:border-gray-800 bg-gradient-to-br from-purple-50/40 via-blue-50/20 to-indigo-50/30 dark:from-gray-900/70 dark:via-gray-900/40 dark:to-gray-800/50 relative overflow-hidden">
             <div className="relative z-10">
               <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-bold text-gray-900">Stock Music</h3>
+              <h3 className="text-sm font-bold text-gray-900 dark:text-gray-50">Stock Music</h3>
               <button 
                 onClick={() => setCurrentView("stock-music")}
-                className="text-xs text-purple-600 hover:text-purple-700 flex items-center gap-1 font-medium transition-colors"
+                className="text-xs text-purple-600 dark:text-purple-300 hover:text-purple-700 dark:hover:text-purple-200 flex items-center gap-1 font-medium transition-colors"
               >
                 View all <ChevronRight className="w-3 h-3" />
               </button>
@@ -649,7 +649,7 @@ const AudioLibraryPanel: React.FC = () => {
                   className={`px-2 py-0.5 rounded-full text-xs whitespace-nowrap transition-all duration-200 ${
                     musicFilter === filter 
                       ? "bg-gradient-to-r from-purple-500 to-purple-400 text-white shadow-md" 
-                      : "bg-gray-100 text-gray-600 hover:bg-gradient-to-r hover:from-purple-100 hover:to-blue-100 hover:text-purple-600"
+                      : "bg-gray-100 text-gray-600 hover:bg-gradient-to-r hover:from-purple-100 hover:to-blue-100 hover:text-purple-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:text-purple-200"
                   }`}
                 >
                   {filter}
@@ -660,9 +660,9 @@ const AudioLibraryPanel: React.FC = () => {
             {/* Music Tracks */}
             <div className="space-y-2">
               {getFilteredMusic().slice(0, 3).map((track, index) => (
-                <div 
+              <div 
                   key={track.id || index} 
-                  className="group flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 cursor-pointer transition-all duration-200 border border-transparent hover:border-gray-200"
+                  className="group flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-all duration-200 border border-transparent hover:border-gray-200 dark:hover:border-gray-600"
                   onClick={() => playAudio(track.id, track.id)}
                 >
                   <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-purple-400 flex items-center justify-center shadow-md flex-shrink-0 relative overflow-hidden">
@@ -677,10 +677,10 @@ const AudioLibraryPanel: React.FC = () => {
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h4 className="text-xs font-semibold text-gray-900 truncate mb-0.5 group-hover:text-purple-600 transition-colors" title={track.name}>
+                    <h4 className="text-xs font-semibold text-gray-900 dark:text-gray-100 truncate mb-0.5 group-hover:text-purple-600 dark:group-hover:text-purple-300 transition-colors" title={track.name}>
                       {track.name}
                     </h4>
-                   <p className="text-[10px] text-gray-500 group-hover:text-gray-600">
+                   <p className="text-[10px] text-gray-500 dark:text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300">
                      {playingAudio === track.id && currentTime[track.id] !== undefined 
                         ? `${formatDuration(currentTime[track.id])} / ${formatDuration(track.duration)}`
                         : formatDuration(track.duration)}
@@ -710,13 +710,13 @@ const AudioLibraryPanel: React.FC = () => {
 
         {/* Sound Effects Section */}
         {!loading && !error && (
-          <div className="p-3 pt-4 bg-gradient-to-br from-purple-50/40 via-blue-50/20 to-indigo-50/30 relative overflow-hidden">
+          <div className="p-3 pt-4 bg-gradient-to-br from-purple-50/40 via-blue-50/20 to-indigo-50/30 dark:from-gray-900/70 dark:via-gray-900/40 dark:to-gray-800/50 relative overflow-hidden border-t border-gray-100 dark:border-gray-800">
             <div className="relative z-10">
               <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-bold text-gray-900">Sound Effects</h3>
+              <h3 className="text-sm font-bold text-gray-900 dark:text-gray-50">Sound Effects</h3>
               <button 
                 onClick={() => setCurrentView("sound-effects")}
-                className="text-xs text-purple-600 hover:text-purple-700 flex items-center gap-1 font-medium transition-colors"
+                className="text-xs text-purple-600 dark:text-purple-300 hover:text-purple-700 dark:hover:text-purple-200 flex items-center gap-1 font-medium transition-colors"
               >
                 View all <ChevronRight className="w-3 h-3" />
               </button>
@@ -731,7 +731,7 @@ const AudioLibraryPanel: React.FC = () => {
                   className={`px-2 py-0.5 rounded-full text-xs whitespace-nowrap transition-all duration-200 ${
                     soundEffectsFilter === filter 
                       ? "bg-gradient-to-r from-blue-500 to-blue-400 text-white shadow-md" 
-                      : "bg-gray-100 text-gray-600 hover:bg-gradient-to-r hover:from-blue-100 hover:to-indigo-100 hover:text-blue-700"
+                      : "bg-gray-100 text-gray-600 hover:bg-gradient-to-r hover:from-blue-100 hover:to-indigo-100 hover:text-blue-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:text-blue-200"
                   }`}
                 >
                   {filter}
@@ -744,7 +744,7 @@ const AudioLibraryPanel: React.FC = () => {
               {getFilteredSoundEffects().slice(0, 3).map((track, index) => (
                 <div 
                   key={track.id || index} 
-                  className="group flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 cursor-pointer transition-all duration-200 border border-transparent hover:border-gray-200"
+                  className="group flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-all duration-200 border border-transparent hover:border-gray-200 dark:hover:border-gray-600"
                   onClick={() => playAudio(track.id, track.id)}
                 >
                   <div className={`w-10 h-10 rounded-full bg-gradient-to-br from-blue-600 to-blue-400 flex items-center justify-center shadow-md flex-shrink-0 relative overflow-hidden`}>
@@ -759,10 +759,10 @@ const AudioLibraryPanel: React.FC = () => {
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h4 className="text-xs font-semibold text-gray-900 truncate mb-0.5 group-hover:text-blue-600 transition-colors" title={track.name}>
+                    <h4 className="text-xs font-semibold text-gray-900 dark:text-gray-100 truncate mb-0.5 group-hover:text-blue-600 dark:group-hover:text-blue-200 transition-colors" title={track.name}>
                       {track.name}
                     </h4>
-                   <p className="text-[10px] text-gray-500 group-hover:text-gray-600">
+                   <p className="text-[10px] text-gray-500 dark:text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300">
                      {playingAudio === track.id && currentTime[track.id] !== undefined 
                         ? `${formatDuration(currentTime[track.id])} / ${formatDuration(track.duration)}`
                         : formatDuration(track.duration)}

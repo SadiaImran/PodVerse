@@ -56,7 +56,7 @@ export const ENABLE_PUSH_ON_DRAG = false; // Set to false to disable pushing ite
 
 // Render configuration
 // NOTE: TO CHANGE RENDER TYPE, UPDATE THE RENDER_TYPE CONSTANT
-export const RENDER_TYPE: "ssr" | "lambda" = "lambda";
+export const RENDER_TYPE: "ssr" | "lambda" = "ssr";
 
 // Autosave configuration
 export const AUTO_SAVE_INTERVAL = 10000; // Autosave every 10 seconds
