@@ -28,7 +28,7 @@ function SignInScreenEmail() {
       setEmailError("");
       setPasswordError("");
 
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
       if (error) {
         if (error.message.includes("Invalid login credentials")) {
@@ -37,7 +37,23 @@ function SignInScreenEmail() {
           setPasswordError(error.message);
         }
       } else {
-        navigate("/home");
+        // Check if user has completed onboarding
+        if (data?.user) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('onboarding_complete')
+            .eq('id', data.user.id)
+            .single();
+          
+          // If profile doesn't exist or onboarding_complete is false, redirect to onboarding
+          if (!profile || profile.onboarding_complete === false) {
+            navigate("/onboarding");
+          } else {
+            navigate("/home");
+          }
+        } else {
+          navigate("/home");
+        }
       }
     } catch (err) {
       setPasswordError("Something went wrong. Please try again.");

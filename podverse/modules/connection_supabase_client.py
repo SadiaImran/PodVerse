@@ -38,7 +38,11 @@ async def get_authenticated_supabase_client(authorization: str = Header(...)):
     options = ClientOptions(headers={'Authorization': f'Bearer {jwt_token}'})
     try:
         supabase_authenticated = create_client(SUPABASE_URL, SUPABASE_KEY, options)
-        return {"client": supabase_authenticated, "user_id": user.id}
+        return {
+            "client": supabase_authenticated, 
+            "user_id": user.id,
+            "user_email": user.email 
+        }
     except Exception as e:
         print(f"Failed to create authenticated client: {e}")
         raise HTTPException(status_code=500, detail="Internal server error.")

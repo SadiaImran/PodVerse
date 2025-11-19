@@ -114,8 +114,24 @@ export default function TopBar({ open, onMenuClick }) {
           </div>
 
           <div className="flex items-center gap-2 cursor-pointer relative">
-            <img src={userData?.profile_url || ProfileMarry} className="w-8 h-8 rounded-full" />
-            <span className="text-sm text-gray-800 font-medium hidden sm:block">
+            <img 
+              src={userData?.profile_url || ProfileMarry} 
+              className="w-8 h-8 rounded-full border-2 border-purple-200 hover:border-purple-400 transition-colors"
+              onClick={() => {
+                if (userData?.id) {
+                  navigate(`/profile/${userData.id}`);
+                }
+              }}
+              alt={userData?.full_name || "User"}
+            />
+            <span 
+              className="text-sm text-gray-800 font-medium hidden sm:block hover:text-purple-600 transition-colors"
+              onClick={() => {
+                if (userData?.id) {
+                  navigate(`/profile/${userData.id}`);
+                }
+              }}
+            >
               {userData?.full_name || "User"}
             </span>
             <FaChevronDown
@@ -124,7 +140,18 @@ export default function TopBar({ open, onMenuClick }) {
             />
 
             {showDropdown && (
-              <div className="absolute right-0 mt-10 w-40 bg-white border rounded-md shadow-lg z-50">
+              <div className="absolute right-0 mt-10 w-48 bg-white border rounded-md shadow-lg z-50">
+                <button
+                  onClick={() => {
+                    setShowDropdown(false);
+                    if (userData?.id) {
+                      navigate(`/profile/${userData.id}`);
+                    }
+                  }}
+                  className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 border-b border-gray-100"
+                >
+                  View Profile
+                </button>
                 <button
                   onClick={() => {
                     setShowDropdown(false);
