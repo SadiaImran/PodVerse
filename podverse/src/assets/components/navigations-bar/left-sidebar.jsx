@@ -1,5 +1,5 @@
 import Logo from "../../images/logo.png";
-import { Home, Mic, Users, BookOpen, Settings, TrendingUp, Calendar, Bell, Search, Plus, ChevronLeft, ChevronRight, MessageCircle } from 'lucide-react';
+import { Home, Mic, Users, BookOpen, Settings, TrendingUp, Calendar, Bell, Search, Plus, ChevronLeft, ChevronRight, MessageCircle, Music2, Clapperboard } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import {
@@ -19,6 +19,8 @@ const LeftSidebar = ({ open, setOpen }) => {
   const menuItems = [
   { icon: Home, label: "Home" , navigateTo: "/home"},
   { icon: Mic, label: "My Podcasts" , count: 12 , navigateTo: "/create-podcast" },
+  { icon: Music2, label: "Audio Editor", navigateTo: "/audio-edit" },
+  { icon: Clapperboard, label: "Video Editor", navigateTo: "/video-editor" },
   { icon: BookOpen, label: "My Library" , navigateTo: "/library" },
   { icon: Users, label: 'Following', count: 28 , navigateTo: "/following"},
   { icon: IoAnalyticsOutline, label: "Analytics" , navigateTo:"/analytics"},

@@ -399,6 +399,13 @@ const fetchLiveKitToken = async () => {
       }
     }
 
+    // Get selected voice name from sessionStorage
+    const selectedVoiceName = sessionStorage.getItem('selected_voice_name');
+    if (selectedVoiceName) {
+      formData.append("voice_name", selectedVoiceName);
+      console.log("🎤 Using selected voice name:", selectedVoiceName);
+    }
+
     console.log("🎟️ Fetching LiveKit token for:", user);
 
     const response = await axios.post(
@@ -1418,6 +1425,8 @@ const fetchLiveKitToken = async () => {
 
 // LiveKit Participants Component - Shows only actual LiveKit participants
 const LiveKitParticipants = ({ podcastConfig = {} }) => {
+  // Hooks must be called at the top level - before any conditionals or loops
+  const { user } = useAuth();
   const tracks = useTracks(
     [
       { source: Track.Source.Camera, withPlaceholder: true },
@@ -1441,7 +1450,6 @@ const LiveKitParticipants = ({ podcastConfig = {} }) => {
     <>
       {uniqueParticipants.map((participant) => {
         const isAgent = participant.identity?.includes('agent');
-        const { user } = useAuth();
         
         // Get AI agent name and avatar from podcast config
         const aiAgentName = podcastConfig.agentName || podcastConfig.guestPersona?.name || 'AI Assistant';

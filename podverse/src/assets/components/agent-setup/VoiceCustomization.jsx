@@ -32,8 +32,15 @@ const VoiceCustomization = ({ goNext, goBack }) => {
   // Handle view voice - update the preview panel
   const handleViewVoice = (voice) => {
     setSelectedVoiceData(voice);
-
   };
+
+  // Save voice name to sessionStorage when voice is selected
+  useEffect(() => {
+    if (selectedVoiceData && selectedVoiceData.name) {
+      sessionStorage.setItem('selected_voice_name', selectedVoiceData.name);
+      console.log("🎤 Voice name saved to sessionStorage:", selectedVoiceData.name);
+    }
+  }, [selectedVoiceData]);
 
   return (
     <div className="max-w-7xl mx-auto">

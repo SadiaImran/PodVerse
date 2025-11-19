@@ -142,6 +142,17 @@ async def entrypoint(ctx: agents.JobContext):
                             agent.user_id = parsed["user_id"]
                         if "selectedKbId" in parsed:
                             agent.selected_kb_id = parsed["selectedKbId"]
+                        if "voice_name" in parsed:
+                            voice_name = parsed["voice_name"]
+                            agent.voice_name = voice_name
+                            # Update agent's LLM model voice if possible
+                            if hasattr(agent, '_llm') and hasattr(agent._llm, 'voice'):
+                                try:
+                                    agent._llm.voice = voice_name
+                                    print(f"🎤 Voice updated to: {voice_name}")
+                                except Exception as e:
+                                    print(f"⚠️ Could not update voice: {e}")
+                            print(f"🎤 Voice name from metadata: {voice_name}")
                         print(f"✅ user_id from metadata: {agent.user_id}, kb_id: {agent.selected_kb_id}")
                         
                         # Start egress now that we have proper user_id and kb_id

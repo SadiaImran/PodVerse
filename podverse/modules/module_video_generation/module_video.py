@@ -1,10 +1,13 @@
 #module_video.py
 import time
 import requests
-from fastapi import APIRouter, HTTPException, Depends, Header, File, UploadFile
+from fastapi import APIRouter, HTTPException, Depends, Header, File, UploadFile, Form
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import os
 from typing import Optional, List
+from datetime import datetime
+from connection_supabase_client import get_authenticated_supabase_client
 
 # Configuration
 HEYGEN_API_KEY = os.environ.get("HEYGEN_API_KEY")
@@ -441,6 +444,239 @@ def video_status(
         raise HTTPException(status_code=500, detail=f"Status check error: {str(e)}")
 
 
+# --- Supabase Video Storage ---
+
+@router.post("/upload-video")
+async def upload_video_to_supabase(
+    file: UploadFile = File(...),
+    project_name: Optional[str] = Form(None),
+    render_id: Optional[str] = Form(None),
+    auth_data: dict = Depends(get_authenticated_supabase_client)
+):
+    """
+    Upload rendered video to Supabase Storage
+    
+    Args:
+        file: Video file (MP4)
+        project_name: Optional project name for the video
+        render_id: Optional render ID (unique ID from render process)
+        auth_data: Authenticated Supabase client and user_id
+    
+    Returns:
+        JSON with video URL and metadata
+    """
+    try:
+        supabase_authenticated = auth_data["client"]
+        user_id = auth_data["user_id"]
+        
+        # Generate unique filename
+        # Naming convention: {user_id}_{render_id}_{project_name}.mp4
+        file_extension = os.path.splitext(file.filename)[1] or ".mp4"
+        
+        if render_id and project_name:
+            # Remove any special characters from project name for filename safety
+            safe_project_name = "".join(c for c in project_name if c.isalnum() or c in (' ', '-', '_')).strip()
+            safe_project_name = safe_project_name.replace(' ', '_')
+            # Remove any special characters from render_id for filename safety
+            safe_render_id = "".join(c for c in render_id if c.isalnum() or c in ('-', '_')).strip()
+            storage_path = f"{user_id}_{safe_render_id}_{safe_project_name}{file_extension}"
+        elif render_id:
+            # If only render_id, use it with user_id
+            safe_render_id = "".join(c for c in render_id if c.isalnum() or c in ('-', '_')).strip()
+            storage_path = f"{user_id}_{safe_render_id}{file_extension}"
+        elif project_name:
+            # If only project_name (backward compatibility)
+            safe_project_name = "".join(c for c in project_name if c.isalnum() or c in (' ', '-', '_')).strip()
+            safe_project_name = safe_project_name.replace(' ', '_')
+            storage_path = f"{user_id}_{safe_project_name}{file_extension}"
+        else:
+            # If no project name or render_id, use timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            storage_path = f"{user_id}_{timestamp}{file_extension}"
+        
+        # Read file data
+        file_data = await file.read()
+        file_size = len(file_data)
+        
+        print(f"Uploading video to Supabase: {storage_path} ({file_size} bytes)")
+        
+        # Upload to Supabase Storage (videos bucket)
+        bucket_name = "videos"
+        try:
+            # Try to upload with upsert=true to allow overwriting
+            response = supabase_authenticated.storage.from_(bucket_name).upload(
+                storage_path,
+                file_data,
+                file_options={
+                    "content-type": "video/mp4",
+                    "upsert": "true"  # Allow overwriting existing files
+                }
+            )
+            print(f"Upload response: {response}")
+        except Exception as upload_error:
+            error_str = str(upload_error)
+            print(f"Upload error: {upload_error}")
+            
+            # Check if error is due to bucket not existing
+            if "not found" in error_str.lower() or "does not exist" in error_str.lower():
+                # If bucket doesn't exist, try to create it
+                try:
+                    print(f"Attempting to create bucket '{bucket_name}'...")
+                    # Supabase create_bucket expects: (bucket_name, options_dict)
+                    # Options should include "name" as a string and "public" as boolean
+                    bucket_options = {
+                        "name": bucket_name,
+                        "public": True
+                    }
+                    create_response = supabase_authenticated.storage.create_bucket(bucket_name, bucket_options)
+                    print(f"Bucket '{bucket_name}' created successfully: {create_response}")
+                    # Retry upload
+                    response = supabase_authenticated.storage.from_(bucket_name).upload(
+                        storage_path,
+                        file_data,
+                        file_options={
+                            "content-type": "video/mp4",
+                            "upsert": "true"
+                        }
+                    )
+                    print(f"Retry upload response: {response}")
+                except Exception as create_error:
+                    print(f"Bucket creation error: {create_error}")
+                    # If bucket already exists, that's fine - just retry upload
+                    if "already exists" in str(create_error).lower() or "duplicate" in str(create_error).lower():
+                        print(f"Bucket already exists, retrying upload...")
+                        response = supabase_authenticated.storage.from_(bucket_name).upload(
+                            storage_path,
+                            file_data,
+                            file_options={
+                                "content-type": "video/mp4",
+                                "upsert": "true"
+                            }
+                        )
+                    else:
+                        raise HTTPException(
+                            status_code=500,
+                            detail=f"Failed to create bucket or upload video: {str(create_error)}"
+                        )
+            # Check if error is due to duplicate file (409)
+            elif "409" in error_str or "duplicate" in error_str.lower() or "already exists" in error_str.lower():
+                # File already exists, use upsert to overwrite
+                print(f"File already exists, overwriting with upsert=true...")
+                response = supabase_authenticated.storage.from_(bucket_name).upload(
+                    storage_path,
+                    file_data,
+                    file_options={
+                        "content-type": "video/mp4",
+                        "upsert": "true"
+                    }
+                )
+                print(f"Overwrite upload response: {response}")
+            # Check if error is due to RLS policy (403 Unauthorized)
+            elif "403" in error_str or "unauthorized" in error_str.lower() or "row-level security" in error_str.lower() or "policy" in error_str.lower():
+                error_message = (
+                    "Storage bucket RLS (Row Level Security) policy violation. "
+                    "Please ensure the 'videos' bucket exists and has proper policies set up in Supabase Dashboard:\n"
+                    "1. Go to Supabase Dashboard > Storage > Policies\n"
+                    "2. For 'videos' bucket, add a policy that allows authenticated users to INSERT/UPDATE files\n"
+                    "3. Or make the bucket public (if appropriate for your use case)\n"
+                    f"Error details: {error_str}"
+                )
+                print(f"❌ RLS Policy Error: {error_message}")
+                raise HTTPException(
+                    status_code=403,
+                    detail=error_message
+                )
+            else:
+                # Other error, re-raise
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to upload video: {str(upload_error)}"
+                )
+        
+        # Get public URL
+        public_url = supabase_authenticated.storage.from_(bucket_name).get_public_url(storage_path)
+        print(f"Video uploaded successfully. Public URL: {public_url}")
+        
+        return JSONResponse({
+            "success": True,
+            "message": "Video uploaded successfully",
+            "video_url": public_url,
+            "storage_path": storage_path,
+            "file_size": file_size
+        })
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error uploading video to Supabase: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to upload video: {str(e)}"
+        )
+
+
+@router.get("/list")
+async def list_user_videos(
+    auth_data: dict = Depends(get_authenticated_supabase_client)
+):
+    """
+    List all videos for the authenticated user
+    
+    Returns:
+        List of video metadata
+    """
+    try:
+        supabase_authenticated = auth_data["client"]
+        user_id = auth_data["user_id"]
+        
+        # List files in videos bucket (root level, filtered by user_id prefix)
+        bucket_name = "videos"
+        
+        try:
+            # List all files in bucket root
+            response = supabase_authenticated.storage.from_(bucket_name).list()
+            videos = []
+            
+            for file_info in response:
+                file_name = file_info.get("name", "")
+                # Filter files that start with user_id and are video files
+                if file_name.startswith(f"{user_id}_") and file_name.endswith((".mp4", ".webm", ".mov")):
+                    storage_path = file_name  # No folder, just filename
+                    public_url = supabase_authenticated.storage.from_(bucket_name).get_public_url(storage_path)
+                    
+                    videos.append({
+                        "name": file_info["name"],
+                        "storage_path": storage_path,
+                        "video_url": public_url,
+                        "size": file_info.get("metadata", {}).get("size", 0),
+                        "created_at": file_info.get("created_at"),
+                        "updated_at": file_info.get("updated_at")
+                    })
+            
+            return JSONResponse({
+                "success": True,
+                "videos": videos,
+                "count": len(videos)
+            })
+        except Exception as list_error:
+            print(f"Error listing videos: {list_error}")
+            return JSONResponse({
+                "success": True,
+                "videos": [],
+                "count": 0,
+                "message": "No videos found or bucket doesn't exist"
+            })
+    
+    except Exception as e:
+        print(f"Error listing videos: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to list videos: {str(e)}"
+        )
+
+
 @router.get("/api/test")
 def test_endpoint():
     return {
@@ -451,6 +687,8 @@ def test_endpoint():
             "list_avatars": "/api/list-avatars (get predefined avatars)",
             "list_voices": "/api/list-voices (get predefined voices)",
             "generate_video": "/api/generate-video (use avatar_id and voice_id)",
-            "video_status": "/api/video-status/{video_id}"
+            "video_status": "/api/video-status/{video_id}",
+            "upload_video": "/upload (upload rendered video to Supabase)",
+            "list_videos": "/list (list user's videos from Supabase)"
         }
     }

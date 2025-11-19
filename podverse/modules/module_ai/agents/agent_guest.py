@@ -37,12 +37,15 @@ load_dotenv()
 
 # ---------- Guest Agent class ----------
 class GuestAgent(Agent):
-    def __init__(self, persona=None) -> None:
+    def __init__(self, persona=None, voice_name=None) -> None:
+        # Use provided voice_name or default to "Charon"
+        selected_voice = voice_name if voice_name else "Charon"
         llm_model = google.beta.realtime.RealtimeModel(
             model="models/gemini-2.0-flash-exp",
             temperature=0.8,
-            voice="Charon",  # Professional voice suitable for podcasting
+            voice=selected_voice,  # Use selected voice or default
         )
+        print(f"🎤 Guest Agent initialized with voice: {selected_voice}")
 
         # Create dynamic instructions based on persona
         dynamic_instructions = AGENT_INSTRUCTION
@@ -199,15 +202,18 @@ async def entrypoint_guest(ctx: agents.JobContext):
                             agent.user_id = parsed["user_id"]
                         if "selectedKbId" in parsed:
                             agent.selected_kb_id = parsed["selectedKbId"]
+                        voice_name = parsed.get("voice_name")
                         if "guest_persona" in parsed:
-                            # Create new agent with persona
-                            new_agent = GuestAgent(persona=parsed["guest_persona"])
+                            # Create new agent with persona and voice
+                            new_agent = GuestAgent(persona=parsed["guest_persona"], voice_name=voice_name)
                             new_agent.user_id = agent.user_id
                             new_agent.selected_kb_id = agent.selected_kb_id
                             new_agent._room = agent._room
                             agent = new_agent
                             global_agent = agent
                             print(f"🔄 Created new agent with persona: {parsed['guest_persona'].get('name', 'Unknown')}")
+                            if voice_name:
+                                print(f"🎤 Using voice: {voice_name}")
                             
                             # Restart session with new agent if session was already started
                             if session_started:
@@ -305,9 +311,10 @@ async def entrypoint_guest(ctx: agents.JobContext):
                                 agent.user_id = parsed["userId"]
                             if "selectedKbId" in parsed:
                                 agent.selected_kb_id = parsed["selectedKbId"]
+                            voice_name = parsed.get("voice_name")
                             if "guest_persona" in parsed:
-                                # Create new agent with persona
-                                new_agent = GuestAgent(persona=parsed["guest_persona"])
+                                # Create new agent with persona and voice
+                                new_agent = GuestAgent(persona=parsed["guest_persona"], voice_name=voice_name)
                                 new_agent.user_id = agent.user_id
                                 new_agent.selected_kb_id = agent.selected_kb_id
                                 new_agent._room = agent._room
