@@ -1,3 +1,4 @@
+#module_video.py
 import time
 import requests
 from fastapi import APIRouter, HTTPException, Depends, Header, File, UploadFile, Form
@@ -29,8 +30,10 @@ router = APIRouter()
 
 class GenerateRequest(BaseModel):
     avatar_id: str
-    voice_id: str
-    input_text: str
+    voice_id: Optional[str] = None  # Make optional
+    input_text: Optional[str] = None  # Make optional
+    input_type: Optional[str] = "text"  # Add input_type field
+    audio_asset_id: Optional[str] = None  # Add audio_asset_id field
     is_custom_avatar: Optional[bool] = False
 
 class CreateAvatarRequest(BaseModel):
@@ -316,8 +319,9 @@ def generate_video(
     """
     Generates a video using HeyGen avatar and voice.
     Supports both predefined avatars and custom photo avatars.
+    Supports both text input (TTS) and audio input (original voice).
     """
-    print(f"🎬 Generating video with avatar: {req.avatar_id}, voice: {req.voice_id}, is_custom: {req.is_custom_avatar}")
+    print(f"🎬 Generating video with avatar: {req.avatar_id}, input_type: {req.input_type}, is_custom: {req.is_custom_avatar}")
     
     if not HEYGEN_API_KEY:
         raise HTTPException(status_code=500, detail="HEYGEN_API_KEY not configured")
@@ -326,28 +330,42 @@ def generate_video(
     
     # Determine character settings based on avatar type
     if req.is_custom_avatar:
-        # If it's a custom photo avatar, use 'talking_photo' type and 'talking_photo_id'
         character_settings = {
             "type": "talking_photo",
-            "talking_photo_id": req.avatar_id  # The ID from create-photo-avatar step
+            "talking_photo_id": req.avatar_id
         }
     else:
-        # Otherwise, use the standard 'avatar' type and 'avatar_id'
         character_settings = {
             "type": "avatar",
             "avatar_id": req.avatar_id,
             "avatar_style": "normal"
         }
     
+    # Determine voice settings based on input type
+    if req.input_type == "audio" and req.audio_asset_id:
+        # Use uploaded audio
+        voice_settings = {
+            "type": "audio",
+            "audio_asset_id": req.audio_asset_id
+        }
+        print(f"🎤 Using audio input: {req.audio_asset_id}")
+    else:
+        # Use TTS
+        if not req.voice_id or not req.input_text:
+            raise HTTPException(status_code=400, detail="voice_id and input_text required for text input")
+        
+        voice_settings = {
+            "type": "text",
+            "input_text": req.input_text,
+            "voice_id": req.voice_id
+        }
+        print(f"🎤 Using TTS: voice_id={req.voice_id}")
+    
     payload = {
         "video_inputs": [
             {
-                "character": character_settings,  # Use the dynamic settings
-                "voice": {
-                    "type": "text",
-                    "input_text": req.input_text,
-                    "voice_id": req.voice_id
-                },
+                "character": character_settings,
+                "voice": voice_settings,
                 "background": {
                     "type": "color",
                     "value": "#FFFFFF"

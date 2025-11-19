@@ -11,6 +11,7 @@ from module_voices.module_voices import router as voices_router
 # from module_voice_clone.module_voice_clone import router as voice_clone_router
 from module_faq.module_faq_route import router as faq_router
 from module_video_generation.module_video import router as video_router
+from module_video_generation.module_podcast_processing import router as podcast_router
 from fastapi.staticfiles import StaticFiles
 
 import tempfile
