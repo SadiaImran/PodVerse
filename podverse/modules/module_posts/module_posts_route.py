@@ -1,13 +1,25 @@
-from fastapi import APIRouter, HTTPException
-from connection_supabase_client import supabase
+from fastapi import APIRouter, HTTPException, Depends, Query
+from connection_supabase_client import supabase, get_authenticated_supabase_client
+from typing import Optional, List
+from pydantic import BaseModel
 import subprocess
 import os
 import tempfile
 import uuid
 import requests
-from typing import Optional
 
 router = APIRouter()
+
+# ==================== Models ====================
+
+class CommentCreate(BaseModel):
+    post_id: str
+    content: str
+
+class LikeResponse(BaseModel):
+    success: bool
+    liked: bool
+    likes_count: int
 
 def generate_thumbnail(video_path: str, output_path: str, timestamp: str = "00:00:03") -> bool:
     """
@@ -177,11 +189,138 @@ def upload_to_supabase_storage(file_path: str, bucket_name: str, file_name: str)
 
 @router.get("/posts")
 def get_all_posts():
-    """Get all posts with profiles and comments"""
+    """Get all posts with profiles and comments (DEPRECATED - use /posts/feed)"""
     response = supabase.table("posts").select(
-        "*, profiles(full_name), comments(*, profiles(full_name))"
+        "*, profiles:user_id(id, full_name, username, profile_url), comments(*, profiles:user_id(id, full_name, username, profile_url))"
     ).order("created_at", desc=True).execute()
     return response.data
+
+
+@router.get("/posts/feed")
+async def get_feed(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=50),
+    auth_data: dict = Depends(get_authenticated_supabase_client)
+):
+    """
+    Get posts from users that the current user follows.
+    Returns posts in chronological order (newest first).
+    """
+    try:
+        user_id = auth_data["user_id"]
+        client = auth_data["client"]
+        
+        # Calculate offset
+        offset = (page - 1) * limit
+        
+        # Get list of users that current user follows (accepted status only)
+        follows_response = client.table("follows").select("following_id").eq(
+            "follower_id", user_id
+        ).eq("status", "accepted").execute()
+        
+        following_ids = [f["following_id"] for f in follows_response.data]
+        
+        # If user follows no one, return empty feed
+        if not following_ids:
+            return {
+                "success": True,
+                "posts": [],
+                "pagination": {
+                    "page": page,
+                    "limit": limit,
+                    "total": 0,
+                    "total_pages": 0
+                }
+            }
+        
+        # Get posts from followed users
+        posts_response = client.table("posts").select(
+            "*, profiles:user_id(id, full_name, username, profile_url)"
+        ).in_("user_id", following_ids).order("created_at", desc=True).range(
+            offset, offset + limit - 1
+        ).execute()
+        
+        posts = posts_response.data
+        
+        # Get post IDs for fetching likes and comments
+        post_ids = [post["id"] for post in posts]
+        
+        # Get likes count and check if current user liked each post
+        likes_data = {}
+        if post_ids:
+            # Get all likes for these posts
+            likes_response = client.table("post_likes").select("post_id, user_id").in_(
+                "post_id", post_ids
+            ).execute()
+            
+            # Count likes per post and check if current user liked
+            for like in likes_response.data:
+                post_id = like["post_id"]
+                if post_id not in likes_data:
+                    likes_data[post_id] = {"count": 0, "user_liked": False}
+                likes_data[post_id]["count"] += 1
+                if like["user_id"] == user_id:
+                    likes_data[post_id]["user_liked"] = True
+        
+        # Get comments count for each post
+        comments_data = {}
+        if post_ids:
+            comments_response = client.table("comments").select("post_id").in_(
+                "post_id", post_ids
+            ).execute()
+            
+            for comment in comments_response.data:
+                post_id = comment["post_id"]
+                comments_data[post_id] = comments_data.get(post_id, 0) + 1
+        
+        # Get recent comments (2 per post) for preview
+        recent_comments = {}
+        if post_ids:
+            for post_id in post_ids:
+                comments_preview = client.table("comments").select(
+                    "*, profiles:user_id(id, full_name, username, profile_url)"
+                ).eq("post_id", post_id).order("created_at", desc=True).limit(2).execute()
+                if comments_preview.data:
+                    recent_comments[post_id] = comments_preview.data
+        
+        # Combine data
+        enriched_posts = []
+        for post in posts:
+            post_id = post["id"]
+            likes_info = likes_data.get(post_id, {"count": post.get("likes", 0), "user_liked": False})
+            
+            enriched_post = {
+                **post,
+                "likes": likes_info["count"],
+                "user_liked": likes_info["user_liked"],
+                "comments_count": comments_data.get(post_id, 0),
+                "comments": recent_comments.get(post_id, []),
+                "views": post.get("views", 0)
+            }
+            enriched_posts.append(enriched_post)
+        
+        # Get total count for pagination
+        total_response = client.table("posts").select("id", count="exact").in_(
+            "user_id", following_ids
+        ).execute()
+        total_count = total_response.count if hasattr(total_response, 'count') else len(total_response.data)
+        
+        return {
+            "success": True,
+            "posts": enriched_posts,
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total_count,
+                "total_pages": (total_count + limit - 1) // limit
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error fetching feed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/posts/generate-thumbnails")
@@ -438,3 +577,237 @@ def generate_thumbnail_for_single_post(post_id: str, timestamp: str = "00:00:03"
             os.remove(temp_video_path)
         if temp_thumbnail_path and os.path.exists(temp_thumbnail_path):
             os.remove(temp_thumbnail_path)
+
+
+# ==================== Like/Unlike Endpoints ====================
+
+@router.post("/posts/{post_id}/like")
+async def like_post(
+    post_id: str,
+    auth_data: dict = Depends(get_authenticated_supabase_client)
+):
+    """Like a post"""
+    try:
+        user_id = auth_data["user_id"]
+        client = auth_data["client"]
+        
+        # Check if post exists
+        post_response = client.table("posts").select("id, likes").eq("id", post_id).execute()
+        if not post_response.data:
+            raise HTTPException(status_code=404, detail="Post not found")
+        
+        # Check if already liked
+        existing_like = client.table("post_likes").select("id").eq(
+            "post_id", post_id
+        ).eq("user_id", user_id).execute()
+        
+        if existing_like.data:
+            raise HTTPException(status_code=400, detail="Post already liked")
+        
+        # Add like
+        client.table("post_likes").insert({
+            "post_id": post_id,
+            "user_id": user_id
+        }).execute()
+        
+        # Update cached likes count
+        current_likes = post_response.data[0].get("likes", 0)
+        client.table("posts").update({
+            "likes": current_likes + 1
+        }).eq("id", post_id).execute()
+        
+        return {
+            "success": True,
+            "liked": True,
+            "likes_count": current_likes + 1
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error liking post: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/posts/{post_id}/like")
+async def unlike_post(
+    post_id: str,
+    auth_data: dict = Depends(get_authenticated_supabase_client)
+):
+    """Unlike a post"""
+    try:
+        user_id = auth_data["user_id"]
+        client = auth_data["client"]
+        
+        # Check if like exists
+        existing_like = client.table("post_likes").select("id").eq(
+            "post_id", post_id
+        ).eq("user_id", user_id).execute()
+        
+        if not existing_like.data:
+            raise HTTPException(status_code=400, detail="Post not liked")
+        
+        # Remove like
+        client.table("post_likes").delete().eq(
+            "post_id", post_id
+        ).eq("user_id", user_id).execute()
+        
+        # Update cached likes count
+        post_response = client.table("posts").select("likes").eq("id", post_id).execute()
+        if post_response.data:
+            current_likes = post_response.data[0].get("likes", 0)
+            client.table("posts").update({
+                "likes": max(0, current_likes - 1)
+            }).eq("id", post_id).execute()
+            
+            return {
+                "success": True,
+                "liked": False,
+                "likes_count": max(0, current_likes - 1)
+            }
+        
+        return {
+            "success": True,
+            "liked": False,
+            "likes_count": 0
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error unliking post: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== Comment Endpoints ====================
+
+@router.post("/posts/{post_id}/comments")
+async def add_comment(
+    post_id: str,
+    comment: CommentCreate,
+    auth_data: dict = Depends(get_authenticated_supabase_client)
+):
+    """Add a comment to a post"""
+    try:
+        user_id = auth_data["user_id"]
+        client = auth_data["client"]
+        
+        # Validate post_id matches
+        if comment.post_id != post_id:
+            raise HTTPException(status_code=400, detail="Post ID mismatch")
+        
+        # Check if post exists
+        post_response = client.table("posts").select("id").eq("id", post_id).execute()
+        if not post_response.data:
+            raise HTTPException(status_code=404, detail="Post not found")
+        
+        # Add comment
+        comment_response = client.table("comments").insert({
+            "post_id": post_id,
+            "user_id": user_id,
+            "content": comment.content
+        }).execute()
+        
+        if not comment_response.data:
+            raise HTTPException(status_code=500, detail="Failed to add comment")
+        
+        # Get comment with user profile
+        new_comment = comment_response.data[0]
+        comment_with_profile = client.table("comments").select(
+            "*, profiles:user_id(id, full_name, username, profile_url)"
+        ).eq("id", new_comment["id"]).single().execute()
+        
+        return {
+            "success": True,
+            "comment": comment_with_profile.data
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error adding comment: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/posts/{post_id}/comments")
+async def get_comments(
+    post_id: str,
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=50),
+    auth_data: Optional[dict] = Depends(get_authenticated_supabase_client)
+):
+    """Get comments for a post"""
+    try:
+        if auth_data:
+            client = auth_data["client"]
+        else:
+            client = supabase
+        
+        offset = (page - 1) * limit
+        
+        # Get comments with user profiles
+        comments_response = client.table("comments").select(
+            "*, profiles:user_id(id, full_name, username, profile_url)"
+        ).eq("post_id", post_id).order("created_at", desc=True).range(
+            offset, offset + limit - 1
+        ).execute()
+        
+        # Get total count
+        total_response = client.table("comments").select("id", count="exact").eq(
+            "post_id", post_id
+        ).execute()
+        total_count = total_response.count if hasattr(total_response, 'count') else len(total_response.data)
+        
+        return {
+            "success": True,
+            "comments": comments_response.data,
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total_count,
+                "total_pages": (total_count + limit - 1) // limit
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error fetching comments: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== View Tracking ====================
+
+@router.post("/posts/{post_id}/view")
+async def track_view(
+    post_id: str,
+    auth_data: Optional[dict] = Depends(get_authenticated_supabase_client)
+):
+    """Track a view for a post (increment views count)"""
+    try:
+        if auth_data:
+            client = auth_data["client"]
+        else:
+            client = supabase
+        
+        # Check if post exists
+        post_response = client.table("posts").select("id, views").eq("id", post_id).execute()
+        if not post_response.data:
+            raise HTTPException(status_code=404, detail="Post not found")
+        
+        # Increment views count
+        current_views = post_response.data[0].get("views", 0)
+        client.table("posts").update({
+            "views": current_views + 1
+        }).eq("id", post_id).execute()
+        
+        return {
+            "success": True,
+            "views": current_views + 1
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error tracking view: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
