@@ -16,6 +16,7 @@ import VideoGeneratorPage from './assets/screens/screen-video-generation';
 import VideoEditorV7Screen from './assets/screens/screen-video-editor-v7';
 import ProfilePage from './assets/screens/screen-profile';
 import OnboardingScreen from './assets/screens/screen-onboarding';
+import SearchPage from './assets/screens/screen-search';
 
 function App() {
   return (
@@ -130,6 +131,14 @@ function App() {
             element={
               <PrivateRoute>
                 <OnboardingScreen />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/search"
+            element={
+              <PrivateRoute>
+                <SearchPage />
               </PrivateRoute>
             }
           />

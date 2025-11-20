@@ -13,6 +13,7 @@ const LeftSidebar = () => {
   const navigate = useNavigate();
   const menuItems = [
     { icon: Home, label: "Home" , navigateTo: "/home"},
+    { icon: Search, label: "Search Users" , navigateTo: "/search"},
     { icon: Mic, label: "My Podcasts" , count: 12 , navigateTo: "/create-podcast" },
     { icon: BookOpen, label: "My Library" , navigateTo: "/library" },
     { icon: Users, label: 'Following', count: 28 , navigateTo: "/following"},

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, Form, File, UploadFile
+from fastapi import APIRouter, HTTPException, Depends, Form, File, UploadFile, Query
 from typing import Optional
 from connection_supabase_client import supabase, get_authenticated_supabase_client
 
@@ -317,12 +317,26 @@ async def get_profile_by_id(user_id: str, auth_data: Optional[dict] = Depends(ge
         
         profile = response.data[0]
         
-        # Check if current user is following this profile
+        # Check connection status (following, pending, or none)
         if current_user_id and current_user_id != user_id:
-            follow_check = client.table("follows").select("id").eq("follower_id", current_user_id).eq("following_id", user_id).execute()
-            profile["is_following"] = len(follow_check.data) > 0
+            follow_check = client.table("follows").select("id, status").eq("follower_id", current_user_id).eq("following_id", user_id).execute()
+            if follow_check.data:
+                connection = follow_check.data[0]
+                if connection.get("status") == "accepted":
+                    profile["is_following"] = True
+                    profile["connection_status"] = "following"
+                elif connection.get("status") == "pending":
+                    profile["is_following"] = "pending"
+                    profile["connection_status"] = "pending"
+                else:
+                    profile["is_following"] = False
+                    profile["connection_status"] = "none"
+            else:
+                profile["is_following"] = False
+                profile["connection_status"] = "none"
         else:
             profile["is_following"] = False
+            profile["connection_status"] = "none"
         
         return {"profile": profile}
     except HTTPException:
@@ -349,12 +363,26 @@ async def get_profile_by_username(username: str, auth_data: Optional[dict] = Dep
         
         profile = response.data[0]
         
-        # Check if current user is following this profile
+        # Check connection status (following, pending, or none)
         if current_user_id and current_user_id != profile["id"]:
-            follow_check = client.table("follows").select("id").eq("follower_id", current_user_id).eq("following_id", profile["id"]).execute()
-            profile["is_following"] = len(follow_check.data) > 0
+            follow_check = client.table("follows").select("id, status").eq("follower_id", current_user_id).eq("following_id", profile["id"]).execute()
+            if follow_check.data:
+                connection = follow_check.data[0]
+                if connection.get("status") == "accepted":
+                    profile["is_following"] = True
+                    profile["connection_status"] = "following"
+                elif connection.get("status") == "pending":
+                    profile["is_following"] = "pending"
+                    profile["connection_status"] = "pending"
+                else:
+                    profile["is_following"] = False
+                    profile["connection_status"] = "none"
+            else:
+                profile["is_following"] = False
+                profile["connection_status"] = "none"
         else:
             profile["is_following"] = False
+            profile["connection_status"] = "none"
         
         return {"profile": profile}
     except HTTPException:
@@ -496,6 +524,103 @@ async def update_profile(
         raise
     except Exception as e:
         print(f"Error updating profile: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/search")
+async def search_users(
+    query: str = Query(..., min_length=1, description="Search query (username or full name)"),
+    limit: int = Query(20, ge=1, le=50),
+    auth_data: Optional[dict] = Depends(get_authenticated_supabase_client)
+):
+    """Search for users by username or full name"""
+    try:
+        if auth_data:
+            client = auth_data["client"]
+            current_user_id = auth_data["user_id"]
+        else:
+            client = supabase
+            current_user_id = None
+        
+        # Normalize query
+        search_query = query.strip().lower()
+        
+        # Search in both username and full_name (case-insensitive)
+        # Get profiles matching username
+        username_results = client.table("profiles").select(
+            "id, full_name, username, profile_url, bio, is_private, followers_count, following_count"
+        ).ilike("username", f"%{search_query}%").limit(limit).execute()
+        
+        # Get profiles matching full_name
+        name_results = client.table("profiles").select(
+            "id, full_name, username, profile_url, bio, is_private, followers_count, following_count"
+        ).ilike("full_name", f"%{search_query}%").limit(limit).execute()
+        
+        # Combine and deduplicate results
+        profiles_dict = {}
+        for profile in (username_results.data or []):
+            profiles_dict[profile["id"]] = profile
+        for profile in (name_results.data or []):
+            profiles_dict[profile["id"]] = profile
+        
+        profiles_data = list(profiles_dict.values())[:limit]
+        
+        if not profiles_data:
+            return {
+                "success": True,
+                "users": [],
+                "query": query
+            }
+        
+        # Get connection status for each user (if current user is logged in)
+        user_ids = [p["id"] for p in profiles_data]
+        following_map = {}
+        pending_map = {}
+        
+        if current_user_id:
+            # Get accepted connections
+            following = client.table("follows").select("following_id").eq("follower_id", current_user_id).eq("status", "accepted").in_("following_id", user_ids).execute()
+            following_map = {f["following_id"]: True for f in following.data}
+            
+            # Get pending connections
+            pending = client.table("follows").select("following_id").eq("follower_id", current_user_id).eq("status", "pending").in_("following_id", user_ids).execute()
+            pending_map = {p["following_id"]: True for p in pending.data}
+        
+        # Format response with connection status
+        formatted_users = []
+        for profile in profiles_data:
+            user_id = profile["id"]
+            connection_status = "none"
+            if current_user_id:
+                if user_id == current_user_id:
+                    connection_status = "self"
+                elif following_map.get(user_id):
+                    connection_status = "following"
+                elif pending_map.get(user_id):
+                    connection_status = "pending"
+            
+            formatted_users.append({
+                "id": user_id,
+                "full_name": profile.get("full_name"),
+                "username": profile.get("username"),
+                "profile_url": profile.get("profile_url"),
+                "bio": profile.get("bio"),
+                "is_private": profile.get("is_private", False),
+                "followers_count": profile.get("followers_count", 0),
+                "following_count": profile.get("following_count", 0),
+                "connection_status": connection_status
+            })
+        
+        return {
+            "success": True,
+            "users": formatted_users,
+            "query": query,
+            "total": len(formatted_users)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error searching users: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/profile/username/{username}/check")
