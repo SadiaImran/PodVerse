@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "../../../connection_supabase_client";
+import { supabase } from "../../supabaseClient.js";
 
 function ResetPassword() {
   const navigate = useNavigate();

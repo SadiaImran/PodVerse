@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { supabase } from '../../connection_supabase_client';
+import { supabase } from '../supabaseClient.js';
 import { useAuth } from '../context/AuthContext';
 import BaseLayout from '../components/layouts/BaseLayout';
 import { 
@@ -18,11 +18,9 @@ import {
   Eye,
   Lock,
   Globe,
-  Camera,
-  XCircle
+  Camera
 } from 'lucide-react';
 import ProfileMarry from '../images/icon-profile-marry.png';
-import PostCard from '../components/feed/activity-feed';
 
 const API_BASE_URL = 'http://localhost:8000';
 
@@ -36,17 +34,40 @@ const ProfilePage = () => {
   const [isFollowing, setIsFollowing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('posts'); // 'posts', 'about', 'activity'
-  const [showEditModal, setShowEditModal] = useState(false);
+  const [showInfoModal, setShowInfoModal] = useState(false);
+  const [showAvatarModal, setShowAvatarModal] = useState(false);
+  const [showCoverModal, setShowCoverModal] = useState(false);
   
   // Form states for editing
-  const [editForm, setEditForm] = useState({
+  const [infoForm, setInfoForm] = useState({
     full_name: '',
     username: '',
     bio: '',
-    profile_url: '',
-    cover_image_url: '',
     is_private: false
   });
+  const [avatarForm, setAvatarForm] = useState({
+    profile_url: ''
+  });
+  const [coverForm, setCoverForm] = useState({
+    cover_image_url: ''
+  });
+
+  const syncProfileState = (profileData) => {
+    if (!profileData) return;
+    setProfile(profileData);
+    setInfoForm({
+      full_name: profileData.full_name || '',
+      username: profileData.username || '',
+      bio: profileData.bio || '',
+      is_private: profileData.is_private || false
+    });
+    setAvatarForm({
+      profile_url: profileData.profile_url || ''
+    });
+    setCoverForm({
+      cover_image_url: profileData.cover_image_url || ''
+    });
+  };
 
   // File upload states
   const [avatarFile, setAvatarFile] = useState(null);
@@ -125,15 +146,7 @@ const ProfilePage = () => {
           cover_image_url: coverImageUrl
         };
 
-        setProfile(normalizedProfile);
-        setEditForm({
-          full_name: normalizedProfile.full_name || '',
-          username: normalizedProfile.username || '',
-          bio: normalizedProfile.bio || '',
-          profile_url: profileImageUrl,
-          cover_image_url: coverImageUrl,
-          is_private: normalizedProfile.is_private || false
-        });
+        syncProfileState(normalizedProfile);
 
         // Set is_following from API response
         if (profileData.is_following !== undefined) {
@@ -232,6 +245,7 @@ const ProfilePage = () => {
     }
 
     setAvatarFile(file);
+    setAvatarForm((prev) => ({ ...prev, profile_url: '' }));
     
     // Create preview
     const reader = new FileReader();
@@ -259,6 +273,7 @@ const ProfilePage = () => {
     }
 
     setCoverFile(file);
+    setCoverForm((prev) => ({ ...prev, cover_image_url: '' }));
     
     // Create preview
     const reader = new FileReader();
@@ -268,56 +283,43 @@ const ProfilePage = () => {
     reader.readAsDataURL(file);
   };
 
-  // Profile update handler - Using Backend API
-  const handleUpdateProfile = async () => {
+  const updateProfile = async ({ fields = {}, files = {} } = {}) => {
     if (!currentUser) {
       alert('You must be logged in to update your profile');
-      return;
+      return false;
+    }
+
+    const formDataToSend = new FormData();
+    let hasPayload = false;
+
+    Object.entries(fields).forEach(([key, value]) => {
+      if (value === undefined || value === null) return;
+      formDataToSend.append(
+        key,
+        typeof value === 'boolean' ? value.toString() : value
+      );
+      hasPayload = true;
+    });
+
+    Object.entries(files).forEach(([key, file]) => {
+      if (!file) return;
+      formDataToSend.append(key, file);
+      hasPayload = true;
+    });
+
+    if (!hasPayload) {
+      alert('Please provide something to update.');
+      return false;
     }
 
     setIsUpdating(true);
 
     try {
-      // Get auth token
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         throw new Error('No active session');
       }
 
-      // Create FormData for the API request
-      const formDataToSend = new FormData();
-      
-      if (editForm.full_name) {
-        formDataToSend.append('full_name', editForm.full_name.trim());
-      }
-      if (editForm.username) {
-        formDataToSend.append('username', editForm.username.toLowerCase().trim());
-      }
-      if (editForm.bio !== undefined) {
-        formDataToSend.append('bio', editForm.bio.trim() || '');
-      }
-      
-      // Add profile image if user selected one
-      if (avatarFile) {
-        formDataToSend.append('profile_image', avatarFile);
-      } else if (editForm.profile_url && !avatarFile) {
-        // If URL is provided and no file, pass the URL
-        formDataToSend.append('profile_url', editForm.profile_url);
-      }
-      
-      // Add cover image if user selected one
-      if (coverFile) {
-        formDataToSend.append('cover_image', coverFile);
-      } else if (editForm.cover_image_url && !coverFile) {
-        // If URL is provided and no file, pass the URL
-        formDataToSend.append('cover_image_url', editForm.cover_image_url);
-      }
-      
-      if (editForm.is_private !== undefined) {
-        formDataToSend.append('is_private', editForm.is_private.toString());
-      }
-
-      // Update profile using backend API
       const response = await fetch(`${API_BASE_URL}/social-media/update-profile`, {
         method: 'PATCH',
         headers: {
@@ -334,50 +336,151 @@ const ProfilePage = () => {
         } else {
           throw new Error(result.detail || 'Failed to update profile');
         }
-        setIsUpdating(false);
-        return;
+        return false;
       }
 
-      // Success! Update local state
       if (result.profile) {
-        setProfile(result.profile);
-        // Reset file states
+        syncProfileState(result.profile);
         setAvatarFile(null);
         setAvatarPreview(null);
         setCoverFile(null);
         setCoverPreview(null);
-        setShowEditModal(false);
-        alert('Profile updated successfully!');
       }
 
+      return true;
     } catch (error) {
       console.error('Error updating profile:', error);
       alert(error.message || 'Failed to update profile. Please try again.');
+      return false;
     } finally {
       setIsUpdating(false);
     }
   };
 
-  // Reset edit modal when closed
-  const handleCloseEditModal = () => {
-    setShowEditModal(false);
-    // Reset to original profile data
+  const handleUpdateInfo = async () => {
+    if (!infoForm.full_name.trim() || !infoForm.username.trim()) {
+      alert('Full name and username are required.');
+      return;
+    }
+
+    const success = await updateProfile({
+      fields: {
+        full_name: infoForm.full_name.trim(),
+        username: infoForm.username.trim(),
+        bio: infoForm.bio ?? '',
+        is_private: infoForm.is_private
+      }
+    });
+
+    if (success) {
+      setShowInfoModal(false);
+    }
+  };
+
+  const handleUpdateAvatar = async () => {
+    const payload = {};
+    const files = {};
+    const rawUrl = avatarForm.profile_url ?? '';
+    const cleanedUrl = rawUrl.trim();
+
+    if (avatarFile) {
+      files.profile_image = avatarFile;
+    } else if (avatarForm.profile_url === '') {
+      payload.profile_url = '';
+    } else if (cleanedUrl) {
+      payload.profile_url = cleanedUrl;
+    }
+
+    if (!files.profile_image && payload.profile_url === undefined) {
+      alert('Upload a photo or paste an image URL.');
+      return;
+    }
+
+    const success = await updateProfile({ fields: payload, files });
+
+    if (success) {
+      setShowAvatarModal(false);
+      setAvatarFile(null);
+      setAvatarPreview(null);
+    }
+  };
+
+  const handleUpdateCover = async () => {
+    const payload = {};
+    const files = {};
+    const rawUrl = coverForm.cover_image_url ?? '';
+    const cleanedUrl = rawUrl.trim();
+
+    if (coverFile) {
+      files.cover_image = coverFile;
+    } else if (coverForm.cover_image_url === '') {
+      payload.cover_image_url = '';
+    } else if (cleanedUrl) {
+      payload.cover_image_url = cleanedUrl;
+    }
+
+    if (!files.cover_image && payload.cover_image_url === undefined) {
+      alert('Upload a cover image or paste an image URL.');
+      return;
+    }
+
+    const success = await updateProfile({ fields: payload, files });
+
+    if (success) {
+      setShowCoverModal(false);
+      setCoverFile(null);
+      setCoverPreview(null);
+    }
+  };
+
+  const handleCloseInfoModal = () => {
     if (profile) {
-      setEditForm({
+      setInfoForm({
         full_name: profile.full_name || '',
         username: profile.username || '',
         bio: profile.bio || '',
-        profile_url: profile.profile_url || '',
-        cover_image_url: profile.cover_image_url || '',
         is_private: profile.is_private || false
       });
     }
-    // Reset file states
+    setShowInfoModal(false);
+  };
+
+  const handleCloseAvatarModal = () => {
+    if (profile) {
+      setAvatarForm({
+        profile_url: profile.profile_url || ''
+      });
+    }
     setAvatarFile(null);
     setAvatarPreview(null);
+    setShowAvatarModal(false);
+  };
+
+  const handleCloseCoverModal = () => {
+    if (profile) {
+      setCoverForm({
+        cover_image_url: profile.cover_image_url || ''
+      });
+    }
     setCoverFile(null);
     setCoverPreview(null);
+    setShowCoverModal(false);
   };
+
+  const totalViews = posts.reduce((sum, post) => sum + (post.views_count || 0), 0);
+  const totalLikes = posts.reduce((sum, post) => sum + (post.likes_count || 0), 0);
+  const totalComments = posts.reduce((sum, post) => sum + (post.comments_count || 0), 0);
+  const engagementRate = totalViews > 0
+    ? Math.min(100, Math.round(((totalLikes + totalComments) / totalViews) * 100))
+    : 0;
+  const websiteUrl = profile?.website_url || profile?.website || '';
+  const locationLabel = profile?.location || profile?.city || '';
+  const joinedDateLabel = profile?.created_at
+    ? new Date(profile.created_at).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long'
+      })
+    : '';
 
   if (loading) {
     return (
@@ -412,109 +515,130 @@ const ProfilePage = () => {
 
   return (
     <BaseLayout>
-      <div className="min-h-screen bg-gray-50">
-        {/* Cover Image */}
-        <div className="relative h-64 bg-gradient-to-r from-purple-400 via-pink-500 to-red-500 overflow-hidden">
-          {profile.cover_image_url ? (
-            <img
-              src={profile.cover_image_url}
-              alt="Cover"
-              className="w-full h-full object-cover"
-              onError={(e) => {
-                console.error('Cover image failed to load:', profile.cover_image_url);
-                e.target.style.display = 'none';
-              }}
-              onLoad={() => {
-                console.log('Cover image loaded successfully:', profile.cover_image_url);
-              }}
-            />
-          ) : (
-            <div className="w-full h-full bg-gradient-to-r from-purple-400 via-pink-500 to-red-500"></div>
-          )}
-          {isOwnProfile && (
-            <button
-              onClick={() => setShowEditModal(true)}
-              className="absolute top-4 right-4 bg-white/90 hover:bg-white text-gray-800 px-4 py-2 rounded-lg flex items-center gap-2 transition-all shadow-md"
-            >
-              <Edit3 size={18} />
-              Edit Cover
-            </button>
-          )}
+      <div className="min-h-screen bg-gradient-to-b from-white via-white to-gray-100">
+        <div className="relative">
+          <div className="relative h-72 md:h-[380px] overflow-hidden bg-gradient-to-r from-[#6D3EFF] via-[#A54EFF] to-[#FF6FB5]">
+            {profile.cover_image_url ? (
+              <img
+                src={profile.cover_image_url}
+                alt="Cover"
+                className="absolute inset-0 w-full h-full object-cover"
+                onError={(e) => {
+                  console.error('Cover image failed to load:', profile.cover_image_url);
+                  e.target.style.display = 'none';
+                }}
+              />
+            ) : (
+              <div className="absolute inset-0 bg-gradient-to-r from-purple-400 via-light-purple to-pink-400" />
+            )}
+            <div className="absolute inset-0 bg-gradient-to-t from-gray-900/80 via-gray-900/25 to-transparent" />
+            {isOwnProfile && (
+              <button
+                onClick={() => setShowCoverModal(true)}
+                className="absolute top-5 right-5 bg-white/90 hover:bg-white text-gray-800 px-4 py-2 rounded-full flex items-center gap-2 transition-all shadow-lg"
+              >
+                <Camera size={18} />
+                Edit Cover
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* Profile Content */}
-        <div className="max-w-6xl mx-auto px-4 -mt-20 relative z-10">
-          {/* Profile Header */}
-          <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
-            <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
-              {/* Avatar and Basic Info */}
-              <div className="flex flex-col md:flex-row items-center md:items-end gap-4">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 -mt-12 md:-mt-16 lg:-mt-12 pb-16 relative z-10">
+          <div className="bg-gradient-to-br from-[#E0C2FF] via-[#F9D7FF] to-[#FFD4EF] backdrop-blur-md rounded-[40px] shadow-[0_30px_90px_rgba(109,62,255,0.2)] border border-[#D3ABFF] p-6 md:p-8">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+              <div className="flex flex-col md:flex-row md:items-center gap-6">
                 <div className="relative">
                   <img
                     src={profile.profile_url || ProfileMarry}
                     alt={profile.full_name || 'User'}
-                    className="w-32 h-32 rounded-full border-4 border-white shadow-lg object-cover bg-gray-200"
+                    className="w-36 h-36 rounded-full border-4 border-white/80 shadow-2xl object-cover bg-gray-50"
                     onError={(e) => {
                       console.error('Profile image failed to load:', profile.profile_url);
                       if (e.target.src !== ProfileMarry) {
                         e.target.src = ProfileMarry;
                       }
                     }}
-                    onLoad={() => {
-                      if (profile.profile_url) {
-                        console.log('Profile image loaded successfully:', profile.profile_url);
-                      }
-                    }}
                   />
                   {isOwnProfile && (
                     <button
-                      onClick={() => setShowEditModal(true)}
-                      className="absolute bottom-0 right-0 bg-light-purple text-white p-2 rounded-full hover:bg-purple-700 transition-all shadow-md"
+                      onClick={() => setShowAvatarModal(true)}
+                      className="absolute -bottom-1 -right-1 bg-light-purple text-white p-3 rounded-full hover:bg-purple-700 transition-all shadow-lg"
                     >
-                      <Edit3 size={16} />
+                      <Camera size={16} />
                     </button>
                   )}
                 </div>
-                
-                <div className="text-center md:text-left">
-                  <div className="flex items-center gap-2 justify-center md:justify-start">
-                    <h1 className="text-3xl font-bold text-gray-900">
+
+                <div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <h1 className="text-3xl md:text-4xl font-extrabold text-gray-900">
                       {profile.full_name || 'User'}
                     </h1>
-                    {profile.is_private && (
-                      <div className="flex items-center gap-1 text-gray-600" title="Private Account">
-                        <Lock size={18} />
-                        <span className="text-sm font-medium">Private</span>
-                      </div>
-                    )}
-                    {!profile.is_private && (
-                      <div className="flex items-center gap-1 text-gray-600" title="Public Account">
-                        <Globe size={18} />
-                        <span className="text-sm font-medium">Public</span>
-                      </div>
+                    {profile.is_private ? (
+                      <span className="inline-flex items-center gap-1 text-sm font-semibold text-gray-600 bg-gray-100 px-3 py-1 rounded-full">
+                        <Lock size={14} />
+                        Private
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-sm font-semibold text-light-purple bg-purple-50 px-3 py-1 rounded-full">
+                        <Globe size={14} />
+                        Public
+                      </span>
                     )}
                   </div>
-                  <p className="text-gray-500 mb-2">@{profile.username || 'username'}</p>
+                  <p className="text-gray-500 text-lg">@{profile.username || 'username'}</p>
                   {profile.bio && (
-                    <p className="text-gray-700 max-w-md">{profile.bio}</p>
+                    <p className="mt-3 text-gray-700 max-w-2xl leading-relaxed">{profile.bio}</p>
                   )}
+
+                  <div className="flex flex-wrap gap-4 mt-4 text-sm text-gray-600">
+                    {locationLabel && (
+                      <span className="inline-flex items-center gap-1">
+                        <MapPin size={15} />
+                        {locationLabel}
+                      </span>
+                    )}
+                    {websiteUrl && (
+                      <a
+                        href={websiteUrl.startsWith('http') ? websiteUrl : `https://${websiteUrl}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-light-purple hover:underline"
+                      >
+                        <LinkIcon size={15} />
+                        Website
+                      </a>
+                    )}
+                    {profile.email && (
+                      <span className="inline-flex items-center gap-1">
+                        <Mail size={15} />
+                        {profile.email}
+                      </span>
+                    )}
+                    {joinedDateLabel && (
+                      <span className="inline-flex items-center gap-1">
+                        <Calendar size={15} />
+                        Joined {joinedDateLabel}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap gap-3">
                 {isOwnProfile ? (
                   <>
                     <button
-                      onClick={() => setShowEditModal(true)}
-                      className="px-6 py-2 bg-light-purple text-white rounded-lg hover:bg-purple-700 transition-all flex items-center gap-2 shadow-md"
+                      onClick={() => setShowInfoModal(true)}
+                      className="px-6 py-2.5 bg-light-purple text-white rounded-full hover:bg-purple-700 transition-all flex items-center gap-2 shadow-lg"
                     >
                       <Edit3 size={18} />
                       Edit Profile
                     </button>
                     <button
                       onClick={() => navigate('/settings')}
-                      className="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all flex items-center gap-2"
+                      className="px-6 py-2.5 bg-white text-gray-800 rounded-full border border-gray-200 hover:border-gray-300 transition-all flex items-center gap-2"
                     >
                       <Settings size={18} />
                       Settings
@@ -524,9 +648,9 @@ const ProfilePage = () => {
                   <>
                     <button
                       onClick={handleFollow}
-                      className={`px-6 py-2 rounded-lg transition-all flex items-center gap-2 shadow-md ${
+                      className={`px-6 py-2.5 rounded-full transition-all flex items-center gap-2 shadow-md ${
                         isFollowing
-                          ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          ? 'bg-gray-100 text-gray-800 hover:bg-gray-200'
                           : 'bg-light-purple text-white hover:bg-purple-700'
                       }`}
                     >
@@ -542,7 +666,7 @@ const ProfilePage = () => {
                         </>
                       )}
                     </button>
-                    <button className="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all">
+                    <button className="px-6 py-2.5 bg-white text-gray-800 rounded-full border border-gray-200 hover:border-gray-300 transition-all">
                       Message
                     </button>
                   </>
@@ -550,146 +674,186 @@ const ProfilePage = () => {
               </div>
             </div>
 
-            {/* Stats */}
-            <div className="flex items-center gap-8 mt-6 pt-6 border-t border-gray-200">
-              <div className="text-center">
-                <p className="text-2xl font-bold text-gray-900">{posts.length}</p>
+            <div className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="rounded-2xl border border-[#E9DCFF] bg-gradient-to-br from-[#E9DCFF] via-white to-white p-5 shadow-sm">
                 <p className="text-sm text-gray-500">Posts</p>
+                <p className="text-3xl font-bold text-gray-900 mt-1">{posts.length}</p>
+                <span className="text-xs text-light-purple font-semibold">This month</span>
               </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold text-gray-900">
-                  {profile.followers_count || 0}
-                </p>
+              <div className="rounded-2xl border border-[#FDE4FF] bg-gradient-to-br from-[#FDE4FF] via-white to-white p-5 shadow-sm">
                 <p className="text-sm text-gray-500">Followers</p>
+                <p className="text-3xl font-bold text-gray-900 mt-1">{profile.followers_count || 0}</p>
+                <span className="text-xs text-gray-400">Community love</span>
               </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold text-gray-900">
-                  {profile.following_count || 0}
-                </p>
+              <div className="rounded-2xl border border-[#DFF0FF] bg-gradient-to-br from-[#DFF0FF] via-white to-white p-5 shadow-sm">
                 <p className="text-sm text-gray-500">Following</p>
+                <p className="text-3xl font-bold text-gray-900 mt-1">{profile.following_count || 0}</p>
+                <span className="text-xs text-gray-400">Collabs</span>
               </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold text-gray-900">
-                  {posts.reduce((sum, post) => sum + (post.views_count || 0), 0)}
-                </p>
-                <p className="text-sm text-gray-500">Total Views</p>
+              <div className="rounded-2xl border border-[#FFDDE7] bg-gradient-to-br from-[#FFDDE7] via-white to-white p-5 shadow-sm">
+                <p className="text-sm text-gray-500">Engagement</p>
+                <p className="text-3xl font-bold text-gray-900 mt-1">{engagementRate}%</p>
+                <span className="text-xs text-gray-400">Likes + comments</span>
               </div>
             </div>
           </div>
 
-          {/* Tabs */}
-          <div className="bg-white rounded-2xl shadow-lg mb-6">
+          <div className="mt-10 bg-white rounded-3xl shadow-xl border border-gray-100">
             <div className="flex border-b border-gray-200">
               <button
                 onClick={() => setActiveTab('posts')}
-                className={`flex-1 px-6 py-4 text-center font-medium transition-all ${
+                className={`flex-1 px-6 py-4 text-center font-semibold transition-all ${
                   activeTab === 'posts'
                     ? 'text-light-purple border-b-2 border-light-purple'
-                    : 'text-gray-600 hover:text-gray-900'
+                    : 'text-gray-500 hover:text-gray-900'
                 }`}
               >
                 Posts
               </button>
               <button
                 onClick={() => setActiveTab('about')}
-                className={`flex-1 px-6 py-4 text-center font-medium transition-all ${
+                className={`flex-1 px-6 py-4 text-center font-semibold transition-all ${
                   activeTab === 'about'
                     ? 'text-light-purple border-b-2 border-light-purple'
-                    : 'text-gray-600 hover:text-gray-900'
+                    : 'text-gray-500 hover:text-gray-900'
                 }`}
               >
                 About
               </button>
             </div>
 
-            {/* Tab Content */}
-            <div className="p-6">
+            <div className="p-6 md:p-8">
               {activeTab === 'posts' && (
                 <div className="space-y-6">
-                  {/* Private Profile Restriction Message */}
                   {profile.is_private && !isOwnProfile && !isFollowing && (
-                    <div className="text-center py-12 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300">
+                    <div className="text-center py-14 bg-gray-50 rounded-3xl border border-dashed border-gray-300">
                       <Lock size={48} className="mx-auto text-gray-400 mb-4" />
-                      <p className="text-gray-700 text-lg font-semibold mb-2">This Account is Private</p>
-                      <p className="text-gray-600 mb-4">
-                        Follow this account to see their posts
+                      <p className="text-gray-800 text-xl font-semibold mb-2">This account is private</p>
+                      <p className="text-gray-500 mb-6">
+                        Follow {profile.full_name || 'this creator'} to unlock their content.
                       </p>
                       <button
                         onClick={handleFollow}
-                        className="px-6 py-2 bg-light-purple text-white rounded-lg hover:bg-purple-700 transition-all"
+                        className="px-6 py-2.5 bg-light-purple text-white rounded-full hover:bg-purple-700 transition-all"
                       >
-                        Follow
+                        Request Follow
                       </button>
                     </div>
                   )}
-                  
+
                   {!profile.is_private || isOwnProfile || isFollowing ? (
                     posts.length === 0 ? (
-                      <div className="text-center py-12">
+                      <div className="text-center py-14 bg-gray-50 rounded-3xl">
                         <Mic size={48} className="mx-auto text-gray-400 mb-4" />
-                        <p className="text-gray-600 text-lg">No posts yet</p>
+                        <p className="text-gray-700 text-lg">No posts yet</p>
                         {isOwnProfile && (
                           <button
                             onClick={() => navigate('/create-podcast')}
-                            className="mt-4 px-6 py-2 bg-light-purple text-white rounded-lg hover:bg-purple-700"
+                            className="mt-4 px-6 py-2.5 bg-light-purple text-white rounded-full hover:bg-purple-700 transition-all"
                           >
-                            Create Your First Post
+                            Create your first post
                           </button>
                         )}
                       </div>
                     ) : (
-                      posts.map((post) => (
-                      <div key={post.id} className="border border-gray-200 rounded-xl p-4 hover:shadow-md transition-all">
-                        <h3 className="text-xl font-bold text-gray-900 mb-2">{post.podcastTitle}</h3>
-                        <p className="text-gray-600 mb-4">{post.description}</p>
-                        {post.video_url && (
-                          <video
-                            src={post.video_url}
-                            poster={post.thumbnail_url}
-                            className="w-full rounded-lg"
-                            controls
-                          />
-                        )}
-                        <div className="flex items-center gap-6 mt-4 text-sm text-gray-500">
-                          <span className="flex items-center gap-1">
-                            <Heart size={16} />
-                            {post.likes_count || 0}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <MessageCircle size={16} />
-                            {post.comments_count || 0}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Eye size={16} />
-                            {post.views_count || 0}
-                          </span>
-                        </div>
+                      <div className="space-y-6">
+                        {posts.map((post) => (
+                          <div
+                            key={post.id}
+                            className="border border-gray-100 rounded-3xl p-5 shadow-md hover:shadow-lg transition-all"
+                          >
+                            <div className="flex items-center justify-between mb-3">
+                              <div>
+                                <h3 className="text-xl font-bold text-gray-900">{post.podcastTitle}</h3>
+                                <p className="text-sm text-gray-500">
+                                  {new Date(post.created_at).toLocaleDateString('en-US', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    year: 'numeric'
+                                  })}
+                                </p>
+                              </div>
+                              <span className="text-xs font-semibold text-light-purple bg-purple-50 px-3 py-1 rounded-full">
+                                Podcast drop
+                              </span>
+                            </div>
+                            <p className="text-gray-700 mb-4">{post.description}</p>
+                            {post.video_url && (
+                              <div className="overflow-hidden rounded-2xl border border-gray-100 mb-4">
+                                <video
+                                  src={post.video_url}
+                                  poster={post.thumbnail_url}
+                                  className="w-full"
+                                  controls
+                                />
+                              </div>
+                            )}
+                            <div className="flex flex-wrap gap-6 text-sm text-gray-500">
+                              <span className="inline-flex items-center gap-1">
+                                <Heart size={16} />
+                                {post.likes_count || 0} Likes
+                              </span>
+                              <span className="inline-flex items-center gap-1">
+                                <MessageCircle size={16} />
+                                {post.comments_count || 0} Comments
+                              </span>
+                              <span className="inline-flex items-center gap-1">
+                                <Eye size={16} />
+                                {post.views_count || 0} Plays
+                              </span>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                      ))
                     )
                   ) : null}
                 </div>
               )}
 
               {activeTab === 'about' && (
-                <div className="space-y-6">
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Bio</h3>
-                    <p className="text-gray-700">
-                      {profile.bio || 'No bio available'}
+                <div className="grid gap-6 md:grid-cols-2">
+                  <div className="rounded-3xl border border-gray-100 p-6 bg-gradient-to-br from-purple-50 to-white">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-3">Story</h3>
+                    <p className="text-gray-700 leading-relaxed">
+                      {profile.bio || 'No bio yet. Share your vibe, mission, and what makes your pod unique!'}
                     </p>
                   </div>
-                  
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Account Information</h3>
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-3 text-gray-700">
-                        <Calendar size={18} className="text-gray-400" />
-                        <span>Joined {new Date(profile.created_at).toLocaleDateString('en-US', { 
-                          year: 'numeric', 
-                          month: 'long' 
-                        })}</span>
+                  <div className="rounded-3xl border border-gray-100 p-6 bg-white">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-3">Account information</h3>
+                    <div className="space-y-3 text-gray-700">
+                      <div className="flex items-center gap-3">
+                        <Calendar size={18} className="text-light-purple" />
+                        <span>{joinedDateLabel ? `Joined ${joinedDateLabel}` : 'Joining soon'}</span>
                       </div>
+                      <div className="flex items-center gap-3">
+                        <Lock size={18} className="text-light-purple" />
+                        <span>{profile.is_private ? 'Private profile' : 'Public profile'}</span>
+                      </div>
+                      {locationLabel && (
+                        <div className="flex items-center gap-3">
+                          <MapPin size={18} className="text-light-purple" />
+                          <span>{locationLabel}</span>
+                        </div>
+                      )}
+                      {websiteUrl && (
+                        <div className="flex items-center gap-3">
+                          <LinkIcon size={18} className="text-light-purple" />
+                          <a
+                            href={websiteUrl.startsWith('http') ? websiteUrl : `https://${websiteUrl}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-light-purple hover:underline"
+                          >
+                            {websiteUrl}
+                          </a>
+                        </div>
+                      )}
+                      {profile.email && (
+                        <div className="flex items-center gap-3">
+                          <Mail size={18} className="text-light-purple" />
+                          <span>{profile.email}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -699,225 +863,84 @@ const ProfilePage = () => {
         </div>
       </div>
 
-      {/* Edit Profile Modal */}
-      {showEditModal && (
+      {/* Modals */}
+      {showInfoModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
-          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-xl p-6 md:p-8 relative max-h-[90vh] overflow-y-auto">
+          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl p-6 md:p-8 relative max-h-[90vh] overflow-y-auto">
             <button
               className="absolute top-4 right-4 text-gray-400 hover:text-red-500 text-2xl"
-              onClick={handleCloseEditModal}
+              onClick={handleCloseInfoModal}
+              aria-label="Close"
             >
               ✕
             </button>
 
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Edit Profile</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">Profile details</h2>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Full Name
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Full name</label>
                 <input
                   type="text"
-                  value={editForm.full_name}
-                  onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
+                  value={infoForm.full_name}
+                  onChange={(e) => setInfoForm({ ...infoForm, full_name: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-light-purple"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Username
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Username</label>
                 <input
                   type="text"
-                  value={editForm.username}
-                  onChange={(e) => setEditForm({ ...editForm, username: e.target.value.toLowerCase() })}
+                  value={infoForm.username}
+                  onChange={(e) => setInfoForm({ ...infoForm, username: e.target.value.toLowerCase() })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-light-purple"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Bio
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Bio</label>
                 <textarea
-                  value={editForm.bio}
-                  onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })}
+                  value={infoForm.bio}
+                  onChange={(e) => setInfoForm({ ...infoForm, bio: e.target.value })}
                   rows={4}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-light-purple"
-                  placeholder="Tell us about yourself..."
                   maxLength={160}
+                  placeholder="Tell the community about your tone, topics and vibe..."
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-light-purple"
                 />
-                <p className="text-xs text-gray-500 mt-1">{editForm.bio?.length || 0}/160</p>
+                <p className="text-xs text-gray-500 mt-1">{infoForm.bio?.length || 0}/160</p>
               </div>
 
-              {/* Profile Picture Upload */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Profile Picture
-                </label>
-                <div className="flex items-center gap-4">
-                  <div className="relative">
-                    <img
-                      src={avatarPreview || editForm.profile_url || ProfileMarry}
-                      alt="Profile"
-                      className="w-20 h-20 rounded-full border-2 border-gray-300 object-cover"
-                      onError={(e) => {
-                        e.target.src = ProfileMarry;
-                      }}
-                    />
-                    {avatarPreview && (
-                      <button
-                        onClick={() => {
-                          setAvatarFile(null);
-                          setAvatarPreview(null);
-                        }}
-                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
-                      >
-                        <XCircle size={16} />
-                      </button>
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <label className="block">
-                      <div className="flex items-center gap-3 px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg hover:border-purple-400 hover:bg-purple-50/50 transition-all cursor-pointer">
-                        <Camera className="text-purple-600" size={20} />
-                        <div className="flex-1">
-                          <p className="text-sm font-semibold text-gray-800">
-                            {avatarFile ? 'Change profile picture' : 'Upload a photo'}
-                          </p>
-                          <p className="text-xs text-gray-600">JPG, PNG or GIF • Max 5MB</p>
-                        </div>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleAvatarChange}
-                          className="hidden"
-                        />
-                      </div>
-                    </label>
-                  </div>
-                </div>
-                {!avatarFile && (
-                  <div className="mt-2">
-                    <label className="block text-xs text-gray-600 mb-1">Or enter image URL:</label>
-                    <input
-                      type="url"
-                      value={editForm.profile_url}
-                      onChange={(e) => setEditForm({ ...editForm, profile_url: e.target.value })}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-light-purple"
-                      placeholder="https://..."
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* Cover Image Upload */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Cover Image
-                </label>
-                <div className="relative">
-                  <div className="w-full h-32 rounded-lg overflow-hidden border-2 border-dashed border-gray-300 bg-gray-50">
-                    {coverPreview || editForm.cover_image_url ? (
-                      <div className="relative w-full h-full">
-                        <img
-                          src={coverPreview || editForm.cover_image_url}
-                          alt="Cover"
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            e.target.style.display = 'none';
-                          }}
-                        />
-                        {coverPreview && (
-                          <button
-                            onClick={() => {
-                              setCoverFile(null);
-                              setCoverPreview(null);
-                            }}
-                            className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
-                          >
-                            <XCircle size={16} />
-                          </button>
-                        )}
-                        <label className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/20 transition-all cursor-pointer">
-                          <div className="bg-white/90 backdrop-blur-sm px-4 py-2 rounded-lg flex items-center gap-2 opacity-0 hover:opacity-100 transition-opacity">
-                            <Camera className="text-purple-600" size={20} />
-                            <span className="text-sm font-semibold text-gray-800">Change cover</span>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={handleCoverChange}
-                              className="hidden"
-                            />
-                          </div>
-                        </label>
-                      </div>
-                    ) : (
-                      <label className="w-full h-full flex flex-col items-center justify-center cursor-pointer group">
-                        <div className="p-2 bg-purple-100 rounded-lg group-hover:bg-purple-200 transition-colors mb-2">
-                          <Camera className="text-purple-600" size={24} />
-                        </div>
-                        <p className="text-sm font-semibold text-gray-800 mb-1">Upload cover image</p>
-                        <p className="text-xs text-gray-600">JPG, PNG or GIF • Max 5MB</p>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleCoverChange}
-                          className="hidden"
-                        />
-                      </label>
-                    )}
-                  </div>
-                </div>
-                {!coverFile && (
-                  <div className="mt-2">
-                    <label className="block text-xs text-gray-600 mb-1">Or enter image URL:</label>
-                    <input
-                      type="url"
-                      value={editForm.cover_image_url}
-                      onChange={(e) => setEditForm({ ...editForm, cover_image_url: e.target.value })}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-light-purple"
-                      placeholder="https://..."
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* Privacy Setting */}
               <div className="border-t border-gray-200 pt-4">
-                <label className="block text-sm font-medium text-gray-700 mb-3">
-                  Account Privacy
-                </label>
-                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <label className="block text-sm font-medium text-gray-700 mb-3">Account privacy</label>
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
                   <div className="flex items-center gap-3">
-                    {editForm.is_private ? (
-                      <Lock size={24} className="text-gray-600" />
+                    {infoForm.is_private ? (
+                      <Lock size={22} className="text-gray-600" />
                     ) : (
-                      <Globe size={24} className="text-gray-600" />
+                      <Globe size={22} className="text-gray-600" />
                     )}
                     <div>
-                      <p className="font-medium text-gray-900">
-                        {editForm.is_private ? 'Private Account' : 'Public Account'}
+                      <p className="font-semibold text-gray-900">
+                        {infoForm.is_private ? 'Private account' : 'Public account'}
                       </p>
                       <p className="text-sm text-gray-500">
-                        {editForm.is_private 
-                          ? 'Only approved followers can see your posts' 
-                          : 'Anyone can see your posts and profile'}
+                        {infoForm.is_private
+                          ? 'Only followers you approve can see content.'
+                          : 'Anyone on PodVerse can discover your work.'}
                       </p>
                     </div>
                   </div>
                   <button
                     type="button"
-                    onClick={() => setEditForm({ ...editForm, is_private: !editForm.is_private })}
+                    onClick={() => setInfoForm({ ...infoForm, is_private: !infoForm.is_private })}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      editForm.is_private ? 'bg-light-purple' : 'bg-gray-300'
+                      infoForm.is_private ? 'bg-light-purple' : 'bg-gray-300'
                     }`}
                   >
                     <span
                       className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        editForm.is_private ? 'translate-x-6' : 'translate-x-1'
+                        infoForm.is_private ? 'translate-x-6' : 'translate-x-1'
                       }`}
                     />
                   </button>
@@ -927,27 +950,199 @@ const ProfilePage = () => {
 
             <div className="flex gap-3 mt-6">
               <button
-                onClick={handleUpdateProfile}
+                onClick={handleUpdateInfo}
                 disabled={isUpdating}
-                className={`flex-1 px-6 py-3 bg-light-purple text-white rounded-lg hover:bg-purple-700 transition-all font-medium ${
+                className={`flex-1 px-6 py-3 bg-light-purple text-white rounded-xl hover:bg-purple-700 transition-all font-medium ${
                   isUpdating ? 'opacity-50 cursor-not-allowed' : ''
                 }`}
               >
-                {isUpdating ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                    Updating...
-                  </span>
-                ) : (
-                  'Save Changes'
-                )}
+                {isUpdating ? 'Saving...' : 'Save changes'}
               </button>
               <button
-                onClick={handleCloseEditModal}
+                onClick={handleCloseInfoModal}
                 disabled={isUpdating}
-                className={`flex-1 px-6 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all font-medium ${
+                className="flex-1 px-6 py-3 bg-gray-100 text-gray-800 rounded-xl hover:bg-gray-200 transition-all font-medium"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAvatarModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+          <div className="bg-white w-full max-w-xl rounded-2xl shadow-2xl p-6 md:p-8 relative">
+            <button
+              className="absolute top-4 right-4 text-gray-400 hover:text-red-500 text-2xl"
+              onClick={handleCloseAvatarModal}
+              aria-label="Close"
+            >
+              ✕
+            </button>
+
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">Update profile photo</h2>
+            <p className="text-sm text-gray-500 mb-6">Keep it crisp, centered, and on-brand.</p>
+
+            <div className="flex flex-col md:flex-row gap-6">
+              <div className="flex flex-col items-center gap-3">
+                <img
+                  src={avatarPreview || avatarForm.profile_url || profile.profile_url || ProfileMarry}
+                  alt="Profile preview"
+                  className="w-36 h-36 rounded-3xl object-cover border-4 border-white shadow-lg bg-gray-100"
+                  onError={(e) => {
+                    e.target.src = ProfileMarry;
+                  }}
+                />
+                {avatarFile && (
+                  <button
+                    onClick={() => {
+                      setAvatarFile(null);
+                      setAvatarPreview(null);
+                    }}
+                    className="text-sm text-red-500 hover:text-red-600"
+                  >
+                    Remove upload
+                  </button>
+                )}
+              </div>
+
+              <div className="flex-1 space-y-4">
+                <label className="block">
+                  <span className="text-sm font-medium text-gray-700 mb-2 block">Upload a new photo</span>
+                  <div className="p-4 border-2 border-dashed border-gray-300 rounded-2xl hover:border-light-purple hover:bg-purple-50/40 transition-all cursor-pointer text-center">
+                    <Camera className="mx-auto text-light-purple mb-2" size={24} />
+                    <p className="text-sm font-semibold text-gray-800">Drag & drop or browse</p>
+                    <p className="text-xs text-gray-500">JPG, PNG, GIF • Max 5MB</p>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleAvatarChange}
+                      className="hidden"
+                    />
+                  </div>
+                </label>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Or paste image URL</label>
+                  <input
+                    type="url"
+                    value={avatarForm.profile_url}
+                    onChange={(e) => setAvatarForm({ profile_url: e.target.value })}
+                    disabled={!!avatarFile}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-light-purple disabled:bg-gray-100"
+                    placeholder="https://..."
+                  />
+                  {avatarFile && (
+                    <p className="text-xs text-gray-500 mt-1">Remove the uploaded file to enable URL input.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-8">
+              <button
+                onClick={handleUpdateAvatar}
+                disabled={isUpdating}
+                className={`flex-1 px-6 py-3 bg-light-purple text-white rounded-xl hover:bg-purple-700 transition-all font-medium ${
                   isUpdating ? 'opacity-50 cursor-not-allowed' : ''
                 }`}
+              >
+                {isUpdating ? 'Saving...' : 'Save photo'}
+              </button>
+              <button
+                onClick={handleCloseAvatarModal}
+                disabled={isUpdating}
+                className="flex-1 px-6 py-3 bg-gray-100 text-gray-800 rounded-xl hover:bg-gray-200 transition-all font-medium"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCoverModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+          <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl p-6 md:p-8 relative max-h-[90vh] overflow-y-auto">
+            <button
+              className="absolute top-4 right-4 text-gray-400 hover:text-red-500 text-2xl"
+              onClick={handleCloseCoverModal}
+              aria-label="Close"
+            >
+              ✕
+            </button>
+
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">Refresh cover art</h2>
+            <p className="text-sm text-gray-500 mb-6">
+              Go widescreen (16:9) for the best hero moment across devices.
+            </p>
+
+            <div className="rounded-3xl border-2 border-dashed border-gray-200 bg-gray-50 overflow-hidden mb-6 h-56 relative">
+              {coverPreview || coverForm.cover_image_url || profile.cover_image_url ? (
+                <img
+                  src={coverPreview || coverForm.cover_image_url || profile.cover_image_url}
+                  alt="Cover preview"
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                  }}
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-gray-500">
+                  <Camera size={32} className="mb-2 text-light-purple" />
+                  No cover selected yet
+                </div>
+              )}
+              <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-black/20 to-transparent" />
+            </div>
+
+            <div className="space-y-4">
+              <label className="block">
+                <span className="text-sm font-medium text-gray-700 mb-2 block">Upload an image</span>
+                <div className="p-5 border-2 border-dashed border-gray-300 rounded-2xl hover:border-light-purple hover:bg-purple-50/40 transition-all cursor-pointer text-center">
+                  <Camera className="mx-auto text-light-purple mb-2" size={26} />
+                  <p className="text-sm font-semibold text-gray-800">Drop an image here or click to browse</p>
+                  <p className="text-xs text-gray-500">High-res JPG, PNG, GIF • Max 5MB</p>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleCoverChange}
+                    className="hidden"
+                  />
+                </div>
+              </label>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Or paste cover URL</label>
+                <input
+                  type="url"
+                  value={coverForm.cover_image_url}
+                  onChange={(e) => setCoverForm({ cover_image_url: e.target.value })}
+                  disabled={!!coverFile}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-light-purple disabled:bg-gray-100"
+                  placeholder="https://..."
+                />
+                {coverFile && (
+                  <p className="text-xs text-gray-500 mt-1">Remove the uploaded file to enable URL input.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-8">
+              <button
+                onClick={handleUpdateCover}
+                disabled={isUpdating}
+                className={`flex-1 px-6 py-3 bg-light-purple text-white rounded-xl hover:bg-purple-700 transition-all font-medium ${
+                  isUpdating ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
+              >
+                {isUpdating ? 'Saving...' : 'Save cover'}
+              </button>
+              <button
+                onClick={handleCloseCoverModal}
+                disabled={isUpdating}
+                className="flex-1 px-6 py-3 bg-gray-100 text-gray-800 rounded-xl hover:bg-gray-200 transition-all font-medium"
               >
                 Cancel
               </button>

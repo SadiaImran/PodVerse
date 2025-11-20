@@ -1,7 +1,6 @@
 // src/context/AuthContext.jsx
 import { createContext, useContext, useEffect, useState } from "react";
-import { supabase } from "../../connection_supabase_client";
-
+import { supabase } from "../supabaseClient.js";
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {

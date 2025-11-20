@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../../connection_supabase_client';
+import { supabase } from '../supabaseClient.js';
 import { useAuth } from '../context/AuthContext';
 import { User, Lock, Globe, Camera, CheckCircle, XCircle, UserCircle } from 'lucide-react';
 import ProfileMarry from '../images/icon-profile-marry.png';

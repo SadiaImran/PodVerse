@@ -4,7 +4,7 @@ import { FiSearch, FiLogOut, FiMenu } from "react-icons/fi";
 import { HiOutlineBell } from "react-icons/hi2";
 import ProfileMarry from "../../images/icon-profile-marry.png";
 import Logo from "../../images/logo.png";
-import { supabase } from "../../../connection_supabase_client";
+import { supabase } from "../../supabaseClient.js";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext"; // adjust path if needed
 

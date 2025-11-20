@@ -75,7 +75,7 @@ const PostCard = ({ post }) => {
           className="w-full aspect-video object-cover bg-gray-100"
           poster={post.thumbnail_url}
           onPlay={() => setIsPlaying(true)}
-          onPause={() => setIsPlaying(false)}s
+          onPause={() => setIsPlaying(false)}
           onLoadedMetadata={() => {
             if (videoRef) {
               setIsMuted(videoRef.muted);

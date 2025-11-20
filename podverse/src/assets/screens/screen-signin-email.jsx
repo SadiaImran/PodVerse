@@ -10,7 +10,7 @@ import AuthFields from "../components/shared/AuthFields.jsx";
 import { FaRegEnvelope, FaGoogle, FaPodcast, FaHeadphones } from "react-icons/fa";
 import { MdOutlineLock, MdWaves} from "react-icons/md";
 import ImageCarousel from "../components/comp-signin/ImageCarousel.jsx";
-import { supabase } from "../../connection_supabase_client.js";
+import { supabase } from "../supabaseClient.js";
 
 function SignInScreenEmail() {
   const [email, setEmail] = useState("");
@@ -37,20 +37,29 @@ function SignInScreenEmail() {
           setPasswordError(error.message);
         }
       } else {
-        // Check if user has completed onboarding
         if (data?.user) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('onboarding_complete')
-            .eq('id', data.user.id)
-            .single();
-          
-          // If profile doesn't exist or onboarding_complete is false, redirect to onboarding
-          if (!profile || profile.onboarding_complete === false) {
-            navigate("/onboarding");
-          } else {
-            navigate("/home");
+          const userId = data.user.id;
+
+          const { data: profile, error: profileError } = await supabase
+            .from("profiles")
+            .select("onboarding_complete")
+            .eq("id", userId)
+            .maybeSingle(); // ⭐ Use maybeSingle() (does NOT throw error if no row)
+
+          console.log("PROFILE RESULT:", profile);
+
+          // CASE 1: No profile row → new user → onboard
+          if (!profile) {
+            return navigate("/onboarding");
           }
+
+          // CASE 2: Profile exists but onboarding incomplete → onboard
+          if (profile.onboarding_complete === false) {
+            return navigate("/onboarding");
+          }
+          // CASE 3: Profile exists + onboarding complete → go home / create podcast
+          return navigate("/home");
+        
         } else {
           navigate("/home");
         }
