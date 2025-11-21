@@ -1360,12 +1360,6 @@ const ProfilePage = () => {
     fetchFollowing();
   };
 
-  const totalViews = posts.reduce((sum, post) => sum + (post.views_count || 0), 0);
-  const totalLikes = posts.reduce((sum, post) => sum + (post.likes_count || 0), 0);
-  const totalComments = posts.reduce((sum, post) => sum + (post.comments_count || 0), 0);
-  const engagementRate = totalViews > 0
-    ? Math.min(100, Math.round(((totalLikes + totalComments) / totalViews) * 100))
-    : 0;
   const websiteUrl = profile?.website_url || profile?.website || '';
   const locationLabel = profile?.location || profile?.city || '';
   const joinedDateLabel = profile?.created_at
@@ -1596,11 +1590,6 @@ const ProfilePage = () => {
                 <p className="text-sm text-gray-500">Following</p>
                 <p className="text-3xl font-bold text-gray-900 mt-1">{profile.following_count || 0}</p>
                 <span className="text-xs text-gray-400">Collabs</span>
-              </div>
-              <div className="rounded-2xl border border-[#FFDDE7] bg-gradient-to-br from-[#FFDDE7] via-white to-white p-5 shadow-sm">
-                <p className="text-sm text-gray-500">Engagement</p>
-                <p className="text-3xl font-bold text-gray-900 mt-1">{engagementRate}%</p>
-                <span className="text-xs text-gray-400">Likes + comments</span>
               </div>
             </div>
           </div>

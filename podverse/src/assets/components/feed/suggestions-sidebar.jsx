@@ -2,22 +2,234 @@ import React, { useState, useEffect } from 'react';
 import { UserPlus, TrendingUp, Sparkles, Tag } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../supabaseClient.js';
+import { useAuth } from '../../context/AuthContext';
 import ProfileMarry from '../../images/icon-profile-marry.png';
 
 const API_BASE_URL = 'http://localhost:8000';
 
 const SuggestionsSidebar = () => {
   const navigate = useNavigate();
+  const { user: currentUser } = useAuth();
   const [suggestedUsers, setSuggestedUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [followingMap, setFollowingMap] = useState({});
   const [trendingTags, setTrendingTags] = useState([]);
   const [loadingTags, setLoadingTags] = useState(true);
+  
+  // Impact stats
+  const [impactStats, setImpactStats] = useState({
+    totalPlays: 0,
+    followers: 0,
+    monthlyGrowth: 0
+  });
+  const [loadingStats, setLoadingStats] = useState(true);
+
+  // Fetch user impact stats
+  const fetchImpactStats = async () => {
+    if (!currentUser?.id) return;
+    
+    setLoadingStats(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setLoadingStats(false);
+        return;
+      }
+
+      // Fetch user's profile for followers count
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('followers_count')
+        .eq('id', currentUser.id)
+        .single();
+
+      const followers = profile?.followers_count || 0;
+
+      let totalPlays = 0;
+      let currentMonthViews = 0;
+      let previousMonthViews = 0;
+
+      // Try to fetch from API first
+      try {
+        const response = await fetch(`${API_BASE_URL}/posts/user/${currentUser.id}`, {
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success && result.posts) {
+            // Calculate date ranges for current and previous month
+            const now = new Date();
+            const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+            const previousMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            const previousMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+
+            result.posts.forEach(post => {
+              const views = post.views_count || post.views || 0;
+              totalPlays += views;
+
+              // Calculate monthly views based on post creation date
+              // Note: This counts ALL views of posts created in that month
+              // For more accuracy, you'd need view timestamps in the database
+              const postDate = new Date(post.created_at);
+              if (postDate >= currentMonthStart) {
+                // Post created this month - count all its views
+                currentMonthViews += views;
+              } else if (postDate >= previousMonthStart && postDate <= previousMonthEnd) {
+                // Post created last month - count its views for comparison
+                previousMonthViews += views;
+              }
+            });
+          }
+        }
+      } catch (apiError) {
+        console.warn('API fetch failed, using Supabase fallback:', apiError);
+      }
+
+      // Fallback to Supabase if API fails or returns no data
+      if (totalPlays === 0) {
+        const { data: postsData } = await supabase
+          .from('posts')
+          .select('views, views_count, created_at')
+          .eq('user_id', currentUser.id);
+
+        if (postsData && postsData.length > 0) {
+          const now = new Date();
+          const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+          const previousMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+          const previousMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+
+          postsData.forEach(post => {
+            const views = post.views_count || post.views || 0;
+            totalPlays += views;
+
+            const postDate = new Date(post.created_at);
+            if (postDate >= currentMonthStart) {
+              currentMonthViews += views;
+            } else if (postDate >= previousMonthStart && postDate <= previousMonthEnd) {
+              previousMonthViews += views;
+            }
+          });
+        }
+      }
+
+      // Calculate monthly growth percentage
+      // Formula: ((Current Month Views - Previous Month Views) / Previous Month Views) * 100
+      let monthlyGrowth = 0;
+      if (previousMonthViews > 0) {
+        monthlyGrowth = Math.round(((currentMonthViews - previousMonthViews) / previousMonthViews) * 100);
+      } else if (currentMonthViews > 0) {
+        monthlyGrowth = 100; // New content this month (infinite growth from 0)
+      }
+
+      setImpactStats({
+        totalPlays,
+        followers,
+        monthlyGrowth
+      });
+    } catch (error) {
+      console.error('Error fetching impact stats:', error);
+    } finally {
+      setLoadingStats(false);
+    }
+  };
 
   useEffect(() => {
     fetchSuggestions();
     fetchTrendingTags();
-  }, []);
+    if (currentUser) {
+      fetchImpactStats();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser]);
+
+  // Set up realtime listeners for impact stats updates
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    let profileChannel = null;
+    let postsChannel = null;
+    let refreshInterval = null;
+    let mounted = true;
+
+    const setupRealtime = async () => {
+      try {
+        // Listen for profile updates (followers count)
+        profileChannel = supabase
+          .channel(`impact:profile:${currentUser.id}`)
+          .on(
+            'postgres_changes',
+            {
+              event: 'UPDATE',
+              schema: 'public',
+              table: 'profiles',
+              filter: `id=eq.${currentUser.id}`,
+            },
+            (payload) => {
+              if (!mounted) return;
+              // Update followers count in real-time
+              setImpactStats(prev => ({
+                ...prev,
+                followers: payload.new.followers_count || prev.followers
+              }));
+            }
+          )
+          .subscribe();
+
+        // Listen for posts updates (views count) - only for current user's posts
+        postsChannel = supabase
+          .channel(`impact:posts:${currentUser.id}`)
+          .on(
+            'postgres_changes',
+            {
+              event: 'UPDATE',
+              schema: 'public',
+              table: 'posts',
+              filter: `user_id=eq.${currentUser.id}`,
+            },
+            async (payload) => {
+              if (!mounted) return;
+              
+              // When a post's views are updated, recalculate total plays
+              const oldViews = payload.old?.views || payload.old?.views_count || 0;
+              const newViews = payload.new?.views || payload.new?.views_count || 0;
+              const viewsDiff = newViews - oldViews;
+
+              if (viewsDiff !== 0) {
+                // Update total plays in real-time
+                setImpactStats(prev => ({
+                  ...prev,
+                  totalPlays: Math.max(0, prev.totalPlays + viewsDiff)
+                }));
+              }
+            }
+          )
+          .subscribe();
+
+        // Also set up periodic refresh as fallback (every 30 seconds)
+        // This ensures stats stay updated even if realtime doesn't catch everything
+        refreshInterval = setInterval(() => {
+          if (mounted) {
+            fetchImpactStats();
+          }
+        }, 30000); // Refresh every 30 seconds
+
+      } catch (error) {
+        console.error('Error setting up impact realtime:', error);
+      }
+    };
+
+    setupRealtime();
+
+    return () => {
+      mounted = false;
+      if (profileChannel) supabase.removeChannel(profileChannel);
+      if (postsChannel) supabase.removeChannel(postsChannel);
+      if (refreshInterval) clearInterval(refreshInterval);
+    };
+  }, [currentUser]);
 
   // Fetch trending tags
   const fetchTrendingTags = async () => {
@@ -359,27 +571,56 @@ const SuggestionsSidebar = () => {
         )}
       </div>
 
-      {/* Quick Stats */}
-      <div className="bg-gradient-to-br from-purple-600 via-pink-600 to-purple-700 rounded-2xl p-6 text-white shadow-xl">
-        <div className="flex items-center gap-2 mb-4">
-          <Sparkles className="w-5 h-5" />
-          <h3 className="font-bold text-lg">Your Impact</h3>
+      {/* Quick Stats - Your Impact */}
+      {currentUser && (
+        <div className="bg-gradient-to-br from-purple-600 via-pink-600 to-purple-700 rounded-2xl p-6 text-white shadow-xl">
+          <div className="flex items-center gap-2 mb-4">
+            <Sparkles className="w-5 h-5" />
+            <h3 className="font-bold text-lg">Your Impact</h3>
+          </div>
+          {loadingStats ? (
+            <div className="space-y-4">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="p-3 bg-white/10 backdrop-blur-sm rounded-xl animate-pulse">
+                  <div className="h-4 bg-white/20 rounded w-24 mb-2"></div>
+                  <div className="h-6 bg-white/20 rounded w-16"></div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex justify-between items-center p-3 bg-white/10 backdrop-blur-sm rounded-xl">
+                <span className="text-purple-100 text-sm">Total Plays</span>
+                <span className="font-bold text-lg">
+                  {impactStats.totalPlays >= 1000 
+                    ? `${(impactStats.totalPlays / 1000).toFixed(1)}K`
+                    : impactStats.totalPlays.toLocaleString()}
+                </span>
+              </div>
+              <div className="flex justify-between items-center p-3 bg-white/10 backdrop-blur-sm rounded-xl">
+                <span className="text-purple-100 text-sm">Followers</span>
+                <span className="font-bold text-lg">
+                  {impactStats.followers >= 1000
+                    ? `${(impactStats.followers / 1000).toFixed(1)}K`
+                    : impactStats.followers.toLocaleString()}
+                </span>
+              </div>
+              <div className="flex justify-between items-center p-3 bg-white/10 backdrop-blur-sm rounded-xl">
+                <span className="text-purple-100 text-sm">This Month</span>
+                <span className={`font-bold text-lg ${
+                  impactStats.monthlyGrowth > 0 
+                    ? 'text-green-300' 
+                    : impactStats.monthlyGrowth < 0 
+                    ? 'text-red-300' 
+                    : 'text-white'
+                }`}>
+                  {impactStats.monthlyGrowth > 0 ? '+' : ''}{impactStats.monthlyGrowth}%
+                </span>
+              </div>
+            </div>
+          )}
         </div>
-        <div className="space-y-4">
-          <div className="flex justify-between items-center p-3 bg-white/10 backdrop-blur-sm rounded-xl">
-            <span className="text-purple-100 text-sm">Total Plays</span>
-            <span className="font-bold text-lg">12.4K</span>
-          </div>
-          <div className="flex justify-between items-center p-3 bg-white/10 backdrop-blur-sm rounded-xl">
-            <span className="text-purple-100 text-sm">Followers</span>
-            <span className="font-bold text-lg">847</span>
-          </div>
-          <div className="flex justify-between items-center p-3 bg-white/10 backdrop-blur-sm rounded-xl">
-            <span className="text-purple-100 text-sm">This Month</span>
-            <span className="font-bold text-lg text-green-300">+23%</span>
-          </div>
-        </div>
-      </div>
+      )}
     </div>
   );
 };
