@@ -290,8 +290,24 @@ export default function TopBar({ open, onMenuClick }) {
   }, []);
 
   const handleLogout = async () => {
-    await logout();
-    window.location.href = "/signin-email"; // full redirect clears cached session
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error("Logout error:", error);
+      }
+
+      await logout();
+
+      localStorage.clear();
+      sessionStorage.clear();
+      
+      console.log("✅ Logout complete, redirecting to signin...");
+      
+      navigate("/signin-email", { replace: true });
+    } catch (err) {
+      console.error("❌ Logout error:", err);
+      navigate("/signin-email", { replace: true });
+    }
   };
   
   const handleSaveProfile = async () => {

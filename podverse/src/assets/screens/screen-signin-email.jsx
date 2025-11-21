@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from 'react-router-dom';
 import TopBar from "../components/shared/TopBar.jsx";
 import AuthWelcome from "../components/shared/AuthWelcome.jsx";
@@ -22,51 +22,102 @@ function SignInScreenEmail() {
 
   const navigate = useNavigate();
 
+  // Check if user is already logged in on component mount
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        // User is already logged in, redirect them
+        const userId = session.user.id;
+        
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("onboarding_complete")
+          .eq("id", userId)
+          .maybeSingle();
+
+        if (!profile || profile.onboarding_complete === false) {
+          navigate("/onboarding", { replace: true });
+        } else {
+          navigate("/home", { replace: true });
+        }
+      }
+    };
+
+    checkSession();
+  }, [navigate]);
+
   const handleContinue = async () => {
+    // Validate inputs first
+    if (!email.trim()) {
+      setEmailError("Please enter your email");
+      return;
+    }
+
+    if (!password.trim()) {
+      setPasswordError("Please enter your password");
+      return;
+    }
+
     try {
       setIsLoading(true);
       setEmailError("");
       setPasswordError("");
+  
+      console.log("Attempting sign in with email:", email);
 
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await supabase.auth.signInWithPassword({ 
+        email: email.trim(), 
+        password: password 
+      });
+  
+      console.log("Sign in response:", { data, error });
 
       if (error) {
+        console.error("Sign in error:", error);
         if (error.message.includes("Invalid login credentials")) {
           setPasswordError("Incorrect email or password.");
         } else {
           setPasswordError(error.message);
         }
-      } else {
-        if (data?.user) {
-          const userId = data.user.id;
+        setIsLoading(false);
+        return;
+      }
+  
+      if (data?.user) {
+        const userId = data.user.id;
+        console.log("User authenticated:", userId);
+  
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("onboarding_complete")
+          .eq("id", userId)
+          .maybeSingle();
+  
+        console.log("PROFILE RESULT:", profile);
 
-          const { data: profile, error: profileError } = await supabase
-            .from("profiles")
-            .select("onboarding_complete")
-            .eq("id", userId)
-            .maybeSingle(); // ⭐ Use maybeSingle() (does NOT throw error if no row)
-
-          console.log("PROFILE RESULT:", profile);
-
-          // CASE 1: No profile row → new user → onboard
-          if (!profile) {
-            return navigate("/onboarding");
-          }
-
-          // CASE 2: Profile exists but onboarding incomplete → onboard
-          if (profile.onboarding_complete === false) {
-            return navigate("/onboarding");
-          }
-          // CASE 3: Profile exists + onboarding complete → go home / create podcast
-          return navigate("/home");
-        
-        } else {
-          navigate("/home");
+        if (profileError) {
+          console.error("Profile fetch error:", profileError);
         }
+  
+        let targetRoute = "/home";
+  
+        if (!profile || profile.onboarding_complete === false) {
+          targetRoute = "/onboarding";
+        }
+  
+        console.log("Navigating to:", targetRoute);
+        
+        // Use replace: true to prevent back button issues
+        navigate(targetRoute, { replace: true });
+      } else {
+        console.error("No user data returned");
+        setPasswordError("Authentication failed. Please try again.");
+        setIsLoading(false);
       }
     } catch (err) {
+      console.error("Sign in error:", err);
       setPasswordError("Something went wrong. Please try again.");
-    } finally {
       setIsLoading(false);
     }
   };
@@ -80,6 +131,14 @@ function SignInScreenEmail() {
     setPassword(e.target.value);
     setPasswordError("");
   };
+
+  // Handle Enter key press
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      handleContinue();
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex flex-col relative overflow-hidden">
       {/* Animated Background Elements */}
@@ -179,7 +238,7 @@ function SignInScreenEmail() {
                       </div>
 
                       {/* Form Fields with Enhanced Design */}
-                      <div className="space-y-5">
+                      <div className="space-y-5" onKeyPress={handleKeyPress}>
                         {/* Email Field */}
                         <div className="space-y-2">
                           <div className="relative group">
