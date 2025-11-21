@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { UserPlus, TrendingUp, Sparkles } from 'lucide-react';
+import { UserPlus, TrendingUp, Sparkles, Tag } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../supabaseClient.js';
 import ProfileMarry from '../../images/icon-profile-marry.png';
@@ -11,10 +11,43 @@ const SuggestionsSidebar = () => {
   const [suggestedUsers, setSuggestedUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [followingMap, setFollowingMap] = useState({});
+  const [trendingTags, setTrendingTags] = useState([]);
+  const [loadingTags, setLoadingTags] = useState(true);
 
   useEffect(() => {
     fetchSuggestions();
+    fetchTrendingTags();
   }, []);
+
+  // Fetch trending tags
+  const fetchTrendingTags = async () => {
+    try {
+      setLoadingTags(true);
+      const { data, error } = await supabase
+        .from('tags')
+        .select('*')
+        .order('usage_count', { ascending: false })
+        .limit(6);
+
+      if (error) {
+        console.error('Error fetching trending tags:', error);
+        return;
+      }
+
+      if (data) {
+        setTrendingTags(data);
+      }
+    } catch (err) {
+      console.error('Error fetching trending tags:', err);
+    } finally {
+      setLoadingTags(false);
+    }
+  };
+
+  // Handle tag click - navigate to search with tag filter
+  const handleTagClick = (tagName) => {
+    navigate(`/search?tag=${encodeURIComponent(tagName)}`);
+  };
 
   // Set up Realtime listeners for follow status and profile updates
   useEffect(() => {
@@ -185,11 +218,14 @@ const SuggestionsSidebar = () => {
     }
   };
 
-  const trendingTopics = [
-    { tag: '#AI2025', posts: '2.3k posts', color: 'from-purple-500 to-pink-500' },
-    { tag: '#PodcastTips', posts: '1.8k posts', color: 'from-blue-500 to-cyan-500' },
-    { tag: '#TechTrends', posts: '956 posts', color: 'from-green-500 to-emerald-500' },
-    { tag: '#CreativeMinds', posts: '743 posts', color: 'from-orange-500 to-red-500' },
+  // Color gradients for tags
+  const tagColors = [
+    'from-purple-500 to-pink-500',
+    'from-blue-500 to-cyan-500',
+    'from-green-500 to-emerald-500',
+    'from-orange-500 to-red-500',
+    'from-indigo-500 to-purple-500',
+    'from-pink-500 to-rose-500',
   ];
 
   return (
@@ -286,22 +322,41 @@ const SuggestionsSidebar = () => {
             Trending Now
           </h3>
         </div>
-        <div className="space-y-3">
-          {trendingTopics.map((topic, idx) => (
-            <div 
-              key={idx} 
-              className="hover:bg-gradient-to-r hover:from-purple-50 hover:to-pink-50 p-3 rounded-xl cursor-pointer transition-all group"
-            >
-              <div className="flex items-center justify-between mb-1">
-                <p className="font-bold text-gray-900 text-sm group-hover:text-purple-600 transition-colors">
-                  {topic.tag}
-                </p>
-                <div className={`w-2 h-2 rounded-full bg-gradient-to-r ${topic.color}`}></div>
+        {loadingTags ? (
+          <div className="space-y-3">
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="p-3 rounded-xl animate-pulse">
+                <div className="h-4 bg-gray-200 rounded w-24 mb-2"></div>
+                <div className="h-3 bg-gray-200 rounded w-16"></div>
               </div>
-              <p className="text-gray-500 text-xs">{topic.posts}</p>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : trendingTags.length > 0 ? (
+          <div className="space-y-3">
+            {trendingTags.map((tag, idx) => (
+              <div 
+                key={tag.id} 
+                onClick={() => handleTagClick(tag.name)}
+                className="hover:bg-gradient-to-r hover:from-purple-50 hover:to-pink-50 p-3 rounded-xl cursor-pointer transition-all group"
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    <Tag size={14} className="text-gray-400 group-hover:text-purple-600 transition-colors" />
+                    <p className="font-bold text-gray-900 text-sm group-hover:text-purple-600 transition-colors">
+                      #{tag.name}
+                    </p>
+                  </div>
+                  <div className={`w-2 h-2 rounded-full bg-gradient-to-r ${tagColors[idx % tagColors.length]}`}></div>
+                </div>
+                <p className="text-gray-500 text-xs">
+                  {tag.usage_count || 0} {tag.usage_count === 1 ? 'post' : 'posts'}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-gray-500 text-sm text-center py-4">No trending topics yet</p>
+        )}
       </div>
 
       {/* Quick Stats */}

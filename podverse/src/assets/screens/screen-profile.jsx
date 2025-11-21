@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient.js';
 import { useAuth } from '../context/AuthContext';
@@ -18,7 +18,8 @@ import {
   Eye,
   Lock,
   Globe,
-  Camera
+  Camera,
+  Tag
 } from 'lucide-react';
 import ProfileMarry from '../images/icon-profile-marry.png';
 
@@ -89,9 +90,17 @@ const ProfilePage = () => {
   const shouldShowPrivateLock = isProfilePrivate && !isOwnProfile && !isFollowingApproved;
   const canViewPrivateContent = !isProfilePrivate || isOwnProfile || isFollowingApproved;
 
+  // Track if profile is being fetched to prevent duplicate calls
+  const fetchingProfileRef = useRef(false);
+  const lastFetchedUserIdRef = useRef(null);
+
   // Profile data fetch karna - Using Backend API
   useEffect(() => {
     const fetchProfile = async () => {
+      // Prevent duplicate fetches
+      if (fetchingProfileRef.current) return;
+      if (lastFetchedUserIdRef.current === userId && profile) return;
+      
       if (!userId) {
         // Agar userId nahi hai, current user ka profile dikhao
         if (currentUser?.id) {
@@ -100,6 +109,7 @@ const ProfilePage = () => {
         return;
       }
 
+      fetchingProfileRef.current = true;
       setLoading(true);
       try {
         // Get auth token
@@ -122,32 +132,10 @@ const ProfilePage = () => {
 
         const result = await response.json();
         const profileData = result.profile;
-
-        // Debug: Log profile data to check image URLs
-        console.log('Profile data received:', {
-          profile_url: profileData.profile_url,
-          avatar_url: profileData.avatar_url, // Check for both field names
-          cover_image_url: profileData.cover_image_url,
-          full_name: profileData.full_name,
-          all_fields: Object.keys(profileData)
-        });
         
         // Use profile_url or avatar_url (whichever is available)
         const profileImageUrl = profileData.profile_url || profileData.avatar_url || '';
         const coverImageUrl = profileData.cover_image_url || '';
-        
-        // Check if URLs are valid
-        if (profileImageUrl) {
-          console.log('Profile Image URL:', profileImageUrl);
-        } else {
-          console.warn('No profile image URL found in profile data');
-        }
-        
-        if (coverImageUrl) {
-          console.log('Cover Image URL:', coverImageUrl);
-        } else {
-          console.warn('No cover image URL found in profile data');
-        }
 
         // Normalize profile data to use consistent field names
         const normalizedProfile = {
@@ -183,7 +171,46 @@ const ProfilePage = () => {
         if (postsResponse.ok) {
           const postsResult = await postsResponse.json();
           if (postsResult.success) {
-            setPosts(postsResult.posts || []);
+            // Fetch tags for each post
+            const postsWithTags = await Promise.all(
+              (postsResult.posts || []).map(async (post) => {
+                if (post.tags && Array.isArray(post.tags) && post.tags.length > 0) {
+                  return post;
+                }
+                
+                // Fetch tags for this post
+                try {
+                  const { data: postTags, error: tagsError } = await supabase
+                    .from('post_tags')
+                    .select(`
+                      tag_id,
+                      tags:tag_id (
+                        id,
+                        name,
+                        usage_count
+                      )
+                    `)
+                    .eq('post_id', post.id);
+
+                  if (!tagsError && postTags) {
+                    return {
+                      ...post,
+                      tags: postTags.map(pt => ({
+                        id: pt.tags?.id || pt.tag_id,
+                        name: pt.tags?.name,
+                        tag_id: pt.tag_id,
+                        tag: pt.tags
+                      }))
+                    };
+                  }
+                } catch (err) {
+                  console.error(`Error fetching tags for post ${post.id}:`, err);
+                }
+                
+                return { ...post, tags: [] };
+              })
+            );
+            setPosts(postsWithTags);
           }
         } else {
           // Fallback to Supabase if API fails
@@ -237,7 +264,42 @@ const ProfilePage = () => {
                 views_count: post.views || 0
               }));
 
-              setPosts(postsWithCounts);
+              // Fetch tags for each post
+              const postsWithTags = await Promise.all(
+                postsWithCounts.map(async (post) => {
+                  try {
+                    const { data: postTags, error: tagsError } = await supabase
+                      .from('post_tags')
+                      .select(`
+                        tag_id,
+                        tags:tag_id (
+                          id,
+                          name,
+                          usage_count
+                        )
+                      `)
+                      .eq('post_id', post.id);
+
+                    if (!tagsError && postTags) {
+                      return {
+                        ...post,
+                        tags: postTags.map(pt => ({
+                          id: pt.tags?.id || pt.tag_id,
+                          name: pt.tags?.name,
+                          tag_id: pt.tag_id,
+                          tag: pt.tags
+                        }))
+                      };
+                    }
+                  } catch (err) {
+                    console.error(`Error fetching tags for post ${post.id}:`, err);
+                  }
+                  
+                  return { ...post, tags: [] };
+                })
+              );
+
+              setPosts(postsWithTags);
             } else {
               setPosts(postsData);
             }
@@ -248,15 +310,32 @@ const ProfilePage = () => {
         console.error('Error fetching profile:', error);
       } finally {
         setLoading(false);
+        fetchingProfileRef.current = false;
+        lastFetchedUserIdRef.current = userId;
       }
     };
 
     fetchProfile();
-  }, [userId, currentUser, navigate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]); // Only depend on userId, navigate is stable
+
+  // Track if realtime is available per profile (persist across re-renders)
+  const realtimeAvailableRef = useRef({});
 
   // Set up Realtime listeners for followers/following counts
   useEffect(() => {
     if (!userId || !profile) return;
+    
+    // Initialize for this userId if not already set
+    if (realtimeAvailableRef.current[userId] === undefined) {
+      realtimeAvailableRef.current[userId] = true;
+    }
+    
+    // Skip if we already determined realtime is not available for this profile
+    if (!realtimeAvailableRef.current[userId]) {
+      // Realtime not available - skip setup completely
+      return;
+    }
 
     let followsChannel = null;
     let currentUserChannel = null;
@@ -264,12 +343,18 @@ const ProfilePage = () => {
 
     const setupRealtime = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user || !mounted) return;
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        
+        // If auth error or no user, skip realtime setup
+        if (userError || !user || !mounted) {
+          if (userError) {
+            // Auth error - mark realtime as unavailable for this profile
+            realtimeAvailableRef.current[userId] = false;
+          }
+          return;
+        }
 
         const currentUserId = user.id;
-        console.log('👥 [REALTIME] Setting up follows listener for profile:', userId);
-        console.log('👥 [REALTIME] Current user ID:', currentUserId);
 
         // Channel for follows table changes
         const channelName = `follows:${userId}`;
@@ -462,17 +547,29 @@ const ProfilePage = () => {
 
         followsChannel.subscribe((status) => {
           if (status === 'SUBSCRIBED') {
+            // Successfully subscribed - realtime is working
             console.log('✅ [REALTIME] Successfully subscribed to follows channel for profile:', userId);
-          } else if (status === 'CHANNEL_ERROR') {
-            console.error('❌ [REALTIME] Follows channel error - Make sure Realtime is enabled for "follows" table');
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            // Realtime not enabled for follows table - fail silently
+            // Don't log anything, just clean up and mark as unavailable for this profile
+            realtimeAvailableRef.current[userId] = false;
+            if (followsChannel) {
+              supabase.removeChannel(followsChannel);
+              followsChannel = null;
+            }
+            // Also clean up currentUserChannel if it exists
+            if (currentUserChannel) {
+              supabase.removeChannel(currentUserChannel);
+              currentUserChannel = null;
+            }
           }
+          // Don't log CLOSED status - it's normal on cleanup
         });
 
         // Also set up listener for current user's following count
         // This is needed to update following_count when current user follows/unfollows someone
         // Whether viewing own profile or someone else's profile
-        if (currentUserId === userId) {
-          console.log('👥 [REALTIME] Setting up current user following listener for own profile');
+        if (currentUserId === userId && realtimeAvailableRef.current[userId]) {
           // Add UPDATE listener for own profile to handle status changes
           followsChannel.on(
             'postgres_changes',
@@ -509,7 +606,7 @@ const ProfilePage = () => {
               }
             }
           );
-        } else {
+        } else if (realtimeAvailableRef.current[userId]) {
           // Set up separate listener for current user's following count
           // This updates when current user follows/unfollows someone while viewing another profile
           currentUserChannel = supabase.channel(`follows:current:${currentUserId}`, {
@@ -631,11 +728,27 @@ const ProfilePage = () => {
           currentUserChannel.subscribe((status) => {
             if (status === 'SUBSCRIBED') {
               console.log('✅ [REALTIME] Successfully subscribed to current user follows channel');
+            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+              // Realtime not available - fail silently
+              realtimeAvailableRef.current[userId] = false;
+              if (currentUserChannel) {
+                supabase.removeChannel(currentUserChannel);
+                currentUserChannel = null;
+              }
             }
           });
         }
       } catch (error) {
-        console.error('❌ [REALTIME] Error setting up follows listener:', error);
+        // Silently handle errors - realtime may not be enabled
+        realtimeAvailableRef.current[userId] = false;
+        if (followsChannel) {
+          supabase.removeChannel(followsChannel);
+          followsChannel = null;
+        }
+        if (currentUserChannel) {
+          supabase.removeChannel(currentUserChannel);
+          currentUserChannel = null;
+        }
       }
     };
 
@@ -663,8 +776,12 @@ const ProfilePage = () => {
 
     const setupPostsRealtime = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user || !mounted) return;
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        
+        // If auth error or no user, skip realtime setup
+        if (userError || !user || !mounted) {
+          return;
+        }
 
         // Listen for new posts by this user
         postsChannel = supabase
@@ -1121,22 +1238,52 @@ const ProfilePage = () => {
     setLoadingConnections(true);
     setConnectionError(null);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      // Check if session is valid
+      if (sessionError || !session) {
+        setConnectionError('Please log in to view followers');
+        setFollowers([]);
+        return;
+      }
+
       const response = await fetch(`${API_BASE_URL}/social-media/connections/followers?user_id=${userId}`, {
-        headers: session ? {
+        headers: {
           'Authorization': `Bearer ${session.access_token}`,
-        } : {},
+        },
       });
+
+      // Check if response is ok before parsing JSON
+      if (!response.ok) {
+        // Try to parse error message
+        let errorMessage = 'Unable to load followers';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.detail || errorMessage;
+        } catch {
+          // If JSON parsing fails, use status text
+          errorMessage = response.statusText || errorMessage;
+        }
+        setConnectionError(errorMessage);
+        setFollowers([]);
+        return;
+      }
+
       const result = await response.json();
-      if (response.ok && result.success) {
+      if (result.success) {
         setFollowers(result.followers || []);
       } else {
         setConnectionError(result.detail || 'Unable to load followers');
         setFollowers([]);
       }
     } catch (error) {
-      console.error('Error fetching followers:', error);
-      setConnectionError('Failed to load followers');
+      // Handle network errors, CORS errors, etc.
+      if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        setConnectionError('Network error. Please check your connection or try again later.');
+      } else {
+        console.error('Error fetching followers:', error);
+        setConnectionError('Failed to load followers. Please try again.');
+      }
       setFollowers([]);
     } finally {
       setLoadingConnections(false);
@@ -1149,22 +1296,52 @@ const ProfilePage = () => {
     setLoadingConnections(true);
     setConnectionError(null);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      // Check if session is valid
+      if (sessionError || !session) {
+        setConnectionError('Please log in to view following');
+        setFollowing([]);
+        return;
+      }
+
       const response = await fetch(`${API_BASE_URL}/social-media/connections/following?user_id=${userId}`, {
-        headers: session ? {
+        headers: {
           'Authorization': `Bearer ${session.access_token}`,
-        } : {},
+        },
       });
+
+      // Check if response is ok before parsing JSON
+      if (!response.ok) {
+        // Try to parse error message
+        let errorMessage = 'Unable to load following';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.detail || errorMessage;
+        } catch {
+          // If JSON parsing fails, use status text
+          errorMessage = response.statusText || errorMessage;
+        }
+        setConnectionError(errorMessage);
+        setFollowing([]);
+        return;
+      }
+
       const result = await response.json();
-      if (response.ok && result.success) {
+      if (result.success) {
         setFollowing(result.following || []);
       } else {
         setConnectionError(result.detail || 'Unable to load following');
         setFollowing([]);
       }
     } catch (error) {
-      console.error('Error fetching following:', error);
-      setConnectionError('Failed to load following');
+      // Handle network errors, CORS errors, etc.
+      if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        setConnectionError('Network error. Please check your connection or try again later.');
+      } else {
+        console.error('Error fetching following:', error);
+        setConnectionError('Failed to load following. Please try again.');
+      }
       setFollowing([]);
     } finally {
       setLoadingConnections(false);
@@ -1502,6 +1679,23 @@ const ProfilePage = () => {
                               </span>
                             </div>
                             <p className="text-gray-700 mb-4">{post.description}</p>
+                            
+                            {/* Tags Section */}
+                            {post.tags && post.tags.length > 0 && (
+                              <div className="mb-4 flex flex-wrap gap-2">
+                                {post.tags.map((tag) => (
+                                  <button
+                                    key={tag.id || tag.tag_id}
+                                    onClick={() => navigate(`/search?tag=${encodeURIComponent(tag.name || tag.tag?.name)}`)}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-light-lightPurple/20 to-light-lavender/20 hover:from-light-lightPurple/30 hover:to-light-lavender/30 border border-light-lightPurple/40 rounded-full text-xs font-medium text-light-primary hover:text-light-deepPurple transition-all cursor-pointer group/tag"
+                                  >
+                                    <Tag size={12} className="group-hover/tag:scale-110 transition-transform" />
+                                    <span>#{tag.name || tag.tag?.name}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                            
                             {post.video_url && (
                               <div className="overflow-hidden rounded-2xl border border-gray-100 mb-4">
                                 <video

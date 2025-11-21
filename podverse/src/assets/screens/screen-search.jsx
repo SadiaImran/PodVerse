@@ -1,20 +1,121 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Search, UserPlus, UserMinus, Clock, X } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Search, UserPlus, UserMinus, Clock, X, Tag } from 'lucide-react';
 import { supabase } from '../supabaseClient.js';
 import { useAuth } from '../context/AuthContext';
 import BaseLayout from '../components/layouts/BaseLayout';
 import ProfileMarry from '../images/icon-profile-marry.png';
+import ActivityFeed from '../components/feed/activity-feed';
 
 const API_BASE_URL = 'http://localhost:8000';
 
 const SearchPage = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user: currentUser } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [debounceTimer, setDebounceTimer] = useState(null);
+  const [tagFilter, setTagFilter] = useState(null);
+  const [tagPosts, setTagPosts] = useState([]);
+  const [loadingTagPosts, setLoadingTagPosts] = useState(false);
+
+  // Check for tag parameter in URL
+  useEffect(() => {
+    const tag = searchParams.get('tag');
+    if (tag) {
+      setTagFilter(tag);
+      fetchPostsByTag(tag);
+    } else {
+      setTagFilter(null);
+      setTagPosts([]);
+    }
+  }, [searchParams]);
+
+  // Fetch posts by tag
+  const fetchPostsByTag = async (tagName) => {
+    setLoadingTagPosts(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      // First get tag ID
+      const { data: tagData, error: tagError } = await supabase
+        .from('tags')
+        .select('id')
+        .eq('name', tagName)
+        .single();
+
+      if (tagError || !tagData) {
+        console.error('Tag not found:', tagError);
+        setTagPosts([]);
+        return;
+      }
+
+      // Get post IDs with this tag
+      const { data: postTags, error: postTagsError } = await supabase
+        .from('post_tags')
+        .select('post_id')
+        .eq('tag_id', tagData.id);
+
+      if (postTagsError || !postTags || postTags.length === 0) {
+        setTagPosts([]);
+        return;
+      }
+
+      const postIds = postTags.map(pt => pt.post_id);
+
+      // Fetch posts
+      const response = await fetch(
+        `${API_BASE_URL}/posts/feed?limit=50`,
+        {
+          headers: session ? {
+            'Authorization': `Bearer ${session.access_token}`,
+          } : {},
+        }
+      );
+
+      const result = await response.json();
+      if (result.success) {
+        // Filter posts that have this tag
+        const filteredPosts = result.posts.filter(post => postIds.includes(post.id));
+        
+        // Fetch tags for each post
+        const postsWithTags = await Promise.all(
+          filteredPosts.map(async (post) => {
+            const { data: postTagsData } = await supabase
+              .from('post_tags')
+              .select(`
+                tag_id,
+                tags:tag_id (
+                  id,
+                  name,
+                  usage_count
+                )
+              `)
+              .eq('post_id', post.id);
+
+            return {
+              ...post,
+              tags: postTagsData?.map(pt => ({
+                id: pt.tags?.id || pt.tag_id,
+                name: pt.tags?.name,
+                tag_id: pt.tag_id,
+                tag: pt.tags
+              })) || []
+            };
+          })
+        );
+        
+        setTagPosts(postsWithTags);
+      }
+    } catch (error) {
+      console.error('Error fetching posts by tag:', error);
+      setTagPosts([]);
+    } finally {
+      setLoadingTagPosts(false);
+    }
+  };
 
   // Debounced search
   const performSearch = useCallback(async (query) => {
@@ -255,14 +356,35 @@ const SearchPage = () => {
     }
   };
 
+  // Handle tag click in posts
+  const handleTagClick = (tagName) => {
+    navigate(`/search?tag=${encodeURIComponent(tagName)}`);
+  };
+
   return (
     <BaseLayout>
       <div className="min-h-screen bg-gradient-to-b from-white via-gray-50 to-white">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {/* Search Header */}
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Search Users</h1>
-            <p className="text-gray-600">Find and connect with podcasters on PodVerse</p>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+              {tagFilter ? `Posts tagged #${tagFilter}` : 'Search Users'}
+            </h1>
+            <p className="text-gray-600">
+              {tagFilter ? `Discover content about ${tagFilter}` : 'Find and connect with podcasters on PodVerse'}
+            </p>
+            {tagFilter && (
+              <button
+                onClick={() => {
+                  navigate('/search');
+                  setTagFilter(null);
+                }}
+                className="mt-4 inline-flex items-center gap-2 px-4 py-2 text-sm text-gray-600 hover:text-gray-900 bg-white border border-gray-200 rounded-full hover:border-gray-300 transition-all"
+              >
+                <X size={14} />
+                Clear tag filter
+              </button>
+            )}
           </div>
 
           {/* Search Bar */}
@@ -403,11 +525,47 @@ const SearchPage = () => {
           )}
 
           {/* Empty State - No Search */}
-          {!loading && !searchQuery && (
+          {!loading && !searchQuery && !tagFilter && (
             <div className="text-center py-16 bg-white rounded-2xl border border-gray-200">
               <Search size={64} className="mx-auto text-gray-300 mb-4" />
               <p className="text-gray-600 text-lg font-medium mb-2">Start searching</p>
               <p className="text-gray-500 text-sm">Enter a username or name to find users</p>
+            </div>
+          )}
+
+          {/* Tag Filtered Posts */}
+          {tagFilter && (
+            <div className="mt-8">
+              {loadingTagPosts ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-light-purple"></div>
+                  <span className="ml-3 text-gray-600">Loading posts...</span>
+                </div>
+              ) : tagPosts.length > 0 ? (
+                <div>
+                  <div className="mb-6 flex items-center gap-2">
+                    <Tag className="text-light-purple" size={20} />
+                    <p className="text-sm text-gray-600">
+                      Found {tagPosts.length} {tagPosts.length === 1 ? 'post' : 'posts'} tagged <span className="font-semibold text-light-purple">#{tagFilter}</span>
+                    </p>
+                  </div>
+                  <div className="space-y-6">
+                    {tagPosts.map((post) => (
+                      <div key={post.id} className="bg-white rounded-2xl border border-gray-200 p-6">
+                        {/* Post content would go here - you can reuse PostCard component */}
+                        <p className="text-gray-600">Post ID: {post.id}</p>
+                        {/* Add full post rendering here */}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-16 bg-white rounded-2xl border border-gray-200">
+                  <Tag size={64} className="mx-auto text-gray-300 mb-4" />
+                  <p className="text-gray-600 text-lg font-medium mb-2">No posts found</p>
+                  <p className="text-gray-500 text-sm">No posts found with tag <span className="font-semibold">#{tagFilter}</span></p>
+                </div>
+              )}
             </div>
           )}
         </div>
