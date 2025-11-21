@@ -9,7 +9,7 @@ import AuthFields from '../components/shared/AuthFields.jsx';
 import { FaRegEnvelope, FaPodcast, FaHeadphones, FaRegUser } from 'react-icons/fa';
 import { MdOutlineLock, MdWaves, MdCheckCircle } from 'react-icons/md';
 import ImageCarousel from '../components/comp-signin/ImageCarousel.jsx';
-import { supabase } from '../../connection_supabase_client.js';
+import { supabase } from "../supabaseClient.js";
 
 function SignUpScreenEmail() {
   const [email, setEmail] = useState('');
@@ -53,8 +53,8 @@ function SignUpScreenEmail() {
     } else if (data.user && !data.user.confirmed_at) {
       alert('Almost there! Please check your email to confirm your account.');
     } else {
-      alert('Your account has been created successfully!');
-      navigate('/create-podcast');
+      // Redirect to onboarding instead of create-podcast
+      navigate('/onboarding');
     }
   };
   

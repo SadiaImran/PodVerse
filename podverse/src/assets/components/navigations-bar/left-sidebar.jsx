@@ -1,6 +1,8 @@
 import Logo from "../../images/logo.png";
-import { Home, Mic, Users, BookOpen, Settings, TrendingUp, Calendar, Bell, Search, Plus, ChevronLeft, ChevronRight, MessageCircle, Music2, Clapperboard } from 'lucide-react';
+import { Home, Mic, Users, BookOpen, Settings, TrendingUp, Calendar, Bell, Search, Plus, ChevronLeft, ChevronRight, MessageCircle, Music2, Clapperboard, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
+import ProfileMarry from "../../images/icon-profile-marry.png";
 
 import {
   HiOutlineHome,
@@ -16,8 +18,11 @@ import { IoAnalyticsOutline, IoSettingsOutline } from "react-icons/io5";
 
 const LeftSidebar = ({ open, setOpen }) => {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  
   const menuItems = [
   { icon: Home, label: "Home" , navigateTo: "/home"},
+  { icon: User, label: "My Profile" , navigateTo: user ? `/profile/${user.id}` : "/profile"},
   { icon: Mic, label: "My Podcasts" , count: 12 , navigateTo: "/create-podcast" },
   { icon: Music2, label: "Audio Editor", navigateTo: "/audio-edit" },
   { icon: Clapperboard, label: "Video Editor", navigateTo: "/video-editor" },
@@ -117,6 +122,7 @@ const LeftSidebar = ({ open, setOpen }) => {
 
         {/* Create Button */}
         <button 
+          onClick={() => navigate('/create-podcast')}
           className={`bg-light-purple text-white rounded-lg hover:bg-white hover:text-light-purple hover:border hover:border-light-purple transition-all shadow-sm flex items-center justify-center gap-2 font-medium ${
             open ? 'w-full py-3 px-4' : 'w-10 h-10 p-0'
           }`}
@@ -126,6 +132,43 @@ const LeftSidebar = ({ open, setOpen }) => {
           {open && <span>Create Podcast</span>}
         </button>
       </div>
+
+      {/* User Profile Section at Bottom */}
+      {user && (
+        <div 
+          className={`mt-auto pt-4 border-t border-gray-200 cursor-pointer hover:bg-gray-50 rounded-lg transition-all ${
+            open ? 'p-3' : 'p-2'
+          }`}
+          onClick={() => navigate(`/profile/${user.id}`)}
+          title={!open ? 'My Profile' : ''}
+        >
+          <div className="flex items-center gap-3">
+            <img 
+              src={user.profile_url || ProfileMarry} 
+              alt={user.full_name || 'User'} 
+              className="w-10 h-10 rounded-full object-cover border-2 border-purple-200 flex-shrink-0"
+              onError={(e) => {
+                e.target.src = ProfileMarry;
+              }}
+            />
+            {open && (
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-gray-900 truncate">
+                  {user.full_name || 'User'}
+                </p>
+                <p className="text-xs text-gray-500 truncate">
+                  View Profile
+                </p>
+              </div>
+            )}
+            {!open && (
+              <div className="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+                {user.full_name || 'User'}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
      
       </div>
     </>

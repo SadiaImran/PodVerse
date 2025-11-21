@@ -1,7 +1,6 @@
 // src/context/AuthContext.jsx
 import { createContext, useContext, useEffect, useState } from "react";
-import { supabase } from "../../connection_supabase_client";
-
+import { supabase } from "../supabaseClient.js";
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
@@ -35,7 +34,7 @@ export const AuthProvider = ({ children }) => {
     try {
       const { data: profile, error } = await supabase
         .from("profiles")
-        .select("full_name, profile_url")
+        .select("full_name, profile_url, onboarding_complete")
         .eq("id", authUser.id)
         .single();
 
@@ -49,6 +48,7 @@ export const AuthProvider = ({ children }) => {
         email: authUser.email,
         full_name: profile?.full_name || "",
         profile_url: profile?.profile_url || null,
+        onboarding_complete: profile?.onboarding_complete || false,
       });
     } catch (err) {
       console.error("Unexpected error loading profile:", err);
@@ -57,6 +57,7 @@ export const AuthProvider = ({ children }) => {
         email: authUser.email,
         full_name: "",
         profile_url: null,
+        onboarding_complete: false,
       });
     }
   };

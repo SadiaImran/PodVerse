@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Plus } from "lucide-react";
 import BaseLayout from "../components/layouts/BaseLayout";
 import banner2 from "../images/banner-2.png";
-import { supabase } from "../../connection_supabase_client";
+import { supabase } from "../supabaseClient.js";
 
 const CreatePodcastPage = () => {
   const navigate = useNavigate();
@@ -26,6 +26,47 @@ const CreatePodcastPage = () => {
     };
     loadProfile();
   }, []);
+
+  useEffect(() => {
+const checkAuthAndLoadProfile = async () => {
+const { data: { user } } = await supabase.auth.getUser();
+
+      if (user) {
+        const userId = user.id;
+
+        // 1. FETCH PROFILE and ONBOARDING STATUS
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("full_name, onboarding_complete") // ⭐ Select both fields
+          .eq("id", userId)
+          .maybeSingle(); // ⭐ Use maybeSingle for safety
+
+        // Log the result for debugging
+        console.log("Profile check after login:", profile);
+
+        // 2. REDIRECT LOGIC
+        // CASE 1 & 2: No profile or Onboarding is incomplete
+        if (!profile || profile.onboarding_complete === false) {
+          console.log("Redirecting to onboarding...");
+          // Use { replace: true } to prevent going back to the sign-in page
+          return navigate("/onboarding", { replace: true }); 
+        }
+
+        // CASE 3: Profile exists and onboarding is complete (Stay on this page)
+        
+        // 3. SET full_name STATE (now that we know the user is complete)
+ setFullName(profile?.full_name || "User");
+        
+} else {
+          // If no user is found (e.g., session expired or sign-in failed)
+          // Redirect to the home or sign-in page.
+          console.log("No user session found, redirecting to home.");
+          navigate("/home", { replace: true }); 
+      }
+ };
+ 
+  checkAuthAndLoadProfile();
+ }, [navigate]); // Added navigate to the dependency array
 
   // Sample videos data
   const sampleVideos = [

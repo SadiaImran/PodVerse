@@ -14,6 +14,9 @@ import AudioEditor from './assets/screens/screen-audio-edit';
 import ScreenFAQ from './assets/screens/screen-faq-chatbot';
 import VideoGeneratorPage from './assets/screens/screen-video-generation';
 import VideoEditorV7Screen from './assets/screens/screen-video-editor-v7';
+import ProfilePage from './assets/screens/screen-profile';
+import OnboardingScreen from './assets/screens/screen-onboarding';
+import SearchPage from './assets/screens/screen-search';
 
 function App() {
   return (
@@ -104,6 +107,38 @@ function App() {
             element={
               <PrivateRoute>
                 <VideoEditorV7Screen />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/profile/:userId"
+            element={
+              <PrivateRoute>
+                <ProfilePage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <PrivateRoute>
+                <ProfilePage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/onboarding"
+            element={
+              <PrivateRoute>
+                <OnboardingScreen />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/search"
+            element={
+              <PrivateRoute>
+                <SearchPage />
               </PrivateRoute>
             }
           />
