@@ -689,3 +689,42 @@ async def list_jobs():
         "jobs": [job.dict() for job in processing_jobs.values()],
         "total": len(processing_jobs)
     }
+
+@router.get("/api/avatar-templates/{speaker}")
+async def get_avatar_templates(speaker: str):
+    """Get avatar template images for a specific speaker (A or B)."""
+    if speaker not in ["A", "B"]:
+        raise HTTPException(status_code=400, detail="Speaker must be 'A' or 'B'")
+    
+    # This assumes you have Supabase configured
+    # Adjust the path based on your bucket structure
+    from supabase import create_client
+    import os
+    
+    supabase_url = os.environ.get("SUPABASE_URL")
+    supabase_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+    supabase = create_client(supabase_url, supabase_key)
+    
+    folder_path = f"speaker-{speaker.lower()}"
+    
+    try:
+        # List files in the folder
+        files = supabase.storage.from_('avatar-templates').list(folder_path)
+        
+        # Generate public URLs
+        templates = []
+        for file in files:
+            public_url = supabase.storage.from_('avatar-templates').get_public_url(
+                f"{folder_path}/{file['name']}"
+            )
+            templates.append({
+                "id": file['name'].split('.')[0],  # filename without extension
+                "name": file['name'].replace('-', ' ').replace('.jpg', '').replace('.png', '').title(),
+                "url": public_url,
+                "speaker": speaker
+            })
+        
+        return {"templates": templates}
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch templates: {str(e)}")
