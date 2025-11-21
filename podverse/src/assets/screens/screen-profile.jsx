@@ -83,6 +83,11 @@ const ProfilePage = () => {
 
   // Check if this is current user's own profile
   const isOwnProfile = currentUser && userId === currentUser.id;
+  const isFollowingApproved = isFollowing === true;
+  const isFollowPending = isFollowing === 'pending';
+  const isProfilePrivate = profile?.is_private ?? false;
+  const shouldShowPrivateLock = isProfilePrivate && !isOwnProfile && !isFollowingApproved;
+  const canViewPrivateContent = !isProfilePrivate || isOwnProfile || isFollowingApproved;
 
   // Profile data fetch karna - Using Backend API
   useEffect(() => {
@@ -167,23 +172,76 @@ const ProfilePage = () => {
           setIsFollowing(profileData.is_following);
         }
 
-        // User ke posts fetch karo (still using Supabase for posts)
-        const { data: postsData, error: postsError } = await supabase
-          .from('posts')
-          .select(`
-            *,
-            profiles:user_id (
-              id,
-              full_name,
-              username,
-              profile_url
-            )
-          `)
-          .eq('user_id', userId)
-          .order('created_at', { ascending: false });
+        // User ke posts fetch karo with proper likes/comments counts from backend API
+        const postsResponse = await fetch(`${API_BASE_URL}/posts/user/${userId}?limit=50`, {
+          method: 'GET',
+          headers: session ? {
+            'Authorization': `Bearer ${session.access_token}`,
+          } : {},
+        });
 
-        if (!postsError && postsData) {
-          setPosts(postsData);
+        if (postsResponse.ok) {
+          const postsResult = await postsResponse.json();
+          if (postsResult.success) {
+            setPosts(postsResult.posts || []);
+          }
+        } else {
+          // Fallback to Supabase if API fails
+          const { data: postsData, error: postsError } = await supabase
+            .from('posts')
+            .select(`
+              *,
+              profiles:user_id (
+                id,
+                full_name,
+                username,
+                profile_url
+              )
+            `)
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false });
+
+          if (!postsError && postsData) {
+            // Fetch likes and comments counts separately
+            const postIds = postsData.map(p => p.id);
+            if (postIds.length > 0) {
+              // Get likes counts
+              const { data: likesData } = await supabase
+                .from('post_likes')
+                .select('post_id')
+                .in('post_id', postIds);
+
+              // Get comments counts
+              const { data: commentsData } = await supabase
+                .from('comments')
+                .select('post_id')
+                .in('post_id', postIds);
+
+              // Count likes and comments per post
+              const likesCount = {};
+              const commentsCount = {};
+              
+              likesData?.forEach(like => {
+                likesCount[like.post_id] = (likesCount[like.post_id] || 0) + 1;
+              });
+              
+              commentsData?.forEach(comment => {
+                commentsCount[comment.post_id] = (commentsCount[comment.post_id] || 0) + 1;
+              });
+
+              // Add counts to posts
+              const postsWithCounts = postsData.map(post => ({
+                ...post,
+                likes_count: likesCount[post.id] || 0,
+                comments_count: commentsCount[post.id] || 0,
+                views_count: post.views || 0
+              }));
+
+              setPosts(postsWithCounts);
+            } else {
+              setPosts(postsData);
+            }
+          }
         }
 
       } catch (error) {
@@ -338,6 +396,47 @@ const ProfilePage = () => {
           }
         );
 
+        // Listen for UPDATE events on following (when status changes from pending to accepted)
+        followsChannel.on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'follows',
+            filter: `follower_id=eq.${userId}`,
+          },
+          (payload) => {
+            console.log('👥 [REALTIME] Following status updated:', payload);
+            if (!mounted) return;
+            
+            const oldStatus = payload.old.status;
+            const newStatus = payload.new.status;
+            
+            // If status changed from non-accepted to accepted, increment following count
+            if (oldStatus !== 'accepted' && newStatus === 'accepted') {
+              setProfile(prev => ({
+                ...prev,
+                following_count: (prev.following_count || 0) + 1
+              }));
+              
+              if (showFollowingModal) {
+                fetchFollowing();
+              }
+            }
+            // If status changed from accepted to non-accepted, decrement following count
+            else if (oldStatus === 'accepted' && newStatus !== 'accepted') {
+              setProfile(prev => ({
+                ...prev,
+                following_count: Math.max(0, (prev.following_count || 0) - 1)
+              }));
+              
+              if (showFollowingModal) {
+                fetchFollowing();
+              }
+            }
+          }
+        );
+
         followsChannel.on(
           'postgres_changes',
           {
@@ -369,10 +468,47 @@ const ProfilePage = () => {
           }
         });
 
-        // Also set up listener for current user's following count (if viewing own profile)
+        // Also set up listener for current user's following count
+        // This is needed to update following_count when current user follows/unfollows someone
+        // Whether viewing own profile or someone else's profile
         if (currentUserId === userId) {
-          console.log('👥 [REALTIME] Setting up current user following listener');
-          // The existing listeners already cover this case since userId === currentUserId
+          console.log('👥 [REALTIME] Setting up current user following listener for own profile');
+          // Add UPDATE listener for own profile to handle status changes
+          followsChannel.on(
+            'postgres_changes',
+            {
+              event: 'UPDATE',
+              schema: 'public',
+              table: 'follows',
+              filter: `follower_id=eq.${currentUserId}`,
+            },
+            (payload) => {
+              console.log('👥 [REALTIME] Own follow status updated:', payload);
+              if (!mounted) return;
+              
+              const oldStatus = payload.old.status;
+              const newStatus = payload.new.status;
+              
+              // If status changed from non-accepted to accepted, increment following count
+              if (oldStatus !== 'accepted' && newStatus === 'accepted') {
+                setProfile(prev => ({
+                  ...prev,
+                  following_count: (prev.following_count || 0) + 1
+                }));
+              }
+              // If status changed from accepted to non-accepted, decrement following count
+              else if (oldStatus === 'accepted' && newStatus !== 'accepted') {
+                setProfile(prev => ({
+                  ...prev,
+                  following_count: Math.max(0, (prev.following_count || 0) - 1)
+                }));
+              }
+              
+              if (showFollowingModal) {
+                fetchFollowing();
+              }
+            }
+          );
         } else {
           // Set up separate listener for current user's following count
           // This updates when current user follows/unfollows someone while viewing another profile
@@ -408,6 +544,57 @@ const ProfilePage = () => {
             }
           );
 
+          // Listen for UPDATE events - when follow request status changes (pending -> accepted)
+          currentUserChannel.on(
+            'postgres_changes',
+            {
+              event: 'UPDATE',
+              schema: 'public',
+              table: 'follows',
+              filter: `follower_id=eq.${currentUserId}`,
+            },
+            (payload) => {
+              console.log('👥 [REALTIME] Current user follow status updated:', payload);
+              if (!mounted) return;
+              
+              const oldStatus = payload.old.status;
+              const newStatus = payload.new.status;
+              const targetUserId = payload.new.following_id;
+              
+              // If viewing the profile of the user whose request was accepted
+              if (targetUserId === userId) {
+                // If status changed from pending to accepted, update the follow status
+                if (oldStatus === 'pending' && newStatus === 'accepted') {
+                  console.log('✅ [REALTIME] Follow request accepted! Updating status from pending to following');
+                  setIsFollowing(true);
+                }
+                // If status changed from accepted to something else, update accordingly
+                else if (oldStatus === 'accepted' && newStatus !== 'accepted') {
+                  setIsFollowing(false);
+                }
+              }
+              
+              // If viewing own profile, update following count
+              if (currentUserId === userId) {
+                if (oldStatus !== 'accepted' && newStatus === 'accepted') {
+                  setProfile(prev => ({
+                    ...prev,
+                    following_count: (prev.following_count || 0) + 1
+                  }));
+                } else if (oldStatus === 'accepted' && newStatus !== 'accepted') {
+                  setProfile(prev => ({
+                    ...prev,
+                    following_count: Math.max(0, (prev.following_count || 0) - 1)
+                  }));
+                }
+                
+                if (showFollowingModal) {
+                  fetchFollowing();
+                }
+              }
+            }
+          );
+
           currentUserChannel.on(
             'postgres_changes',
             {
@@ -419,6 +606,13 @@ const ProfilePage = () => {
             (payload) => {
               console.log('👥 [REALTIME] Current user unfollowed someone:', payload);
               if (!mounted) return;
+              
+              const targetUserId = payload.old.following_id;
+              
+              // If viewing the profile of the user who was unfollowed, update status
+              if (targetUserId === userId) {
+                setIsFollowing(false);
+              }
               
               // If viewing own profile, update following count
               if (currentUserId === userId) {
@@ -457,6 +651,125 @@ const ProfilePage = () => {
       }
     };
   }, [userId, profile, showFollowersModal, showFollowingModal, currentUser]);
+
+  // Set up Realtime listeners for profile posts (likes, comments, new posts)
+  useEffect(() => {
+    if (!userId) return;
+
+    let postsChannel = null;
+    let likesChannel = null;
+    let commentsChannel = null;
+    let mounted = true;
+
+    const setupPostsRealtime = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user || !mounted) return;
+
+        // Listen for new posts by this user
+        postsChannel = supabase
+          .channel(`profile:posts:${userId}`)
+          .on(
+            'postgres_changes',
+            {
+              event: 'INSERT',
+              schema: 'public',
+              table: 'posts',
+              filter: `user_id=eq.${userId}`,
+            },
+            (payload) => {
+              console.log('📹 [REALTIME] New post added to profile:', payload);
+              if (!mounted) return;
+              // Add new post to the beginning of the list
+              setPosts(prev => [payload.new, ...prev]);
+            }
+          )
+          .subscribe();
+
+        // Listen for likes on profile posts (all posts by this user)
+        likesChannel = supabase
+          .channel(`profile:likes:${userId}`)
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'post_likes',
+            },
+            (payload) => {
+              console.log('❤️ [REALTIME] Like update on profile post:', payload);
+              if (!mounted) return;
+              const postId = payload.new?.post_id || payload.old?.post_id;
+              // Update if this post belongs to the profile being viewed
+              setPosts(prev => {
+                const postExists = prev.some(p => p.id === postId);
+                if (!postExists) return prev;
+                return prev.map(p => {
+                  if (p.id === postId) {
+                    if (payload.eventType === 'INSERT') {
+                      return {
+                        ...p,
+                        likes_count: (p.likes_count || 0) + 1
+                      };
+                    } else if (payload.eventType === 'DELETE') {
+                      return {
+                        ...p,
+                        likes_count: Math.max(0, (p.likes_count || 0) - 1)
+                      };
+                    }
+                  }
+                  return p;
+                });
+              });
+            }
+          )
+          .subscribe();
+
+        // Listen for comments on profile posts
+        commentsChannel = supabase
+          .channel(`profile:comments:${userId}`)
+          .on(
+            'postgres_changes',
+            {
+              event: 'INSERT',
+              schema: 'public',
+              table: 'comments',
+            },
+            (payload) => {
+              console.log('💬 [REALTIME] New comment on profile post:', payload);
+              if (!mounted) return;
+              const postId = payload.new.post_id;
+              // Update if this post belongs to the profile being viewed
+              setPosts(prev => {
+                const postExists = prev.some(p => p.id === postId);
+                if (!postExists) return prev;
+                return prev.map(p => {
+                  if (p.id === postId) {
+                    return {
+                      ...p,
+                      comments_count: (p.comments_count || 0) + 1
+                    };
+                  }
+                  return p;
+                });
+              });
+            }
+          )
+          .subscribe();
+      } catch (error) {
+        console.error('❌ [REALTIME] Error setting up posts realtime:', error);
+      }
+    };
+
+    setupPostsRealtime();
+
+    return () => {
+      mounted = false;
+      if (postsChannel) supabase.removeChannel(postsChannel);
+      if (likesChannel) supabase.removeChannel(likesChannel);
+      if (commentsChannel) supabase.removeChannel(commentsChannel);
+    };
+  }, [userId]);
 
   // Follow/Unfollow handler using new connection API
   const handleFollow = async () => {
@@ -1052,17 +1365,20 @@ const ProfilePage = () => {
                     <button
                       onClick={handleFollow}
                       className={`px-6 py-2.5 rounded-full transition-all flex items-center gap-2 shadow-md ${
-                        isFollowing
+                        isFollowingApproved
                           ? 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-                          : 'bg-light-purple text-white hover:bg-purple-700'
+                          : isFollowPending
+                            ? 'bg-gray-100 text-gray-600 cursor-not-allowed'
+                            : 'bg-light-purple text-white hover:bg-purple-700'
                       }`}
+                      disabled={isFollowPending}
                     >
-                      {isFollowing === 'pending' ? (
+                      {isFollowPending ? (
                         <>
                           <UserPlus size={18} />
                           Requested
                         </>
-                      ) : isFollowing ? (
+                      ) : isFollowingApproved ? (
                         <>
                           <UserMinus size={18} />
                           Unfollow
@@ -1139,23 +1455,17 @@ const ProfilePage = () => {
             <div className="p-6 md:p-8">
               {activeTab === 'posts' && (
                 <div className="space-y-6">
-                  {profile.is_private && !isOwnProfile && !isFollowing && (
-                    <div className="text-center py-14 bg-gray-50 rounded-3xl border border-dashed border-gray-300">
-                      <Lock size={48} className="mx-auto text-gray-400 mb-4" />
-                      <p className="text-gray-800 text-xl font-semibold mb-2">This account is private</p>
-                      <p className="text-gray-500 mb-6">
-                        Follow {profile.full_name || 'this creator'} to unlock their content.
+                  {shouldShowPrivateLock && (
+                    <div className="text-center py-16 bg-gray-50 rounded-3xl border border-dashed border-gray-300">
+                      <Lock size={56} className="mx-auto text-gray-400 mb-5" />
+                      <p className="text-gray-800 text-2xl font-bold mb-3">This account is private</p>
+                      <p className="text-gray-600 text-base max-w-md mx-auto">
+                        Follow {profile.full_name || 'this account'} to see their videos and posts.
                       </p>
-                      <button
-                        onClick={handleFollow}
-                        className="px-6 py-2.5 bg-light-purple text-white rounded-full hover:bg-purple-700 transition-all"
-                      >
-                        Request Follow
-                      </button>
                     </div>
                   )}
 
-                  {!profile.is_private || isOwnProfile || isFollowing ? (
+                  {canViewPrivateContent ? (
                     posts.length === 0 ? (
                       <div className="text-center py-14 bg-gray-50 rounded-3xl">
                         <Mic size={48} className="mx-auto text-gray-400 mb-4" />
@@ -1199,6 +1509,34 @@ const ProfilePage = () => {
                                   poster={post.thumbnail_url}
                                   className="w-full"
                                   controls
+                                  onPlay={async () => {
+                                    // Track view when video starts playing (one view per user)
+                                    try {
+                                      const { data: { session } } = await supabase.auth.getSession();
+                                      const response = await fetch(`${API_BASE_URL}/posts/${post.id}/view`, {
+                                        method: 'POST',
+                                        headers: session ? {
+                                          'Authorization': `Bearer ${session.access_token}`,
+                                        } : {},
+                                      });
+                                      
+                                      const result = await response.json();
+                                      if (result.success && result.viewed) {
+                                        // Update local state with new view count
+                                        setPosts(prev => prev.map(p => {
+                                          if (p.id === post.id) {
+                                            return {
+                                              ...p,
+                                              views_count: result.views || (p.views_count || 0)
+                                            };
+                                          }
+                                          return p;
+                                        }));
+                                      }
+                                    } catch (error) {
+                                      console.error('Error tracking view:', error);
+                                    }
+                                  }}
                                 />
                               </div>
                             )}
@@ -1597,15 +1935,23 @@ const ProfilePage = () => {
                   <p className="text-gray-800 font-semibold mb-2">Access Restricted</p>
                   <p className="text-gray-600 text-sm mb-4">{connectionError}</p>
                   {!isOwnProfile && profile?.is_private && (
-                    <button
-                      onClick={() => {
-                        setShowFollowersModal(false);
-                        handleFollow();
-                      }}
-                      className="px-4 py-2 text-sm bg-light-purple text-white rounded-lg hover:bg-purple-700 transition-all"
-                    >
-                      Follow to View
-                    </button>
+                    <>
+                      {isFollowPending ? (
+                        <div className="px-4 py-2 text-sm bg-yellow-100 text-yellow-800 rounded-lg border border-yellow-300">
+                          Request Pending
+                        </div>
+                      ) : !isFollowingApproved ? (
+                        <button
+                          onClick={() => {
+                            setShowFollowersModal(false);
+                            handleFollow();
+                          }}
+                          className="px-4 py-2 text-sm bg-light-purple text-white rounded-lg hover:bg-purple-700 transition-all"
+                        >
+                          Follow to View
+                        </button>
+                      ) : null}
+                    </>
                   )}
                 </div>
               ) : followers.length === 0 ? (
@@ -1693,15 +2039,23 @@ const ProfilePage = () => {
                   <p className="text-gray-800 font-semibold mb-2">Access Restricted</p>
                   <p className="text-gray-600 text-sm mb-4">{connectionError}</p>
                   {!isOwnProfile && profile?.is_private && (
-                    <button
-                      onClick={() => {
-                        setShowFollowingModal(false);
-                        handleFollow();
-                      }}
-                      className="px-4 py-2 text-sm bg-light-purple text-white rounded-lg hover:bg-purple-700 transition-all"
-                    >
-                      Follow to View
-                    </button>
+                    <>
+                      {isFollowPending ? (
+                        <div className="px-4 py-2 text-sm bg-yellow-100 text-yellow-800 rounded-lg border border-yellow-300">
+                          Request Pending
+                        </div>
+                      ) : !isFollowingApproved ? (
+                        <button
+                          onClick={() => {
+                            setShowFollowingModal(false);
+                            handleFollow();
+                          }}
+                          className="px-4 py-2 text-sm bg-light-purple text-white rounded-lg hover:bg-purple-700 transition-all"
+                        >
+                          Follow to View
+                        </button>
+                      ) : null}
+                    </>
                   )}
                 </div>
               ) : following.length === 0 ? (

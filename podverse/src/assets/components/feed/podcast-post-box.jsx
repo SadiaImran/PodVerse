@@ -30,6 +30,64 @@ function PodcastPostBox() {
     fetchProfile();
   }, [user]);
 
+  // Set up Realtime listener for user's posts library
+  useEffect(() => {
+    if (!user?.id) return;
+
+    let postsChannel = null;
+    let mounted = true;
+
+    const setupRealtime = async () => {
+      try {
+        // Listen for new posts by current user
+        postsChannel = supabase
+          .channel(`library:posts:${user.id}`)
+          .on(
+            'postgres_changes',
+            {
+              event: 'INSERT',
+              schema: 'public',
+              table: 'posts',
+              filter: `user_id=eq.${user.id}`,
+            },
+            (payload) => {
+              console.log('📹 [REALTIME] New post added to library:', payload);
+              if (!mounted) return;
+              // Add new post to the beginning of library
+              setLibraryVideos(prev => [payload.new, ...prev]);
+            }
+          )
+          .on(
+            'postgres_changes',
+            {
+              event: 'UPDATE',
+              schema: 'public',
+              table: 'posts',
+              filter: `user_id=eq.${user.id}`,
+            },
+            (payload) => {
+              console.log('📹 [REALTIME] Post updated in library:', payload);
+              if (!mounted) return;
+              // Update existing post in library
+              setLibraryVideos(prev => prev.map(video => 
+                video.id === payload.new.id ? payload.new : video
+              ));
+            }
+          )
+          .subscribe();
+      } catch (error) {
+        console.error('❌ [REALTIME] Error setting up library realtime:', error);
+      }
+    };
+
+    setupRealtime();
+
+    return () => {
+      mounted = false;
+      if (postsChannel) supabase.removeChannel(postsChannel);
+    };
+  }, [user?.id]);
+
   const fetchLibraryVideos = async () => {
     if (!user?.id) return;
     

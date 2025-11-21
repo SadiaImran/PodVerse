@@ -52,18 +52,28 @@ async def get_notifications(
             profiles_dict = {p["id"]: p for p in (profiles.data or [])}
 
         # Get connection IDs for follow_request notifications
+        # Only include connection_id for the MOST RECENT pending request from each user
         connection_ids_map = {}
         follow_request_notifs = [n for n in notification_list if n.get("type") == "follow_request" and n.get("from_user_id")]
         if follow_request_notifs:
             requester_ids = [n.get("from_user_id") for n in follow_request_notifs]
             # Find pending connections
-            connections = client.table("follows").select("id, follower_id").eq("following_id", user_id).eq("status", "pending").in_("follower_id", requester_ids).execute()
+            connections = client.table("follows").select("id, follower_id, created_at").eq("following_id", user_id).eq("status", "pending").in_("follower_id", requester_ids).order("created_at", desc=True).execute()
             if connections.data:
+                # Group by follower_id and only keep the most recent one for each user
+                seen_followers = set()
                 for conn in connections.data:
-                    connection_ids_map[conn["follower_id"]] = conn["id"]
+                    follower_id = conn["follower_id"]
+                    # Only add if we haven't seen this follower_id yet (most recent first due to ordering)
+                    if follower_id not in seen_followers:
+                        connection_ids_map[follower_id] = conn["id"]
+                        seen_followers.add(follower_id)
 
         # Format notifications with profile info
         formatted_notifications = []
+        # Track which users already have a connection_id assigned (only most recent notification gets it)
+        users_with_connection_id = set()
+        
         for notif in notification_list:
             from_user_id = notif.get("from_user_id")
             profile = profiles_dict.get(from_user_id) if from_user_id else None
@@ -76,7 +86,13 @@ async def get_notifications(
                 message = "You have a new notification"
 
             # Get connection_id for follow_request notifications
-            connection_id = connection_ids_map.get(from_user_id) if from_user_id else None
+            # Only assign connection_id to the FIRST (most recent) follow_request notification from each user
+            connection_id = None
+            if notif.get("type") == "follow_request" and from_user_id:
+                if from_user_id not in users_with_connection_id:
+                    connection_id = connection_ids_map.get(from_user_id)
+                    if connection_id:
+                        users_with_connection_id.add(from_user_id)
 
             formatted_notif = {
                 "id": notif["id"],

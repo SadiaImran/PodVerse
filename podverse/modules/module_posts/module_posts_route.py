@@ -196,6 +196,118 @@ def get_all_posts():
     return response.data
 
 
+@router.get("/posts/user/{user_id}")
+async def get_user_posts(
+    user_id: str,
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=50),
+    auth_data: Optional[dict] = Depends(get_authenticated_supabase_client)
+):
+    """
+    Get posts by a specific user with likes, comments, and views counts.
+    Returns posts in chronological order (newest first).
+    """
+    try:
+        if auth_data:
+            client = auth_data["client"]
+            current_user_id = auth_data["user_id"]
+        else:
+            client = supabase
+            current_user_id = None
+
+        # Calculate offset
+        offset = (page - 1) * limit
+
+        # Get posts by user
+        posts_response = client.table("posts").select(
+            "*, profiles:user_id(id, full_name, username, profile_url)"
+        ).eq("user_id", user_id).order("created_at", desc=True).range(
+            offset, offset + limit - 1
+        ).execute()
+
+        posts = posts_response.data
+
+        # Get post IDs for fetching likes and comments
+        post_ids = [post["id"] for post in posts]
+
+        # Get likes count and check if current user liked each post
+        likes_data = {}
+        if post_ids:
+            # Get all likes for these posts
+            likes_response = client.table("post_likes").select("post_id, user_id").in_(
+                "post_id", post_ids
+            ).execute()
+
+            # Count likes per post and check if current user liked
+            for like in likes_response.data:
+                post_id = like["post_id"]
+                if post_id not in likes_data:
+                    likes_data[post_id] = {"count": 0, "user_liked": False}
+                likes_data[post_id]["count"] += 1
+                if current_user_id and like["user_id"] == current_user_id:
+                    likes_data[post_id]["user_liked"] = True
+
+        # Get comments count for each post
+        comments_data = {}
+        if post_ids:
+            comments_response = client.table("comments").select("post_id").in_(
+                "post_id", post_ids
+            ).execute()
+
+            for comment in comments_response.data:
+                post_id = comment["post_id"]
+                comments_data[post_id] = comments_data.get(post_id, 0) + 1
+
+        # Get recent comments (2 per post) for preview
+        recent_comments = {}
+        if post_ids:
+            for post_id in post_ids:
+                comments_preview = client.table("comments").select(
+                    "*, profiles:user_id(id, full_name, username, profile_url)"
+                ).eq("post_id", post_id).order("created_at", desc=True).limit(2).execute()
+                if comments_preview.data:
+                    recent_comments[post_id] = comments_preview.data
+
+        # Combine data
+        enriched_posts = []
+        for post in posts:
+            post_id = post["id"]
+            likes_info = likes_data.get(post_id, {"count": 0, "user_liked": False})
+
+            enriched_post = {
+                **post,
+                "likes": likes_info["count"],
+                "likes_count": likes_info["count"],
+                "user_liked": likes_info["user_liked"],
+                "comments_count": comments_data.get(post_id, 0),
+                "comments": recent_comments.get(post_id, []),
+                "views": post.get("views", 0),
+                "views_count": post.get("views", 0)
+            }
+            enriched_posts.append(enriched_post)
+
+        # Get total count for pagination
+        total_response = client.table("posts").select("id", count="exact").eq("user_id", user_id).execute()
+        total_count = total_response.count if hasattr(total_response, 'count') else len(total_response.data)
+
+        return {
+            "success": True,
+            "posts": enriched_posts,
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total_count,
+                "total_pages": (total_count + limit - 1) // limit
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error fetching user posts: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/posts/feed")
 async def get_feed(
     page: int = Query(1, ge=1),
@@ -292,10 +404,12 @@ async def get_feed(
             enriched_post = {
                 **post,
                 "likes": likes_info["count"],
+                "likes_count": likes_info["count"],  # Add for consistency
                 "user_liked": likes_info["user_liked"],
                 "comments_count": comments_data.get(post_id, 0),
                 "comments": recent_comments.get(post_id, []),
-                "views": post.get("views", 0)
+                "views": post.get("views", 0),
+                "views_count": post.get("views", 0)  # Add for consistency
             }
             enriched_posts.append(enriched_post)
         
@@ -783,28 +897,88 @@ async def track_view(
     post_id: str,
     auth_data: Optional[dict] = Depends(get_authenticated_supabase_client)
 ):
-    """Track a view for a post (increment views count)"""
+    """
+    Track a view for a post (one view per user per post).
+    Approach 2: Only counts if user hasn't viewed before.
+    """
     try:
         if auth_data:
             client = auth_data["client"]
+            user_id = auth_data["user_id"]
         else:
             client = supabase
+            user_id = None
         
         # Check if post exists
         post_response = client.table("posts").select("id, views").eq("id", post_id).execute()
         if not post_response.data:
             raise HTTPException(status_code=404, detail="Post not found")
         
-        # Increment views count
-        current_views = post_response.data[0].get("views", 0)
-        client.table("posts").update({
-            "views": current_views + 1
-        }).eq("id", post_id).execute()
-        
-        return {
-            "success": True,
-            "views": current_views + 1
-        }
+        # If user is logged in, check if they already viewed this post
+        if user_id:
+            existing_view = client.table("post_views").select("id").eq(
+                "post_id", post_id
+            ).eq("user_id", user_id).execute()
+            
+            if existing_view.data:
+                # User already viewed, return current count without incrementing
+                current_views = post_response.data[0].get("views", 0)
+                return {
+                    "success": True,
+                    "viewed": True,
+                    "views": current_views,
+                    "message": "Already viewed"
+                }
+            
+            # User hasn't viewed yet - insert into post_views table
+            try:
+                client.table("post_views").insert({
+                    "post_id": post_id,
+                    "user_id": user_id
+                }).execute()
+            except Exception as insert_error:
+                # If insert fails (e.g., race condition), check again
+                existing_view_retry = client.table("post_views").select("id").eq(
+                    "post_id", post_id
+                ).eq("user_id", user_id).execute()
+                
+                if existing_view_retry.data:
+                    # Already viewed (race condition handled)
+                    current_views = post_response.data[0].get("views", 0)
+                    return {
+                        "success": True,
+                        "viewed": True,
+                        "views": current_views,
+                        "message": "Already viewed"
+                    }
+                else:
+                    raise insert_error
+            
+            # Update cached views count in posts table
+            current_views = post_response.data[0].get("views", 0)
+            client.table("posts").update({
+                "views": current_views + 1
+            }).eq("id", post_id).execute()
+            
+            return {
+                "success": True,
+                "viewed": True,
+                "views": current_views + 1,
+                "message": "View recorded"
+            }
+        else:
+            # Anonymous user - just increment count (no tracking)
+            current_views = post_response.data[0].get("views", 0)
+            client.table("posts").update({
+                "views": current_views + 1
+            }).eq("id", post_id).execute()
+            
+            return {
+                "success": True,
+                "viewed": True,
+                "views": current_views + 1,
+                "message": "View recorded (anonymous)"
+            }
         
     except HTTPException:
         raise

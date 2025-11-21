@@ -24,6 +24,12 @@ export default function TopBar({ open, onMenuClick }) {
   const [loadingNotifications, setLoadingNotifications] = useState(false);
   const dropdownRef = useRef(null);
   const notificationRef = useRef(null);
+  const showNotificationsRef = useRef(showNotifications);
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    showNotificationsRef.current = showNotifications;
+  }, [showNotifications]);
 
   const { logout } = useAuth();
 
@@ -174,8 +180,8 @@ export default function TopBar({ open, onMenuClick }) {
               return newCount;
             });
             
-            // If dropdown is open, refresh the notifications list
-            if (showNotifications) {
+            // If dropdown is open, refresh notifications list to show new notification
+            if (showNotificationsRef.current) {
               loadNotifications();
             }
           }
@@ -204,6 +210,12 @@ export default function TopBar({ open, onMenuClick }) {
                 console.log('📊 [REALTIME] Unread count decremented:', prev, '→', newCount);
                 return newCount;
               });
+              // Update the notification in the list locally (no need to refresh entire list)
+              setNotifications(prev =>
+                prev.map(n =>
+                  n.id === newRecord.id ? { ...n, is_read: true } : n
+                )
+              );
             }
             // If is_read changed from true to false, increment unread count
             else if (oldRecord.is_read === true && newRecord.is_read === false) {
@@ -212,12 +224,14 @@ export default function TopBar({ open, onMenuClick }) {
                 console.log('📊 [REALTIME] Unread count incremented:', prev, '→', newCount);
                 return newCount;
               });
+              // Update the notification in the list locally (no need to refresh entire list)
+              setNotifications(prev =>
+                prev.map(n =>
+                  n.id === newRecord.id ? { ...n, is_read: false } : n
+                )
+              );
             }
-            
-            // If dropdown is open, refresh the notifications list
-            if (showNotifications) {
-              loadNotifications();
-            }
+            // Don't refresh entire list - we already updated local state
           }
         );
 
@@ -422,8 +436,10 @@ export default function TopBar({ open, onMenuClick }) {
                     {notifications.map((notif) => (
                       <div
                         key={notif.id}
-                        className={`p-4 hover:bg-gray-50 transition-colors cursor-pointer ${
-                          !notif.is_read ? 'bg-purple-50/30' : ''
+                        className={`p-4 transition-colors cursor-pointer relative ${
+                          !notif.is_read 
+                            ? 'bg-gradient-to-r from-light-lightPurple/20 via-light-lightPurple/10 to-transparent border-l-4 border-light-lightPurple hover:from-light-lightPurple/30 hover:via-light-lightPurple/15' 
+                            : 'hover:bg-gray-50'
                         }`}
                         onClick={async () => {
                           // Mark as read if not already read
@@ -471,7 +487,9 @@ export default function TopBar({ open, onMenuClick }) {
                             }}
                           />
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm text-gray-900">{notif.message}</p>
+                            <p className={`text-sm ${!notif.is_read ? 'text-gray-900 font-semibold' : 'text-gray-900'}`}>
+                              {notif.message}
+                            </p>
                             <p className="text-xs text-gray-500 mt-1">
                               {new Date(notif.created_at).toLocaleString('en-US', {
                                 month: 'short',
@@ -481,7 +499,7 @@ export default function TopBar({ open, onMenuClick }) {
                               })}
                             </p>
                             {notif.type === 'follow_request' && notif.metadata?.connection_id && (
-                              <div className="flex gap-2 mt-2">
+                              <div className="flex gap-2 mt-2" key={`actions-${notif.id}`}>
                                 <button
                                   onClick={async (e) => {
                                     e.stopPropagation();
@@ -546,7 +564,7 @@ export default function TopBar({ open, onMenuClick }) {
                             )}
                           </div>
                           {!notif.is_read && (
-                            <div className="w-2 h-2 bg-light-purple rounded-full mt-2"></div>
+                            <div className="w-2.5 h-2.5 bg-light-lightPurple rounded-full mt-2 flex-shrink-0 shadow-sm shadow-light-lightPurple/50"></div>
                           )}
                         </div>
                       </div>

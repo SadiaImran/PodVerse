@@ -16,6 +16,98 @@ const SuggestionsSidebar = () => {
     fetchSuggestions();
   }, []);
 
+  // Set up Realtime listeners for follow status and profile updates
+  useEffect(() => {
+    let connectionsChannel = null;
+    let profilesChannel = null;
+    let mounted = true;
+
+    const setupRealtime = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user || !mounted) return;
+
+        // Listen for connection status changes
+        connectionsChannel = supabase
+          .channel(`suggestions:connections:${user.id}`)
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'follows',
+              filter: `follower_id=eq.${user.id}`,
+            },
+            (payload) => {
+              console.log('🔗 [REALTIME] Suggestion connection changed:', payload);
+              if (!mounted) return;
+              const targetUserId = payload.new?.following_id || payload.old?.following_id;
+              // Update following map and suggestions
+              if (payload.eventType === 'INSERT') {
+                setFollowingMap(prev => ({ ...prev, [targetUserId]: true }));
+                // Remove from suggestions if followed
+                if (payload.new.status === 'accepted') {
+                  setSuggestedUsers(prev => prev.filter(u => u.id !== targetUserId));
+                }
+              } else if (payload.eventType === 'DELETE') {
+                setFollowingMap(prev => {
+                  const newMap = { ...prev };
+                  delete newMap[targetUserId];
+                  return newMap;
+                });
+              }
+            }
+          )
+          .subscribe();
+
+        // Listen for profile updates (followers_count)
+        profilesChannel = supabase
+          .channel(`suggestions:profiles:${user.id}`)
+          .on(
+            'postgres_changes',
+            {
+              event: 'UPDATE',
+              schema: 'public',
+              table: 'profiles',
+            },
+            (payload) => {
+              console.log('👤 [REALTIME] Suggestion profile updated:', payload);
+              if (!mounted) return;
+              const updatedUserId = payload.new.id;
+              // Update profile if it exists in suggestions
+              setSuggestedUsers(prev => {
+                const userExists = prev.some(u => u.id === updatedUserId);
+                if (!userExists) return prev;
+                return prev.map(user => {
+                  if (user.id === updatedUserId) {
+                    return {
+                      ...user,
+                      followers_count: payload.new.followers_count ?? user.followers_count,
+                      full_name: payload.new.full_name ?? user.full_name,
+                      profile_url: payload.new.profile_url ?? user.profile_url,
+                      bio: payload.new.bio ?? user.bio,
+                    };
+                  }
+                  return user;
+                });
+              });
+            }
+          )
+          .subscribe();
+      } catch (error) {
+        console.error('❌ [REALTIME] Error setting up suggestions realtime:', error);
+      }
+    };
+
+    setupRealtime();
+
+    return () => {
+      mounted = false;
+      if (connectionsChannel) supabase.removeChannel(connectionsChannel);
+      if (profilesChannel) supabase.removeChannel(profilesChannel);
+    };
+  }, []);
+
   const fetchSuggestions = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();

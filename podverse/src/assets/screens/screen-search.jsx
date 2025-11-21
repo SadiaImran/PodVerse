@@ -63,6 +63,110 @@ const SearchPage = () => {
     };
   }, [searchQuery, performSearch]);
 
+  // Set up Realtime listeners for connection status and profile updates
+  useEffect(() => {
+    if (!currentUser || searchResults.length === 0) return;
+
+    let connectionsChannel = null;
+    let profilesChannel = null;
+    let mounted = true;
+
+    const setupRealtime = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user || !mounted) return;
+
+        const userIds = searchResults.map(u => u.id);
+
+        // Listen for connection status changes
+        connectionsChannel = supabase
+          .channel(`search:connections:${user.id}`)
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'follows',
+              filter: `follower_id=eq.${user.id}`,
+            },
+            (payload) => {
+              console.log('🔗 [REALTIME] Connection status changed:', payload);
+              if (!mounted) return;
+              const targetUserId = payload.new?.following_id || payload.old?.following_id;
+              if (userIds.includes(targetUserId)) {
+                setSearchResults(prev => prev.map(user => {
+                  if (user.id === targetUserId) {
+                    if (payload.eventType === 'INSERT') {
+                      return {
+                        ...user,
+                        connection_status: payload.new.status === 'accepted' ? 'following' : 'pending'
+                      };
+                    } else if (payload.eventType === 'DELETE') {
+                      return {
+                        ...user,
+                        connection_status: 'none'
+                      };
+                    } else if (payload.eventType === 'UPDATE') {
+                      return {
+                        ...user,
+                        connection_status: payload.new.status === 'accepted' ? 'following' : 
+                                         payload.new.status === 'pending' ? 'pending' : 'none'
+                      };
+                    }
+                  }
+                  return user;
+                }));
+              }
+            }
+          )
+          .subscribe();
+
+        // Listen for profile updates (followers_count, following_count)
+        profilesChannel = supabase
+          .channel(`search:profiles:${user.id}`)
+          .on(
+            'postgres_changes',
+            {
+              event: 'UPDATE',
+              schema: 'public',
+              table: 'profiles',
+            },
+            (payload) => {
+              console.log('👤 [REALTIME] Profile updated:', payload);
+              if (!mounted) return;
+              const updatedUserId = payload.new.id;
+              if (userIds.includes(updatedUserId)) {
+                setSearchResults(prev => prev.map(user => {
+                  if (user.id === updatedUserId) {
+                    return {
+                      ...user,
+                      followers_count: payload.new.followers_count ?? user.followers_count,
+                      following_count: payload.new.following_count ?? user.following_count,
+                      full_name: payload.new.full_name ?? user.full_name,
+                      profile_url: payload.new.profile_url ?? user.profile_url,
+                      bio: payload.new.bio ?? user.bio,
+                    };
+                  }
+                  return user;
+                }));
+              }
+            }
+          )
+          .subscribe();
+      } catch (error) {
+        console.error('❌ [REALTIME] Error setting up search realtime:', error);
+      }
+    };
+
+    setupRealtime();
+
+    return () => {
+      mounted = false;
+      if (connectionsChannel) supabase.removeChannel(connectionsChannel);
+      if (profilesChannel) supabase.removeChannel(profilesChannel);
+    };
+  }, [currentUser, searchResults.length]);
+
   // Handle follow/unfollow
   const handleFollow = async (targetUserId, currentStatus) => {
     if (!currentUser) {

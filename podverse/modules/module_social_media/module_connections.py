@@ -112,28 +112,31 @@ async def send_connection_request(
             client.table("profiles").update({"followers_count": current_followers + 1}).eq("id", target_user_id).execute()
 
         # Create notification for target user
+        # Only create if this is a NEW connection (not if connection already existed)
         try:
-            # Get sender profile for message
-            sender_profile = client.table("profiles").select("full_name, username").eq("id", user_id).execute()
-            sender_name = sender_profile.data[0].get("full_name", "Someone") if sender_profile.data else "Someone"
-            sender_username = sender_profile.data[0].get("username", "") if sender_profile.data else ""
-            
-            notification_type = "follow_request" if status == "pending" else "new_follower"
-            notification_message = (
-                f"{sender_name} (@{sender_username}) sent you a follow request" 
-                if status == "pending" 
-                else f"{sender_name} (@{sender_username}) started following you"
-            )
-            
-            notification_data = {
-                "user_id": target_user_id,
-                "type": notification_type,
-                "from_user_id": user_id,
-                "message": notification_message,
-                "is_read": False,
-                "created_at": datetime.utcnow().isoformat()
-            }
-            client.table("notifications").insert(notification_data).execute()
+            # Only create notification if connection was actually created (not if it already existed)
+            if not existing.data:
+                # Get sender profile for message
+                sender_profile = client.table("profiles").select("full_name, username").eq("id", user_id).execute()
+                sender_name = sender_profile.data[0].get("full_name", "Someone") if sender_profile.data else "Someone"
+                sender_username = sender_profile.data[0].get("username", "") if sender_profile.data else ""
+                
+                notification_type = "follow_request" if status == "pending" else "new_follower"
+                notification_message = (
+                    f"{sender_name} (@{sender_username}) sent you a follow request" 
+                    if status == "pending" 
+                    else f"{sender_name} (@{sender_username}) started following you"
+                )
+                
+                notification_data = {
+                    "user_id": target_user_id,
+                    "type": notification_type,
+                    "from_user_id": user_id,
+                    "message": notification_message,
+                    "is_read": False,
+                    "created_at": datetime.utcnow().isoformat()
+                }
+                client.table("notifications").insert(notification_data).execute()
         except Exception as e:
             print(f"[send_connection_request] Failed to create notification: {e}")
             # Don't fail the request if notification fails

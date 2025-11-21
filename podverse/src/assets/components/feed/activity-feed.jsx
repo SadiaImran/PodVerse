@@ -113,7 +113,7 @@ const PostCard = ({ post, onLike, onComment, onView }) => {
 
   return (
     <div 
-      className="bg-gradient-to-br from-white via-purple-50/30 to-pink-50/20 rounded-2xl shadow-lg border border-purple-100 mb-6 hover:shadow-xl transition-all duration-300 overflow-hidden group"
+      className="bg-gradient-to-br from-white via-light-lightPurple/20 to-light-lavender/20 rounded-2xl shadow-lg border border-light-lightPurple/40 mb-6 hover:shadow-xl transition-all duration-300 overflow-hidden group"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -127,20 +127,20 @@ const PostCard = ({ post, onLike, onComment, onView }) => {
             <img
               src={profileUrl}
               alt={profileName}
-              className="w-12 h-12 rounded-full object-cover border-2 border-transparent group-hover/profile:border-purple-300 transition-all ring-2 ring-purple-100"
+              className="w-12 h-12 rounded-full object-cover border-2 border-transparent group-hover/profile:border-light-primary transition-all ring-2 ring-light-lightPurple/40"
               onError={(e) => {
                 e.target.src = ProfileMarry;
               }}
             />
           </div>
           <div>
-            <h3 className="font-semibold text-gray-900 text-sm group-hover/profile:text-purple-600 transition-colors">
+            <h3 className="font-semibold text-gray-900 text-sm group-hover/profile:text-light-primary transition-colors">
               {profileName}
             </h3>
             <div className="flex items-center gap-2">
               <p className="text-gray-500 text-xs">{formatTime(post.created_at)}</p>
               <span className="text-gray-300">•</span>
-              <div className="flex items-center gap-1 text-xs text-purple-600">
+              <div className="flex items-center gap-1 text-xs text-light-secondary">
                 <Sparkles size={12} />
                 <span>Podcast</span>
               </div>
@@ -153,7 +153,7 @@ const PostCard = ({ post, onLike, onComment, onView }) => {
       {(post.title || post.description) && (
         <div className="px-4 pt-4 pb-2">
           {post.title && (
-            <h2 className="text-xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent mb-2">
+            <h2 className="text-xl font-bold bg-gradient-to-r from-light-primary to-light-accent bg-clip-text text-transparent mb-2">
               {post.title}
             </h2>
           )}
@@ -193,7 +193,7 @@ const PostCard = ({ post, onLike, onComment, onView }) => {
               e.stopPropagation();
               handleVideoPlay();
             }}
-            className="w-20 h-20 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center text-purple-600 hover:bg-white hover:scale-110 transition-all shadow-xl"
+            className="w-20 h-20 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center text-light-primary hover:bg-white hover:scale-110 transition-all shadow-xl"
           >
             {isPlaying ? <Pause size={32} fill="currentColor" /> : <Play size={32} className="ml-1" fill="currentColor" />}
           </button>
@@ -210,7 +210,7 @@ const PostCard = ({ post, onLike, onComment, onView }) => {
       </div>
 
       {/* Stats Bar */}
-      <div className="px-4 py-3 border-t border-gray-50 bg-gradient-to-r from-gray-50 to-purple-50/30">
+      <div className="px-4 py-3 border-t border-gray-50 bg-gradient-to-r from-gray-50 to-light-lightPurple/15">
         <div className="flex items-center justify-between text-sm">
           <div className="flex items-center gap-5">
             <div className="flex items-center gap-2 text-gray-700">
@@ -268,7 +268,7 @@ const PostCard = ({ post, onLike, onComment, onView }) => {
 
       {/* Comments Section */}
       {showComments && (
-        <div className="border-t border-gray-100 p-4 bg-gradient-to-br from-gray-50 to-purple-50/30">
+        <div className="border-t border-gray-100 p-4 bg-gradient-to-br from-gray-50 to-light-lightPurple/15">
           <div className="space-y-3 max-h-96 overflow-y-auto mb-4">
             {comments.length > 0 ? (
               comments.map((comment) => {
@@ -281,7 +281,7 @@ const PostCard = ({ post, onLike, onComment, onView }) => {
                     <img
                       src={commentProfileUrl}
                       alt={commentProfileName}
-                      className="w-9 h-9 rounded-full object-cover flex-shrink-0 ring-2 ring-purple-100 group-hover/comment:ring-purple-300 transition-all"
+                      className="w-9 h-9 rounded-full object-cover flex-shrink-0 ring-2 ring-light-lightPurple/40 group-hover/comment:ring-light-lavender transition-all"
                       onError={(e) => {
                         e.target.src = ProfileMarry;
                       }}
@@ -306,14 +306,14 @@ const PostCard = ({ post, onLike, onComment, onView }) => {
           
           {/* Add Comment */}
           <div className="flex space-x-3">
-            <div className="w-9 h-9 bg-gradient-to-br from-purple-400 to-pink-400 rounded-full flex items-center justify-center text-white text-xs font-semibold flex-shrink-0">
+            <div className="w-9 h-9 bg-gradient-to-br from-light-primary to-light-accent rounded-full flex items-center justify-center text-white text-xs font-semibold flex-shrink-0">
               U
             </div>
             <div className="flex justify-between gap-3 items-center flex-1">
               <input
                 type="text"
                 placeholder="Add a comment..."
-                className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm shadow-sm"
+                className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-light-primary focus:border-transparent text-sm shadow-sm"
                 ref={commentRef}
                 onKeyPress={(e) => {
                   if (e.key === 'Enter' && !loadingComment) {
@@ -325,7 +325,7 @@ const PostCard = ({ post, onLike, onComment, onView }) => {
               <button
                 onClick={handleAddComment}
                 disabled={loadingComment}
-                className="w-10 h-10 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl hover:from-purple-700 hover:to-pink-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 shadow-lg shadow-purple-500/30 flex items-center justify-center"
+                className="w-10 h-10 bg-gradient-to-r from-light-primary to-light-accent text-white rounded-xl hover:from-light-deepPurple hover:to-light-primary transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 shadow-lg flex items-center justify-center"
               >
                 <FiSend size={16} />
               </button>
@@ -565,27 +565,33 @@ const ActivityFeed = () => {
     }
   };
 
-  // Handle view tracking
+  // Handle view tracking (one view per user per post)
   const handleView = async (postId) => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       
-      await fetch(`${API_BASE_URL}/posts/${postId}/view`, {
+      const response = await fetch(`${API_BASE_URL}/posts/${postId}/view`, {
         method: 'POST',
         headers: session ? {
           'Authorization': `Bearer ${session.access_token}`,
         } : {},
       });
 
-      setPosts(prev => prev.map(p => {
-        if (p.id === postId) {
-          return {
-            ...p,
-            views: (p.views || 0) + 1
-          };
-        }
-        return p;
-      }));
+      const result = await response.json();
+      
+      // Only update if view was actually recorded (not already viewed)
+      if (result.success && result.viewed) {
+        setPosts(prev => prev.map(p => {
+          if (p.id === postId) {
+            return {
+              ...p,
+              views: result.views || (p.views || 0),
+              views_count: result.views || (p.views_count || 0)
+            };
+          }
+          return p;
+        }));
+      }
     } catch (error) {
       console.error('Error tracking view:', error);
     }
@@ -603,7 +609,7 @@ const ActivityFeed = () => {
   if (loading) {
     return (
       <div className="text-center py-20">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-light-primary mx-auto mb-4"></div>
         <p className="text-gray-500 text-lg">Loading your feed...</p>
       </div>
     );
@@ -618,7 +624,7 @@ const ActivityFeed = () => {
         <p className="text-red-500 mb-4 text-lg">{error}</p>
         <button
           onClick={() => fetchFeed(1, false)}
-          className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl hover:from-purple-700 hover:to-pink-700 transition-all shadow-lg"
+          className="px-6 py-3 bg-gradient-to-r from-light-primary to-light-accent text-white rounded-xl hover:from-light-deepPurple hover:to-light-primary transition-all shadow-lg"
         >
           Retry
         </button>
@@ -629,14 +635,14 @@ const ActivityFeed = () => {
   if (posts.length === 0) {
     return (
       <div className="text-center py-20">
-        <div className="w-20 h-20 bg-gradient-to-br from-purple-100 to-pink-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <Sparkles className="w-10 h-10 text-purple-600" />
+        <div className="w-20 h-20 bg-gradient-to-br from-light-lightPurple/40 to-light-lavender/40 rounded-full flex items-center justify-center mx-auto mb-4">
+          <Sparkles className="w-10 h-10 text-light-primary" />
         </div>
         <h3 className="text-2xl font-bold text-gray-900 mb-2">Your feed is empty</h3>
         <p className="text-gray-500 mb-6">Start following creators to see their amazing content here!</p>
         <button
           onClick={() => window.location.href = '/search'}
-          className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl hover:from-purple-700 hover:to-pink-700 transition-all shadow-lg"
+          className="px-6 py-3 bg-gradient-to-r from-light-primary to-light-accent text-white rounded-xl hover:from-light-deepPurple hover:to-light-primary transition-all shadow-lg"
         >
           Discover Creators
         </button>
@@ -662,7 +668,7 @@ const ActivityFeed = () => {
           <button
             onClick={loadMore}
             disabled={loadingMore}
-            className="px-8 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl hover:from-purple-700 hover:to-pink-700 transition-all font-semibold shadow-lg shadow-purple-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-8 py-3 bg-gradient-to-r from-light-primary to-light-accent text-white rounded-xl hover:from-light-deepPurple hover:to-light-primary transition-all font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loadingMore ? 'Loading...' : 'Load More Posts'}
           </button>
