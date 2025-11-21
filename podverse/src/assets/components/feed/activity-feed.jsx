@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Heart, MessageCircle, Share2, Play, Pause, Volume2, VolumeX, Eye, Sparkles } from 'lucide-react';
+import { Heart, MessageCircle, Share2, Play, Pause, Volume2, VolumeX, Eye, Sparkles, Tag } from 'lucide-react';
 import { FiSend } from "react-icons/fi";
 import { supabase } from '../../supabaseClient.js';
 import { useNavigate } from 'react-router-dom';
@@ -8,7 +8,7 @@ import ProfileMarry from '../../images/icon-profile-marry.png';
 const API_BASE_URL = 'http://localhost:8000';
 
 // Post Card Component - Redesigned
-const PostCard = ({ post, onLike, onComment, onView }) => {
+const PostCard = ({ post, onLike, onComment, onView, onTagClick }) => {
   const [liked, setLiked] = useState(post.user_liked || false);
   const [likesCount, setLikesCount] = useState(post.likes || 0);
   const [showComments, setShowComments] = useState(false);
@@ -160,6 +160,29 @@ const PostCard = ({ post, onLike, onComment, onView }) => {
           {post.description && (
             <p className="text-gray-700 text-sm leading-relaxed line-clamp-3">{post.description}</p>
           )}
+        </div>
+      )}
+
+      {/* Tags Section */}
+      {post.tags && post.tags.length > 0 && (
+        <div className="px-4 pt-2 pb-3">
+          <div className="flex flex-wrap gap-2">
+            {post.tags.map((tag) => (
+              <button
+                key={tag.id || tag.tag_id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onTagClick) {
+                    onTagClick(tag.name || tag.tag?.name);
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-light-lightPurple/20 to-light-lavender/20 hover:from-light-lightPurple/30 hover:to-light-lavender/30 border border-light-lightPurple/40 rounded-full text-xs font-medium text-light-primary hover:text-light-deepPurple transition-all cursor-pointer group/tag"
+              >
+                <Tag size={12} className="group-hover/tag:scale-110 transition-transform" />
+                <span>#{tag.name || tag.tag?.name}</span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -345,6 +368,8 @@ const ActivityFeed = () => {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const navigate = useNavigate();
+
 
   // Fetch feed posts
   const fetchFeed = useCallback(async (pageNum = 1, append = false) => {
@@ -362,7 +387,9 @@ const ActivityFeed = () => {
         setLoadingMore(true);
       }
 
-      const response = await fetch(`${API_BASE_URL}/posts/feed?page=${pageNum}&limit=20`, {
+      const url = `${API_BASE_URL}/posts/feed?page=${pageNum}&limit=20`;
+
+      const response = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
         },
@@ -371,10 +398,50 @@ const ActivityFeed = () => {
       const result = await response.json();
 
       if (result.success) {
+        // Fetch tags for posts if not included in response
+        const postsWithTags = await Promise.all(
+          result.posts.map(async (post) => {
+            if (post.tags && Array.isArray(post.tags) && post.tags.length > 0) {
+              return post;
+            }
+            
+            // Fetch tags for this post from Supabase
+            try {
+              const { data: postTags, error: tagsError } = await supabase
+                .from('post_tags')
+                .select(`
+                  tag_id,
+                  tags:tag_id (
+                    id,
+                    name,
+                    usage_count
+                  )
+                `)
+                .eq('post_id', post.id);
+
+              if (!tagsError && postTags) {
+                return {
+                  ...post,
+                  tags: postTags.map(pt => ({
+                    id: pt.tags?.id || pt.tag_id,
+                    name: pt.tags?.name,
+                    tag_id: pt.tag_id,
+                    tag: pt.tags
+                  }))
+                };
+              }
+            } catch (err) {
+              console.error(`Error fetching tags for post ${post.id}:`, err);
+            }
+            
+            return { ...post, tags: [] };
+          })
+        );
+
         if (append) {
-          setPosts(prev => [...prev, ...result.posts]);
+          setPosts(prev => [...prev, ...postsWithTags]);
         } else {
-          setPosts(result.posts);
+          setPosts(postsWithTags);
         }
         setHasMore(result.pagination.page < result.pagination.total_pages);
       } else {
@@ -391,6 +458,19 @@ const ActivityFeed = () => {
 
   // Initial load
   useEffect(() => {
+    fetchFeed(1, false);
+  }, [fetchFeed]);
+
+  // Handle tag click - navigate to search page with tag filter
+  const handleTagClick = useCallback((tagName) => {
+    navigate(`/search?tag=${encodeURIComponent(tagName)}`);
+  }, [navigate]);
+
+  // Clear tag filter
+  const clearTagFilter = useCallback(() => {
+    setSelectedTag(null);
+    setPage(1);
+    setFilteredPosts([]);
     fetchFeed(1, false);
   }, [fetchFeed]);
 
@@ -652,28 +732,34 @@ const ActivityFeed = () => {
 
   return (
     <div className="space-y-6">
-      {posts.map((post) => (
-        <PostCard
-          key={post.id}
-          post={post}
-          onLike={handleLike}
-          onComment={handleComment}
-          onView={handleView}
-        />
-      ))}
+      {/* Posts List */}
+      {posts.length > 0 ? (
+        <>
+          {posts.map((post) => (
+            <PostCard
+              key={post.id}
+              post={post}
+              onLike={handleLike}
+              onComment={handleComment}
+              onView={handleView}
+              onTagClick={handleTagClick}
+            />
+          ))}
 
-      {/* Load More Button */}
-      {hasMore && (
-        <div className="text-center pt-4">
-          <button
-            onClick={loadMore}
-            disabled={loadingMore}
-            className="px-8 py-3 bg-gradient-to-r from-light-primary to-light-accent text-white rounded-xl hover:from-light-deepPurple hover:to-light-primary transition-all font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loadingMore ? 'Loading...' : 'Load More Posts'}
-          </button>
-        </div>
-      )}
+          {/* Load More Button */}
+          {hasMore && (
+            <div className="text-center pt-4">
+              <button
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="px-8 py-3 bg-gradient-to-r from-light-primary to-light-accent text-white rounded-xl hover:from-light-deepPurple hover:to-light-primary transition-all font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loadingMore ? 'Loading...' : 'Load More Posts'}
+              </button>
+            </div>
+          )}
+        </>
+      ) : null}
     </div>
   );
 };
