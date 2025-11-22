@@ -170,7 +170,7 @@ const ProfilePage = () => {
         }
 
         // User ke posts fetch karo with proper likes/comments counts from backend API
-        const postsResponse = await fetch(`${API_BASE_URL}/posts/user/${userId}?limit=50`, {
+        const postsResponse = await fetch(`${API_BASE_URL}/posts/user/${userId}?limit=50&status=published`, {
           method: 'GET',
           headers: session ? {
             'Authorization': `Bearer ${session.access_token}`,
@@ -180,9 +180,12 @@ const ProfilePage = () => {
         if (postsResponse.ok) {
           const postsResult = await postsResponse.json();
           if (postsResult.success) {
+            // Filter to only published posts (extra safety check)
+            const publishedPosts = (postsResult.posts || []).filter(post => post.status === 'published' || !post.status);
+            
             // Fetch tags for each post
             const postsWithTags = await Promise.all(
-              (postsResult.posts || []).map(async (post) => {
+              publishedPosts.map(async (post) => {
                 if (post.tags && Array.isArray(post.tags) && post.tags.length > 0) {
                   return post;
                 }
@@ -223,9 +226,9 @@ const ProfilePage = () => {
           }
         } else {
           // Fallback to Supabase if API fails
-          const { data: postsData, error: postsError } = await supabase
-            .from('posts')
-            .select(`
+        const { data: postsData, error: postsError } = await supabase
+          .from('posts')
+          .select(`
               *,
               profiles:user_id (
                 id,
@@ -234,7 +237,8 @@ const ProfilePage = () => {
                 profile_url
               )
             `)
-            .eq('user_id', userId)
+          .eq('user_id', userId)
+          .eq('status', 'published')
             .order('created_at', { ascending: false });
 
           if (!postsError && postsData) {

@@ -32,7 +32,7 @@ const ActivityFeed = () => {
         setLoadingMore(true);
       }
 
-      const url = `${API_BASE_URL}/posts/feed?page=${pageNum}&limit=20`;
+      const url = `${API_BASE_URL}/posts/feed?page=${pageNum}&limit=20&status=published`;
 
       const response = await fetch(url, {
         headers: {
@@ -44,8 +44,9 @@ const ActivityFeed = () => {
 
       if (result.success) {
         // Fetch tags for posts if not included in response
+        const publishedPosts = (result.posts || []).filter(post => post.status === 'published' || !post.status);
         const postsWithTags = await Promise.all(
-          result.posts.map(async (post) => {
+          publishedPosts.map(async (post) => {
             if (post.tags && Array.isArray(post.tags) && post.tags.length > 0) {
               return post;
             }
@@ -134,6 +135,9 @@ const ActivityFeed = () => {
             },
             (payload) => {
               console.log('📹 [REALTIME] New post:', payload);
+              if (payload.new?.status && payload.new.status !== 'published') {
+                return;
+              }
               fetchFeed(1, false);
             }
           )

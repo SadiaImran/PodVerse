@@ -51,7 +51,7 @@ const SuggestionsSidebar = () => {
 
       // Try to fetch from API first
       try {
-        const response = await fetch(`${API_BASE_URL}/posts/user/${currentUser.id}`, {
+        const response = await fetch(`${API_BASE_URL}/posts/user/${currentUser.id}?status=published`, {
           headers: {
             'Authorization': `Bearer ${session.access_token}`,
           },
@@ -60,13 +60,14 @@ const SuggestionsSidebar = () => {
         if (response.ok) {
           const result = await response.json();
           if (result.success && result.posts) {
+            const publishedPosts = result.posts.filter(post => post.status === 'published' || !post.status);
             // Calculate date ranges for current and previous month
             const now = new Date();
             const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
             const previousMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
             const previousMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
 
-            result.posts.forEach(post => {
+            publishedPosts.forEach(post => {
               const views = post.views_count || post.views || 0;
               totalPlays += views;
 
@@ -93,7 +94,8 @@ const SuggestionsSidebar = () => {
         const { data: postsData } = await supabase
           .from('posts')
           .select('views, views_count, created_at')
-          .eq('user_id', currentUser.id);
+          .eq('user_id', currentUser.id)
+          .eq('status', 'published');
 
         if (postsData && postsData.length > 0) {
           const now = new Date();

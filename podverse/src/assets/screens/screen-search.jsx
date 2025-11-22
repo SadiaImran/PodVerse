@@ -71,7 +71,7 @@ const SearchPage = () => {
 
       // Fetch posts
       const response = await fetch(
-        `${API_BASE_URL}/posts/feed?limit=50`,
+        `${API_BASE_URL}/posts/feed?limit=50&status=published`,
         {
           headers: session ? {
             'Authorization': `Bearer ${session.access_token}`,
@@ -82,7 +82,8 @@ const SearchPage = () => {
       const result = await response.json();
       if (result.success) {
         // Filter posts that have this tag
-        const filteredPosts = result.posts.filter(post => postIds.includes(post.id));
+        const filteredPosts = (result.posts || [])
+          .filter(post => (post.status === 'published' || !post.status) && postIds.includes(post.id));
         
         // Fetch tags for each post
         const postsWithTags = await Promise.all(
@@ -152,7 +153,7 @@ const SearchPage = () => {
       } else {
         // Search posts
         const response = await fetch(
-          `${API_BASE_URL}/posts/search?query=${encodeURIComponent(query)}&limit=20`,
+          `${API_BASE_URL}/posts/search?query=${encodeURIComponent(query)}&limit=20&status=published`,
           {
             headers: session ? {
               'Authorization': `Bearer ${session.access_token}`,
@@ -164,8 +165,9 @@ const SearchPage = () => {
           const result = await response.json();
           if (result.success) {
             // Fetch tags for each post
+            const publishedPosts = (result.posts || []).filter(post => post.status === 'published' || !post.status);
             const postsWithTags = await Promise.all(
-              (result.posts || []).map(async (post) => {
+              publishedPosts.map(async (post) => {
                 if (post.tags && Array.isArray(post.tags) && post.tags.length > 0) {
                   return post;
                 }
