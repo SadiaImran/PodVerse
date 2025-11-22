@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Upload, Users, Mic, Loader2, CheckCircle2, XCircle, Video, Play, Image as ImageIcon, Sparkles, Zap, ArrowRight, Info } from "lucide-react";
+import { Upload, Users, Mic, Loader2, CheckCircle2, XCircle, Video, Play, Image as ImageIcon, Sparkles, Zap, ArrowRight, Info, Subtitles } from "lucide-react";
 import { getSupabaseAuthorizedtoken } from '../../supabaseClient';
 import axios from 'axios';
 
@@ -11,6 +11,9 @@ function AvatarVideoGenerator() {
   
   const [audioFile, setAudioFile] = useState(null);
   const [audioFileName, setAudioFileName] = useState("");
+  
+  // NEW: Subtitle toggle
+  const [addSubtitles, setAddSubtitles] = useState(false);
   
   // Speaker A configuration
   const [speakerAAvatar, setSpeakerAAvatar] = useState(null);
@@ -330,7 +333,11 @@ function AvatarVideoGenerator() {
         formData.append('speaker_b_voice', speakerBVoice.voice_id);
       }
 
+      // NEW: Add subtitle flag
+      formData.append('add_subtitles', addSubtitles);
+
       console.log("📤 Uploading podcast for processing...");
+      console.log(`📝 Subtitles enabled: ${addSubtitles}`);
 
       const response = await axios.post(
         'http://localhost:8000/video/api/podcast/process',
@@ -728,6 +735,49 @@ function AvatarVideoGenerator() {
               </div>
             </div>
 
+            {/* NEW: Subtitle Toggle Card */}
+            <div className="bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-xl rounded-3xl p-8 border border-white/30 shadow-2xl hover:shadow-purple-500/20 transition-all duration-300">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center shadow-lg">
+                  <Subtitles className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-white font-bold text-xl">Subtitles</h3>
+                  <p className="text-purple-200 text-sm">Add captions to video</p>
+                </div>
+              </div>
+
+              <label className="flex items-center gap-4 cursor-pointer group bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-2 border-amber-400/40 rounded-2xl p-5 hover:border-amber-400/60 transition-all duration-300">
+                <div className="relative">
+                  <input
+                    type="checkbox"
+                    checked={addSubtitles}
+                    onChange={(e) => setAddSubtitles(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-16 h-8 bg-white/20 rounded-full peer peer-checked:bg-gradient-to-r peer-checked:from-amber-500 peer-checked:to-orange-500 transition-all duration-300"></div>
+                  <div className="absolute left-1 top-1 w-6 h-6 bg-white rounded-full transition-all duration-300 peer-checked:translate-x-8 shadow-lg"></div>
+                </div>
+                <div className="flex-1">
+                  <span className="text-white font-bold text-lg block group-hover:text-amber-100 transition-colors">
+                    Add Subtitles/Captions
+                  </span>
+                  <span className="text-purple-300 text-sm">
+                    {addSubtitles ? "Subtitles will be burned into video" : "No subtitles"}
+                  </span>
+                </div>
+              </label>
+
+              {addSubtitles && (
+                <div className="mt-4 bg-amber-500/20 border-2 border-amber-400/60 rounded-xl p-4">
+                  <p className="text-amber-100 text-sm flex items-start gap-2">
+                    <Sparkles className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    <span>Subtitles will be auto-generated from speaker transcription and burned into the final video</span>
+                  </p>
+                </div>
+              )}
+            </div>
+
             {/* How it Works */}
             <div className="bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border-2 border-yellow-400/40 rounded-2xl p-6 backdrop-blur-sm">
               <h4 className="font-bold text-yellow-200 mb-4 flex items-center gap-2 text-lg">
@@ -740,6 +790,7 @@ function AvatarVideoGenerator() {
                   "AI separates two speakers automatically",
                   "Choose preset or custom avatars",
                   "Use original voices or HeyGen TTS",
+                  "Optionally add burned-in subtitles",
                   "Get lip-synced videos for each speaker"
                 ].map((step, index) => (
                   <li key={index} className="flex items-start gap-3 text-yellow-200/90">
@@ -877,6 +928,12 @@ function AvatarVideoGenerator() {
                           <p className="text-white font-bold mb-4 flex items-center gap-2 text-lg">
                             <Video className="w-6 h-6" />
                             🎙️ Dynamic Podcast Video
+                            {addSubtitles && (
+                              <span className="ml-2 px-3 py-1 bg-amber-500/30 border border-amber-400/60 rounded-full text-sm flex items-center gap-1">
+                                <Subtitles className="w-3 h-3" />
+                                With Subtitles
+                              </span>
+                            )}
                           </p>
                           <video
                             src={`http://localhost:8000${jobStatus.merged_video_url}`}
