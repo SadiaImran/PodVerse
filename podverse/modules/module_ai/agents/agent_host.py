@@ -7,6 +7,7 @@ from livekit import agents
 from livekit.agents import AgentSession, Agent, RoomInputOptions
 from livekit.agents.llm import function_tool
 from livekit.plugins import noise_cancellation, google
+import os 
 
 try:
     from prompts.prompts_host import AGENT_INSTRUCTION, SESSION_INSTRUCTION
@@ -47,17 +48,34 @@ Now continue the conversation naturally:
 # ---------- Host Agent class ----------
 class HostAgent(Agent):
     def __init__(self, voice_name=None) -> None:
+        # Log voice configuration
+        if voice_name:
+            print(f"🎤 Initializing HostAgent with voice: {voice_name}")
+        else:
+            print(f"🎤 Initializing HostAgent with default voice (None)")
+        
         llm_model = google.beta.realtime.RealtimeModel(
             model="models/gemini-2.0-flash-exp",
             temperature=0.8,
             voice=voice_name if voice_name else None,  # Use provided voice or default
         )
+        
+        # Verify voice was set correctly
+        if hasattr(llm_model, 'voice'):
+            print(f"✅ LLM model voice attribute: {getattr(llm_model, 'voice', 'NOT SET')}")
+
+        api_google = os.environ.get('GOOGLE_API_KEY')
+        
+        print(f"The value of API_KEY is: {api_google}")
 
         super().__init__(
             instructions=AGENT_INSTRUCTION + "\n\nIMPORTANT: Always respond in English only.\n\n**VOICE INSTRUCTION: Use a professional, informative voice tone that matches a podcast host personality.**",
             llm=llm_model,
             tools=[],
         )
+        
+        # Store voice_name for later reference
+        self.voice_name = voice_name
 
         self.user_id = "default-user"
         self.selected_kb_id = None  
@@ -271,19 +289,55 @@ This is the FINAL closing statement."""
 async def entrypoint_host(ctx: agents.JobContext):
     print("🚀 Starting AI Host Agent (KB-strict mode)...")
 
-    session = AgentSession()
-    agent = HostAgent()
-    agent._session = session
-
     await ctx.connect()
     room = ctx.room
-    agent._room = room
 
     print(f"🏠 Connected to room: {getattr(room, 'name', 'unknown')}")
     await asyncio.sleep(0.6)
 
     room_name_str = getattr(room, 'name', 'my-room')
     print(f"🎬 Will start recording after participant connects with metadata...")
+    
+    # Extract voice_name from existing participants before creating agent
+    voice_name = None
+    try:
+        participants = []
+        try:
+            participants = list(getattr(room, "remote_participants", {}).values())
+            if getattr(room, "local_participant", None):
+                participants.append(room.local_participant)
+        except Exception:
+            if hasattr(room, "get_participants"):
+                participants = room.get_participants()
+            elif hasattr(room, "participants"):
+                participants = list(room.participants.values())
+        
+        print(f"🔍 Checking {len(participants)} existing participants for voice_name...")
+        for p in participants:
+            try:
+                if getattr(p, "identity", None) and not p.identity.startswith("agent"):
+                    meta = getattr(p, "metadata", None)
+                    if meta:
+                        try:
+                            parsed = json.loads(meta)
+                            if "voice_name" in parsed:
+                                voice_name = parsed["voice_name"]
+                                print(f"🎤 Found voice_name from participant metadata: {voice_name}")
+                                break
+                        except Exception as e:
+                            print(f"⚠️ Metadata parse error: {e}")
+            except Exception:
+                continue
+    except Exception as e:
+        print(f"⚠️ Error extracting voice_name: {e}")
+    
+    # Create agent with voice_name if available
+    session = AgentSession()
+    agent = HostAgent(voice_name=voice_name)
+    if voice_name:
+        print(f"🎤 HostAgent created with voice: {voice_name}")
+    agent._session = session
+    agent._room = room
 
     def safe_on(event_name, handler):
         try:
@@ -308,6 +362,15 @@ async def entrypoint_host(ctx: agents.JobContext):
                             agent.user_id = parsed["user_id"]
                         if "selectedKbId" in parsed:
                             agent.selected_kb_id = parsed["selectedKbId"]
+                        # Update voice if provided in metadata
+                        if "voice_name" in parsed:
+                            new_voice = parsed["voice_name"]
+                            if new_voice and hasattr(agent, '_llm') and hasattr(agent._llm, 'voice'):
+                                try:
+                                    agent._llm.voice = new_voice
+                                    print(f"🎤 Voice updated to: {new_voice}")
+                                except Exception as e:
+                                    print(f"⚠️ Could not update voice: {e}")
                         print(f"✅ user_id from metadata: {agent.user_id}, kb_id: {agent.selected_kb_id}")
                     except Exception as e:
                         print(f"⚠️ participant metadata parse error: {e}")
@@ -386,10 +449,18 @@ async def entrypoint_host(ctx: agents.JobContext):
                     if meta:
                         try:
                             parsed = json.loads(meta)
+                            print(f"🔍 Checking participant {getattr(p, 'identity', 'unknown')} metadata: {parsed}")
                             if "userId" in parsed:
                                 agent.user_id = parsed["userId"]
                             if "selectedKbId" in parsed:
                                 agent.selected_kb_id = parsed["selectedKbId"]
+                            # Verify voice matches
+                            if "voice_name" in parsed:
+                                extracted_voice = parsed["voice_name"]
+                                if extracted_voice != voice_name:
+                                    print(f"⚠️ Voice mismatch: extracted={extracted_voice}, agent={voice_name}")
+                                else:
+                                    print(f"✅ Voice confirmed: {extracted_voice}")
                                 break
                         except Exception as e:
                             print(f"⚠️ Startup metadata parse error: {e}")
@@ -401,7 +472,7 @@ async def entrypoint_host(ctx: agents.JobContext):
     except Exception as e:
         print(f"⚠️ participant discovery error: {e}")
 
-    print(f"🧩 Final user_id: {agent.user_id}, selected_kb_id: {agent.selected_kb_id}")
+    print(f"🧩 Final user_id: {agent.user_id}, selected_kb_id: {agent.selected_kb_id}, voice: {voice_name}")
 
     def on_transcript_received(participant, text):
         try:

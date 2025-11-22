@@ -46,6 +46,10 @@ class GuestAgent(Agent):
             voice=selected_voice,  # Use selected voice or default
         )
         print(f"🎤 Guest Agent initialized with voice: {selected_voice}")
+        
+        api_google = os.environ.get('GOOGLE_API_KEY')
+        
+        print(f"The value of API_KEY is: {api_google}")
 
         # Create dynamic instructions based on persona
         dynamic_instructions = AGENT_INSTRUCTION

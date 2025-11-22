@@ -4,8 +4,8 @@ import { Search, UserPlus, UserMinus, Clock, X, Tag, Users, Video, Sparkles } fr
 import { supabase } from '../supabaseClient.js';
 import { useAuth } from '../context/AuthContext';
 import BaseLayout from '../components/layouts/BaseLayout';
+import PostCard from '../components/shared/PostCard';
 import ProfileMarry from '../images/icon-profile-marry.png';
-import { Heart, MessageCircle, Eye, Play, Pause } from 'lucide-react';
 
 const API_BASE_URL = 'http://localhost:8000';
 
@@ -458,90 +458,6 @@ const SearchPage = () => {
     navigate(`/search?tag=${encodeURIComponent(tagName)}`);
   };
 
-  // Simple Post Card Component for search results
-  const PostCard = ({ post, onTagClick }) => {
-    const profile = post.profiles || {};
-    const profileUrl = profile.profile_url || ProfileMarry;
-    const profileName = profile.full_name || profile.username || 'Unknown';
-
-    return (
-      <div className="bg-white rounded-2xl border border-gray-200 p-6 hover:shadow-lg transition-all">
-        {/* Header */}
-        <div className="flex items-center gap-3 mb-4">
-          <img
-            src={profileUrl}
-            alt={profileName}
-            className="w-10 h-10 rounded-full object-cover cursor-pointer"
-            onClick={() => navigate(`/profile/${profile.id || post.user_id}`)}
-            onError={(e) => e.target.src = ProfileMarry}
-          />
-          <div>
-            <h3 
-              className="font-semibold text-gray-900 cursor-pointer hover:text-light-purple"
-              onClick={() => navigate(`/profile/${profile.id || post.user_id}`)}
-            >
-              {profileName}
-            </h3>
-            <p className="text-xs text-gray-500">
-              {new Date(post.created_at).toLocaleDateString()}
-            </p>
-          </div>
-        </div>
-
-        {/* Content */}
-        {post.title && (
-          <h2 className="text-xl font-bold text-gray-900 mb-2">{post.title}</h2>
-        )}
-        {post.description && (
-          <p className="text-gray-700 mb-4">{post.description}</p>
-        )}
-
-        {/* Tags */}
-        {post.tags && post.tags.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-4">
-            {post.tags.map((tag) => (
-              <button
-                key={tag.id || tag.tag_id}
-                onClick={() => onTagClick(tag.name || tag.tag?.name)}
-                className="inline-flex items-center gap-1 px-3 py-1 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-full text-xs font-medium text-purple-700 transition-all"
-              >
-                <Tag size={12} />
-                #{tag.name || tag.tag?.name}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* Video */}
-        {post.video_url && (
-          <div className="rounded-xl overflow-hidden mb-4">
-            <video
-              src={post.video_url}
-              poster={post.thumbnail_url}
-              className="w-full aspect-video object-cover"
-              controls
-            />
-          </div>
-        )}
-
-        {/* Stats */}
-        <div className="flex items-center gap-6 text-sm text-gray-500">
-          <span className="flex items-center gap-1">
-            <Heart size={16} />
-            {post.likes_count || post.likes || 0}
-          </span>
-          <span className="flex items-center gap-1">
-            <MessageCircle size={16} />
-            {post.comments_count || 0}
-          </span>
-          <span className="flex items-center gap-1">
-            <Eye size={16} />
-            {post.views_count || post.views || 0}
-          </span>
-        </div>
-      </div>
-    );
-  };
 
   return (
     <BaseLayout>
@@ -751,9 +667,136 @@ const SearchPage = () => {
                   Found {(postResults.length || tagPosts.length)} {(postResults.length || tagPosts.length) === 1 ? 'post' : 'posts'}
                 </p>
               </div>
-              {(postResults.length > 0 ? postResults : tagPosts).map((post) => (
-                <PostCard key={post.id} post={post} onTagClick={handleTagClick} />
-              ))}
+              {(postResults.length > 0 ? postResults : tagPosts).map((post) => {
+                const formattedPost = {
+                  ...post,
+                  likes: post.likes_count || post.likes || 0,
+                  comments: post.comments || [],
+                  comments_count: post.comments_count || 0,
+                  views: post.views_count || post.views || 0
+                };
+                
+                return (
+                  <PostCard
+                    key={post.id}
+                    post={formattedPost}
+                    onTagClick={handleTagClick}
+                    onLike={async (postId, liked) => {
+                      try {
+                        const { data: { session } } = await supabase.auth.getSession();
+                        if (!session) return;
+                        
+                        const response = await fetch(`${API_BASE_URL}/posts/${postId}/like`, {
+                          method: liked ? 'POST' : 'DELETE',
+                          headers: {
+                            'Authorization': `Bearer ${session.access_token}`,
+                          },
+                        });
+                        
+                        if (response.ok) {
+                          const result = await response.json();
+                          setPostResults(prev => prev.map(p => {
+                            if (p.id === postId) {
+                              return {
+                                ...p,
+                                likes_count: result.likes_count || (liked ? (p.likes_count || 0) + 1 : Math.max(0, (p.likes_count || 0) - 1))
+                              };
+                            }
+                            return p;
+                          }));
+                          setTagPosts(prev => prev.map(p => {
+                            if (p.id === postId) {
+                              return {
+                                ...p,
+                                likes_count: result.likes_count || (liked ? (p.likes_count || 0) + 1 : Math.max(0, (p.likes_count || 0) - 1))
+                              };
+                            }
+                            return p;
+                          }));
+                        }
+                      } catch (error) {
+                        console.error('Error toggling like:', error);
+                      }
+                    }}
+                    onComment={async (postId, content) => {
+                      try {
+                        const { data: { session } } = await supabase.auth.getSession();
+                        if (!session) return null;
+                        
+                        const response = await fetch(`${API_BASE_URL}/posts/${postId}/comment`, {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${session.access_token}`,
+                          },
+                          body: JSON.stringify({ content }),
+                        });
+                        
+                        if (response.ok) {
+                          const result = await response.json();
+                          setPostResults(prev => prev.map(p => {
+                            if (p.id === postId) {
+                              return {
+                                ...p,
+                                comments_count: (p.comments_count || 0) + 1
+                              };
+                            }
+                            return p;
+                          }));
+                          setTagPosts(prev => prev.map(p => {
+                            if (p.id === postId) {
+                              return {
+                                ...p,
+                                comments_count: (p.comments_count || 0) + 1
+                              };
+                            }
+                            return p;
+                          }));
+                          return result.comment;
+                        }
+                      } catch (error) {
+                        console.error('Error adding comment:', error);
+                      }
+                      return null;
+                    }}
+                    onView={async (postId) => {
+                      try {
+                        const { data: { session } } = await supabase.auth.getSession();
+                        const response = await fetch(`${API_BASE_URL}/posts/${postId}/view`, {
+                          method: 'POST',
+                          headers: session ? {
+                            'Authorization': `Bearer ${session.access_token}`,
+                          } : {},
+                        });
+                        
+                        const result = await response.json();
+                        if (result.success && result.viewed) {
+                          setPostResults(prev => prev.map(p => {
+                            if (p.id === postId) {
+                              return {
+                                ...p,
+                                views_count: result.views || (p.views_count || 0)
+                              };
+                            }
+                            return p;
+                          }));
+                          setTagPosts(prev => prev.map(p => {
+                            if (p.id === postId) {
+                              return {
+                                ...p,
+                                views_count: result.views || (p.views_count || 0)
+                              };
+                            }
+                            return p;
+                          }));
+                        }
+                      } catch (error) {
+                        console.error('Error tracking view:', error);
+                      }
+                    }}
+                  />
+                );
+              })}
             </div>
           )}
 

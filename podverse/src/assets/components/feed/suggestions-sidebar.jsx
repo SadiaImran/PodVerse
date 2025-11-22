@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { UserPlus, TrendingUp, Sparkles, Tag } from 'lucide-react';
+import { UserPlus, TrendingUp, Sparkles, Tag, Flame, Hash, ArrowUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../supabaseClient.js';
 import { useAuth } from '../../context/AuthContext';
@@ -239,7 +239,7 @@ const SuggestionsSidebar = () => {
         .from('tags')
         .select('*')
         .order('usage_count', { ascending: false })
-        .limit(6);
+        .limit(4);
 
       if (error) {
         console.error('Error fetching trending tags:', error);
@@ -375,7 +375,7 @@ const SuggestionsSidebar = () => {
       let query = supabase
         .from('profiles')
         .select('id, full_name, username, profile_url, bio, followers_count')
-        .limit(10);
+        .limit(3);
 
       const { data: allUsers, error } = await query;
 
@@ -441,12 +441,14 @@ const SuggestionsSidebar = () => {
   ];
 
   return (
-    <div className="space-y-6 ">
+    <div className="">
       {/* Suggestions */}
-      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <Sparkles className="w-5 h-5 text-purple-600" />
-          <h3 className="text-lg font-bold text-gray-900">
+      <div className="bg-white rounded-3xl shadow-lg p-6 mb-5" style={{ border: '1px solid #e5e7eb' }}>
+        <div className="flex items-center gap-2 mb-6">
+          <div className="p-2 rounded-xl shadow-lg" style={{ backgroundColor: '#6057C7' }}>
+            <Sparkles className="w-5 h-5" style={{ color: '#F9F5EB' }} />
+          </div>
+          <h3 className="text-lg font-bold" style={{ color: '#6057C7' }}>
             Suggested for you
           </h3>
         </div>
@@ -463,7 +465,7 @@ const SuggestionsSidebar = () => {
             ))}
           </div>
         ) : suggestedUsers.length > 0 ? (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {suggestedUsers.map((user) => {
               const isFollowing = followingMap[user.id];
               const profileUrl = user.profile_url || ProfileMarry;
@@ -471,41 +473,68 @@ const SuggestionsSidebar = () => {
               const followersCount = user.followers_count || 0;
               
               return (
-                <div key={user.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-purple-50/50 transition-all group">
-                  <img
-                    src={profileUrl}
-                    alt={displayName}
-                    className="w-12 h-12 rounded-full object-cover ring-2 ring-purple-100 group-hover:ring-purple-300 transition-all cursor-pointer flex-shrink-0"
-                    onClick={() => navigate(`/profile/${user.id}`)}
-                    onError={(e) => {
-                      e.target.src = ProfileMarry;
-                    }}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p 
-                      className="font-semibold text-gray-900 text-sm truncate group-hover:text-purple-600 transition-colors cursor-pointer"
+                <div key={user.id} className="flex items-center gap-3 p-3 rounded-2xl hover:bg-gray-50 transition-all group border border-transparent hover:border-gray-200 hover:shadow-sm">
+                  <div className="relative flex-shrink-0">
+                    <div className="absolute inset-0 rounded-full opacity-0 group-hover:opacity-100 blur-md transition-opacity duration-300" style={{ backgroundColor: '#A388E7' }} />
+                    <img
+                      src={profileUrl}
+                      alt={displayName}
+                      className="relative w-12 h-12 rounded-full object-cover ring-2 transition-all cursor-pointer flex-shrink-0 shadow-sm"
+                      style={{ ringColor: '#A388E7' }}
                       onClick={() => navigate(`/profile/${user.id}`)}
+                      onError={(e) => {
+                        e.target.src = ProfileMarry;
+                      }}
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0 pr-2">
+                    <p 
+                      className="font-bold text-sm transition-colors cursor-pointer"
+                      style={{ color: '#1C1C1C' }}
+                      onClick={() => navigate(`/profile/${user.id}`)}
+                      onMouseEnter={(e) => {
+                        e.target.style.color = '#6057C7';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.target.style.color = '#1C1C1C';
+                      }}
                     >
-                      {displayName}
+                      {displayName.length > 20 ? displayName.substring(0, 20) + '...' : displayName}
                     </p>
                     {user.bio && (
-                      <p className="text-gray-500 text-xs truncate">{user.bio}</p>
+                      <p className="text-xs mt-0.5 line-clamp-2" style={{ color: '#6A6A6A' }}>{user.bio}</p>
                     )}
-                    <p className="text-gray-400 text-xs mt-0.5">
+                    <p className="text-xs mt-1 flex items-center gap-1" style={{ color: '#6A6A6A' }}>
+                      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#A388E7' }}></span>
                       {followersCount > 0 ? `${(followersCount / 1000).toFixed(1)}K` : '0'} followers
                     </p>
                   </div>
                   {!isFollowing ? (
                     <button 
                       onClick={() => handleFollow(user.id)}
-                      className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-4 py-1.5 rounded-full text-xs font-semibold hover:from-purple-700 hover:to-pink-700 transition-all shadow-md shadow-purple-500/30 whitespace-nowrap"
+                      className="text-white px-4 py-1.5 rounded-full text-xs font-bold transition-all shadow-md whitespace-nowrap hover:scale-105 active:scale-95"
+                      style={{
+                        backgroundColor: '#6057C7',
+                        color: '#F9F5EB'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.target.style.backgroundColor = '#2F2867';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.target.style.backgroundColor = '#6057C7';
+                      }}
                     >
-                      <UserPlus size={14} className="inline mr-1" />
+                      <UserPlus size={14} className="inline mr-1.5" />
                       Follow
                     </button>
                   ) : (
                     <button 
-                      className="bg-gray-100 text-gray-600 px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap"
+                      className="px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap border shadow-sm"
+                      style={{
+                        backgroundColor: '#f3f4f6',
+                        color: '#6A6A6A',
+                        borderColor: '#e5e7eb'
+                      }}
                       disabled
                     >
                       Following
@@ -520,17 +549,33 @@ const SuggestionsSidebar = () => {
         )}
         <button 
           onClick={() => navigate('/search')}
-          className="text-purple-600 hover:text-purple-700 text-sm font-semibold mt-4 w-full text-center py-2 hover:bg-purple-50 rounded-lg transition-all"
+          className="text-sm font-bold mt-5 w-full text-center py-2.5 rounded-xl transition-all border hover:shadow-sm"
+          style={{
+            color: '#6057C7',
+            borderColor: '#A388E7'
+          }}
+          onMouseEnter={(e) => {
+            e.target.style.backgroundColor = '#A388E7';
+            e.target.style.color = '#F9F5EB';
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.backgroundColor = 'transparent';
+            e.target.style.color = '#6057C7';
+          }}
         >
           View all recommendations →
         </button>
       </div>
 
       {/* Trending */}
-      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <TrendingUp className="w-5 h-5 text-orange-500" />
-          <h3 className="text-lg font-bold text-gray-900">
+      <div className="bg-white rounded-3xl shadow-lg p-6 mb-5" style={{ border: '1px solid #e5e7eb' }}>
+        <div className="flex items-center gap-2 mb-6">
+          <div className="p-2.5 rounded-xl shadow-lg flex items-center justify-center" style={{ 
+            background: 'linear-gradient(135deg, #6057C7 0%, #A388E7 100%)' 
+          }}>
+            <Flame className="w-5 h-5" style={{ color: '#F9F5EB' }} />
+          </div>
+          <h3 className="text-lg font-bold" style={{ color: '#6057C7' }}>
             Trending Now
           </h3>
         </div>
@@ -545,38 +590,95 @@ const SuggestionsSidebar = () => {
           </div>
         ) : trendingTags.length > 0 ? (
           <div className="space-y-3">
-            {trendingTags.map((tag, idx) => (
-              <div 
-                key={tag.id} 
-                onClick={() => handleTagClick(tag.name)}
-                className="hover:bg-gradient-to-r hover:from-purple-50 hover:to-pink-50 p-3 rounded-xl cursor-pointer transition-all group"
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <div className="flex items-center gap-2">
-                    <Tag size={14} className="text-gray-400 group-hover:text-purple-600 transition-colors" />
-                    <p className="font-bold text-gray-900 text-sm group-hover:text-purple-600 transition-colors">
-                      #{tag.name}
-                    </p>
+            {trendingTags.map((tag, idx) => {
+              const isTopTrending = idx === 0;
+              return (
+                <div 
+                  key={tag.id} 
+                  onClick={() => handleTagClick(tag.name)}
+                  className="relative p-4 rounded-2xl cursor-pointer transition-all group border overflow-hidden"
+                  style={{ 
+                    backgroundColor: isTopTrending ? '#f9fafb' : '#ffffff',
+                    borderColor: isTopTrending ? '#A388E7' : '#e5e7eb'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#f9fafb';
+                    e.currentTarget.style.borderColor = '#A388E7';
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(96, 87, 199, 0.15)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = isTopTrending ? '#f9fafb' : '#ffffff';
+                    e.currentTarget.style.borderColor = isTopTrending ? '#A388E7' : '#e5e7eb';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                >
+                  {/* Top trending badge */}
+                  {isTopTrending && (
+                    <div className="absolute top-2 right-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold"
+                      style={{ backgroundColor: '#6057C7', color: '#F9F5EB' }}
+                    >
+                      <ArrowUp size={10} />
+                      <span>Hot</span>
+                    </div>
+                  )}
+                  
+                  <div className="flex items-center gap-3">
+                    {/* Rank number with icon */}
+                    <div className="flex-shrink-0">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm shadow-sm transition-all group-hover:scale-110"
+                        style={{ 
+                          backgroundColor: isTopTrending ? '#6057C7' : '#A388E7',
+                          color: '#F9F5EB'
+                        }}
+                      >
+                        {idx + 1}
+                      </div>
+                    </div>
+                    
+                    {/* Tag info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Hash size={16} style={{ color: '#6057C7' }} className="flex-shrink-0" />
+                        <p className="font-bold text-sm truncate transition-colors" style={{ color: '#1C1C1C' }}
+                          onMouseEnter={(e) => {
+                            e.target.style.color = '#6057C7';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.target.style.color = '#1C1C1C';
+                          }}
+                        >
+                          {tag.name}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1">
+                          <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#A388E7' }}></div>
+                          <p className="text-xs font-medium" style={{ color: '#6A6A6A' }}>
+                            {tag.usage_count || 0} {tag.usage_count === 1 ? 'post' : 'posts'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div className={`w-2 h-2 rounded-full bg-gradient-to-r ${tagColors[idx % tagColors.length]}`}></div>
                 </div>
-                <p className="text-gray-500 text-xs">
-                  {tag.usage_count || 0} {tag.usage_count === 1 ? 'post' : 'posts'}
-                </p>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
-          <p className="text-gray-500 text-sm text-center py-4">No trending topics yet</p>
+          <div className="text-center py-8">
+            <TrendingUp className="w-12 h-12 mx-auto mb-3" style={{ color: '#d1d5db' }} />
+            <p className="text-sm font-medium" style={{ color: '#6A6A6A' }}>No trending topics yet</p>
+            <p className="text-xs mt-1" style={{ color: '#9ca3af' }}>Start creating content to see trends</p>
+          </div>
         )}
       </div>
 
       {/* Quick Stats - Your Impact */}
       {currentUser && (
-        <div className="bg-gradient-to-br from-purple-600 via-pink-600 to-purple-700 rounded-2xl p-6 text-white shadow-xl">
+        <div className="rounded-2xl p-6 text-white shadow-xl mb-6" style={{ backgroundColor: '#6057C7', border: '1px solid #A388E7' }}>
           <div className="flex items-center gap-2 mb-4">
-            <Sparkles className="w-5 h-5" />
-            <h3 className="font-bold text-lg">Your Impact</h3>
+            <Sparkles className="w-5 h-5" style={{ color: '#F9F5EB' }} />
+            <h3 className="font-bold text-lg" style={{ color: '#F9F5EB' }}>Your Impact</h3>
           </div>
           {loadingStats ? (
             <div className="space-y-4">
@@ -588,32 +690,32 @@ const SuggestionsSidebar = () => {
               ))}
             </div>
           ) : (
-            <div className="space-y-4">
-              <div className="flex justify-between items-center p-3 bg-white/10 backdrop-blur-sm rounded-xl">
-                <span className="text-purple-100 text-sm">Total Plays</span>
-                <span className="font-bold text-lg">
+            <div className="space-y-3">
+              <div className="flex justify-between items-center p-3 rounded-xl" style={{ backgroundColor: 'rgba(249, 245, 235, 0.15)' }}>
+                <span className="text-sm" style={{ color: '#F9F5EB', opacity: 0.9 }}>Total Plays</span>
+                <span className="font-bold text-lg" style={{ color: '#F9F5EB' }}>
                   {impactStats.totalPlays >= 1000 
                     ? `${(impactStats.totalPlays / 1000).toFixed(1)}K`
                     : impactStats.totalPlays.toLocaleString()}
                 </span>
               </div>
-              <div className="flex justify-between items-center p-3 bg-white/10 backdrop-blur-sm rounded-xl">
-                <span className="text-purple-100 text-sm">Followers</span>
-                <span className="font-bold text-lg">
+              <div className="flex justify-between items-center p-3 rounded-xl" style={{ backgroundColor: 'rgba(249, 245, 235, 0.15)' }}>
+                <span className="text-sm" style={{ color: '#F9F5EB', opacity: 0.9 }}>Followers</span>
+                <span className="font-bold text-lg" style={{ color: '#F9F5EB' }}>
                   {impactStats.followers >= 1000
                     ? `${(impactStats.followers / 1000).toFixed(1)}K`
                     : impactStats.followers.toLocaleString()}
                 </span>
               </div>
-              <div className="flex justify-between items-center p-3 bg-white/10 backdrop-blur-sm rounded-xl">
-                <span className="text-purple-100 text-sm">This Month</span>
-                <span className={`font-bold text-lg ${
-                  impactStats.monthlyGrowth > 0 
-                    ? 'text-green-300' 
+              <div className="flex justify-between items-center p-3 rounded-xl" style={{ backgroundColor: 'rgba(249, 245, 235, 0.15)' }}>
+                <span className="text-sm" style={{ color: '#F9F5EB', opacity: 0.9 }}>This Month</span>
+                <span className="font-bold text-lg" style={{
+                  color: impactStats.monthlyGrowth > 0 
+                    ? '#22c55e' 
                     : impactStats.monthlyGrowth < 0 
-                    ? 'text-red-300' 
-                    : 'text-white'
-                }`}>
+                    ? '#ef4444' 
+                    : '#F9F5EB'
+                }}>
                   {impactStats.monthlyGrowth > 0 ? '+' : ''}{impactStats.monthlyGrowth}%
                 </span>
               </div>
