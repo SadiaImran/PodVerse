@@ -49,48 +49,209 @@ processing_jobs: Dict[str, ProcessingStatus] = {}
 merged_video_files: Dict[str, str] = {}
 
 
+def generate_srt_from_utterances(utterances: List[Dict], output_path: str) -> str:
+    """
+    Generate an SRT subtitle file from speaker utterances.
+    
+    Args:
+        utterances: List of dicts with 'speaker', 'start', 'end', 'text'
+        output_path: Path where SRT file should be saved
+    
+    Returns:
+        Path to the generated SRT file
+    """
+    def ms_to_srt_time(milliseconds: int) -> str:
+        """Convert milliseconds to SRT time format (HH:MM:SS,mmm)"""
+        seconds, ms = divmod(milliseconds, 1000)
+        minutes, seconds = divmod(seconds, 60)
+        hours, minutes = divmod(minutes, 60)
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d},{ms:03d}"
+    
+    srt_lines = []
+    
+    for idx, utt in enumerate(utterances, start=1):
+        start_time = ms_to_srt_time(utt["start"])
+        end_time = ms_to_srt_time(utt["end"])
+        speaker = utt["speaker"]
+        text = utt["text"]
+        
+        # Format: Speaker A: text or Speaker B: text
+        subtitle_text = f"Speaker {speaker}: {text}"
+        
+        srt_lines.append(f"{idx}")
+        srt_lines.append(f"{start_time} --> {end_time}")
+        srt_lines.append(subtitle_text)
+        srt_lines.append("")  # Blank line between entries
+    
+    # Write to file
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(srt_lines))
+    
+    print(f"✅ SRT file created: {output_path}")
+    print(f"📊 Total subtitles: {len(utterances)}")
+    
+    return output_path
+
+
+def burn_subtitles_to_video(video_path: str, srt_path: str, output_path: str) -> str:
+    """
+    Burn subtitles into a video using FFmpeg.
+    
+    Args:
+        video_path: Input video file
+        srt_path: SRT subtitle file
+        output_path: Output video with burned subtitles
+    
+    Returns:
+        Path to the output video
+    """
+    print(f"🔥 Burning subtitles into video...")
+    print(f"  Video: {video_path}")
+    print(f"  Subtitles: {srt_path}")
+    
+    import shutil
+    
+    video_dir = os.path.dirname(video_path)
+    simple_srt_name = "temp_subtitles.srt"
+    simple_srt_path = os.path.join(video_dir, simple_srt_name)
+    
+    # Copy SRT to simple path
+    shutil.copy2(srt_path, simple_srt_path)
+    print(f"  Copied SRT to: {simple_srt_path}")
+    
+    try:
+        # Now use the simple filename (relative path, no special chars)
+        subtitle_filter = (
+            f"subtitles={simple_srt_name}:"
+            f"force_style='"
+            f"Fontsize=16,"
+            f"PrimaryColour=&HFFFFFF&,"       # White text
+            f"OutlineColour=&H000000&,"       # Black outline
+            f"Outline=2,"                     # Thick outline
+            f"BackColour=&H80000000&,"        # Semi-transparent black background
+            f"BorderStyle=3,"                 # Box background
+            f"Shadow=1,"                      # Shadow
+            f"MarginV=20,"                    # Position from bottom
+            f"MarginL=30,"                    # Left margin
+            f"MarginR=30,"                    # Right margin
+            f"Alignment=2"                    # Bottom center
+            f"'"
+        )
+        
+        ffmpeg_cmd = [
+            'ffmpeg',
+            '-i', video_path,
+            '-vf', subtitle_filter,
+            '-c:a', 'copy',                  # Copy audio without re-encoding
+            '-y',                            # Overwrite output
+            output_path
+        ]
+        
+        # Change working directory to video directory so relative path works
+        original_cwd = os.getcwd()
+        os.chdir(video_dir)
+        
+        print(f"🎬 Running FFmpeg from directory: {video_dir}")
+        
+        result = subprocess.run(
+            ffmpeg_cmd,
+            check=True,
+            capture_output=True,
+            text=True,
+            cwd=video_dir  # Set working directory
+        )
+        
+        os.chdir(original_cwd)  # Restore original directory
+        
+        print(f"✅ Subtitles burned successfully!")
+        print(f"📊 Output size: {os.path.getsize(output_path)} bytes")
+        
+        return output_path
+        
+    except subprocess.CalledProcessError as e:
+        # Restore directory if error
+        try:
+            os.chdir(original_cwd)
+        except:
+            pass
+            
+        print(f"❌ FFmpeg subtitle burning failed!")
+        print(f"STDOUT: {e.stdout[-1000:]}")
+        print(f"STDERR: {e.stderr[-1000:]}")
+        
+        # Try to find actual error in stderr
+        error_lines = e.stderr.split('\n')
+        actual_error = [line for line in error_lines if 'Error' in line or 'failed' in line or 'Invalid' in line]
+        if actual_error:
+            error_msg = '\n'.join(actual_error[-5:])
+        else:
+            error_msg = e.stderr[-500:]
+        
+        raise Exception(f"Failed to burn subtitles: {error_msg}")
+    
+    finally:
+        # Clean up temporary SRT copy
+        try:
+            if os.path.exists(simple_srt_path):
+                os.remove(simple_srt_path)
+                print(f"🗑️ Cleaned up temporary SRT: {simple_srt_path}")
+        except Exception as e:
+            print(f"⚠️ Could not remove temp SRT: {e}")
+
+
 def build_speaker_switch_filter(utterances: List[Dict]) -> str:
-    """Build FFmpeg filter_complex string to switch between speaker videos."""
+    """
+    Build FFmpeg filter_complex string to switch between speaker videos.
+    
+    CRITICAL FIX: The speaker videos from HeyGen contain ONLY that speaker's audio segments
+    concatenated together. So we need to calculate the cumulative position within each 
+    speaker's video, not use the original timestamps.
+    """
     segments = []
+    
+    # Track cumulative time position for each speaker's video
+    speaker_positions = {"A": 0.0, "B": 0.0}
     
     for i, utt in enumerate(utterances):
         speaker = utt["speaker"]
-        start_sec = utt["start"] / 1000.0
-        end_sec = utt["end"] / 1000.0
-        duration = end_sec - start_sec
+        duration_ms = utt["end"] - utt["start"]
+        duration_sec = duration_ms / 1000.0
         
-        # Select video input (0=A, 1=B)
         input_idx = 0 if speaker == "A" else 1
+        
+        # Get the current position in this speaker's video
+        start_in_speaker_video = speaker_positions[speaker]
         
         segments.append({
             'input': input_idx,
-            'start': start_sec,
-            'duration': duration,
-            'speaker': speaker
+            'start': start_in_speaker_video,  # Position in speaker's video
+            'duration': duration_sec,
+            'speaker': speaker,
+            'original_start': utt["start"] / 1000.0  # For debugging
         })
         
-        print(f"  Segment {i}: Speaker {speaker} from {start_sec:.2f}s for {duration:.2f}s (input {input_idx})")
+        # Update position for this speaker
+        speaker_positions[speaker] += duration_sec
+        
+        print(f"  Segment {i}: Speaker {speaker} | "
+              f"Original: {utt['start']/1000:.2f}s | "
+              f"In Speaker Video: {start_in_speaker_video:.2f}s | "
+              f"Duration: {duration_sec:.2f}s")
     
-    # Build filter_complex for concatenation
+    # Build filter_complex
     filter_parts = []
-    
-    # IMPORTANT: We're NOT trimming the input videos by time
-    # because Speaker A's video only contains Speaker A's audio
-    # and Speaker B's video only contains Speaker B's audio
-    # Instead, we split each video into segments and concatenate
     
     for i, seg in enumerate(segments):
         input_idx = seg['input']
+        start = seg['start']
         duration = seg['duration']
         
-        # Select the appropriate input and trim to the duration of this segment
-        # We use the video sequentially, not by timestamp
+        # Trim from the specific position in the speaker's video
         filter_parts.append(
-            f"[{input_idx}:v]trim=duration={duration},setpts=PTS-STARTPTS[v{i}];"
-            f"[{input_idx}:a]atrim=duration={duration},asetpts=PTS-STARTPTS[a{i}]"
+            f"[{input_idx}:v]trim=start={start}:duration={duration},setpts=PTS-STARTPTS[v{i}];"
+            f"[{input_idx}:a]atrim=start={start}:duration={duration},asetpts=PTS-STARTPTS[a{i}]"
         )
     
-    # Concatenate all segments
     video_inputs = ''.join([f"[v{i}]" for i in range(len(segments))])
     audio_inputs = ''.join([f"[a{i}]" for i in range(len(segments))])
     
@@ -106,17 +267,16 @@ def create_dynamic_podcast_video(
     video_a_url: str,
     video_b_url: str,
     utterances: List[Dict],
-    output_path: str
+    output_path: str,
+    add_subtitles: bool = False  # NEW PARAMETER
 ) -> str:
     """
     Create a dynamic podcast video that switches between speakers.
-    
-    FIXED: Properly downloads videos and uses correct filter
+    Optionally adds burned-in subtitles.
     """
     import tempfile
     import requests
     
-    # Download both videos
     temp_dir = tempfile.gettempdir()
     video_a_path = os.path.join(temp_dir, f"speaker_a_video_{int(time.time())}.mp4")
     video_b_path = os.path.join(temp_dir, f"speaker_b_video_{int(time.time())}.mp4")
@@ -143,17 +303,14 @@ def create_dynamic_podcast_video(
     except Exception as e:
         raise Exception(f"Failed to download Speaker B video: {e}")
     
-    # Build FFmpeg filter for switching between videos
     print("🎬 Building FFmpeg filter...")
     filter_complex = build_speaker_switch_filter(utterances)
     
-    # Save filter to file for debugging
     filter_file = os.path.join(temp_dir, f"ffmpeg_filter_{int(time.time())}.txt")
     with open(filter_file, 'w') as f:
         f.write(filter_complex)
     print(f"📄 Filter saved to: {filter_file}")
     
-    # Merge videos with FFmpeg
     print("🎬 Creating dynamic podcast video...")
     merged_path = os.path.join(temp_dir, f"podcast_merged_{int(time.time())}.mp4")
     
@@ -182,9 +339,27 @@ def create_dynamic_podcast_video(
         print(f"📊 Output size: {os.path.getsize(merged_path)} bytes")
     except subprocess.CalledProcessError as e:
         print(f"❌ FFmpeg failed!")
-        print(f"STDOUT: {e.stdout}")
         print(f"STDERR: {e.stderr}")
         raise Exception(f"FFmpeg merge failed: {e.stderr[:500]}")
+    
+    # NEW: Add subtitles if requested
+    final_output = merged_path
+    
+    if add_subtitles:
+        print("\n📝 Adding subtitles to video...")
+        
+        srt_path = os.path.join(temp_dir, f"subtitles_{int(time.time())}.srt")
+        generate_srt_from_utterances(utterances, srt_path)
+        
+        subtitled_path = os.path.join(temp_dir, f"podcast_subtitled_{int(time.time())}.mp4")
+        burn_subtitles_to_video(merged_path, srt_path, subtitled_path)
+        
+        # Clean up intermediate files
+        os.remove(merged_path)
+        os.remove(srt_path)
+        
+        final_output = subtitled_path
+        print(f"✅ Final video with subtitles: {final_output}")
     
     # Cleanup downloaded videos
     try:
@@ -195,7 +370,7 @@ def create_dynamic_podcast_video(
     except Exception as e:
         print(f"⚠️ Cleanup warning: {e}")
     
-    return merged_path
+    return final_output
 
 
 def transcribe_and_diarize(audio_file: str) -> Tuple[List[Dict], Dict[str, str]]:
@@ -216,7 +391,6 @@ def transcribe_and_diarize(audio_file: str) -> Tuple[List[Dict], Dict[str, str]]
     
     print("✅ Transcription complete!")
     
-    # Build utterances data
     utterances = []
     for utt in transcript.utterances:
         utterances.append({
@@ -227,7 +401,6 @@ def transcribe_and_diarize(audio_file: str) -> Tuple[List[Dict], Dict[str, str]]
         })
         print(f"  {utt.speaker} ({utt.start//1000}s-{utt.end//1000}s): {utt.text[:50]}...")
     
-    # Split audio by speaker
     print("\n🎧 Splitting audio by speaker...")
     audio = AudioSegment.from_file(audio_file)
     audio_files = {}
@@ -335,6 +508,7 @@ def process_podcast_background(
     is_custom_avatar_b: bool,
     use_original_voice_a: bool,
     use_original_voice_b: bool,
+    add_subtitles: bool,  # NEW PARAMETER
     authorization: str
 ):
     """Background task to process podcast audio into avatar videos."""
@@ -380,7 +554,6 @@ def process_podcast_background(
         
         from .module_video import GenerateRequest
         
-        # Create request for Speaker A
         if use_original_voice_a and audio_asset_id_a:
             req_a = GenerateRequest(
                 avatar_id=speaker_a_avatar,
@@ -410,7 +583,6 @@ def process_podcast_background(
             speaker_a_video_id=video_id_a
         )
         
-        # Create request for Speaker B
         if use_original_voice_b and audio_asset_id_b:
             req_b = GenerateRequest(
                 avatar_id=speaker_b_avatar,
@@ -441,7 +613,7 @@ def process_podcast_background(
         )
         
         # Step 5: Poll for completion
-        max_wait = 600  # 10 minutes
+        max_wait = 600
         start_time = time.time()
         
         video_url_a = None
@@ -488,12 +660,13 @@ def process_podcast_background(
         if not video_url_a or not video_url_b:
             raise Exception("One or more videos failed to generate or timed out")
         
-        # Step 6: Merge videos
+        # Step 6: Merge videos (with optional subtitles)
         if video_url_a and video_url_b:
+            subtitle_msg = " with subtitles" if add_subtitles else ""
             update_job_status(
                 job_id,
                 progress=95,
-                message="Creating dynamic podcast video..."
+                message=f"Creating dynamic podcast video{subtitle_msg}..."
             )
             
             try:
@@ -501,18 +674,15 @@ def process_podcast_background(
                     video_url_a,
                     video_url_b,
                     utterances,
-                    tempfile.gettempdir()
+                    tempfile.gettempdir(),
+                    add_subtitles=add_subtitles  # Pass the flag
                 )
                 
-                # Store the path for serving
                 merged_video_files[job_id] = merged_video_path
-                
-                # Create URL for frontend
                 merged_video_url = f"/video/api/podcast/merged/{job_id}"
                 
                 print(f"✅ Dynamic podcast video created: {merged_video_path}")
                 
-                # Success!
                 update_job_status(
                     job_id,
                     status="completed",
@@ -527,7 +697,6 @@ def process_podcast_background(
                 print(f"⚠️ Failed to merge videos: {e}")
                 import traceback
                 traceback.print_exc()
-                # Still return individual videos
                 update_job_status(
                     job_id,
                     status="completed",
@@ -551,7 +720,6 @@ def process_podcast_background(
         )
     
     finally:
-        # Cleanup temp files (but NOT merged video)
         for temp_file in temp_files:
             try:
                 if os.path.exists(temp_file):
@@ -575,6 +743,7 @@ async def process_podcast(
     is_custom_avatar_b: bool = Form(False),
     use_original_voice_a: bool = Form(True),
     use_original_voice_b: bool = Form(True),
+    add_subtitles: bool = Form(False),  # NEW PARAMETER
     conversation_id: Optional[str] = Form(None),
     authorization: str = Depends(verify_token)
 ):
@@ -598,6 +767,7 @@ async def process_podcast(
             f.write(content)
         
         print(f"📥 Saved uploaded audio: {temp_audio} ({len(content)} bytes)")
+        print(f"📝 Subtitles requested: {add_subtitles}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save audio file: {str(e)}")
     
@@ -624,6 +794,7 @@ async def process_podcast(
         is_custom_avatar_b=is_custom_avatar_b,
         use_original_voice_a=use_original_voice_a,
         use_original_voice_b=use_original_voice_b,
+        add_subtitles=add_subtitles,  # Pass the flag
         authorization=authorization
     )
     
@@ -689,3 +860,38 @@ async def list_jobs():
         "jobs": [job.dict() for job in processing_jobs.values()],
         "total": len(processing_jobs)
     }
+
+@router.get("/api/avatar-templates/{speaker}")
+async def get_avatar_templates(speaker: str):
+    """Get avatar template images for a specific speaker (A or B)."""
+    if speaker not in ["A", "B"]:
+        raise HTTPException(status_code=400, detail="Speaker must be 'A' or 'B'")
+    
+    from supabase import create_client
+    import os
+    
+    supabase_url = os.environ.get("SUPABASE_URL")
+    supabase_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+    supabase = create_client(supabase_url, supabase_key)
+    
+    folder_path = f"speaker-{speaker.lower()}"
+    
+    try:
+        files = supabase.storage.from_('avatar-templates').list(folder_path)
+        
+        templates = []
+        for file in files:
+            public_url = supabase.storage.from_('avatar-templates').get_public_url(
+                f"{folder_path}/{file['name']}"
+            )
+            templates.append({
+                "id": file['name'].split('.')[0],
+                "name": file['name'].replace('-', ' ').replace('.jpg', '').replace('.png', '').title(),
+                "url": public_url,
+                "speaker": speaker
+            })
+        
+        return {"templates": templates}
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch templates: {str(e)}")
