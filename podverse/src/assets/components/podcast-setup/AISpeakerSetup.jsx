@@ -141,6 +141,17 @@ const AISpeakerSetup = ({ formData, setFormData, goNext, goBack }) => {
     sessionStorage.setItem('selected_agent_type', agentType);
     console.log(`🎯 Stored agent type in sessionStorage: ${agentType}`);
     
+    // Store AI Host data if AI Host is selected
+    if (agentType === "host") {
+      const hostData = {
+        name: finalConfig.agentName,
+        tone: finalConfig.tone,
+        avatar: finalConfig.avatar || selectedAvatar
+      };
+      sessionStorage.setItem('host_persona', JSON.stringify(hostData));
+      console.log(`🎙️ Stored host persona:`, hostData);
+    }
+    
     // Store guest persona data if AI Guest is selected
     if (agentType === "guest") {
       const guestPersona = {
@@ -148,7 +159,8 @@ const AISpeakerSetup = ({ formData, setFormData, goNext, goBack }) => {
         role: finalConfig.guestPersona.role,
         tone: finalConfig.guestPersona.tone,
         background: finalConfig.guestPersona.background,
-        expertise: finalConfig.guestPersona.expertise
+        expertise: finalConfig.guestPersona.expertise,
+        avatar: finalConfig.avatar || selectedAvatar
       };
       sessionStorage.setItem('guest_persona', JSON.stringify(guestPersona));
       console.log(`🎭 Stored guest persona:`, guestPersona);

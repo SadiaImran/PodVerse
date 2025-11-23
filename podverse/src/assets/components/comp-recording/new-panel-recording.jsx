@@ -190,7 +190,7 @@ const RealAudioWaveform = ({ isActive = false, isMicOn = false }) => {
 };
 
 // Enhanced Status indicator with time display
-const StatusIndicator = ({ isRecording, isProcessing, isSpeaking, conversationStarted, isPaused, elapsedTime, recordingStatus, recordingUrl }) => {
+const StatusIndicator = ({ isRecording, isProcessing, isSpeaking, conversationStarted, isPaused, elapsedTime, recordingStatus, recordingUrl, onCopyUrl }) => {
   const formatTime = (seconds) => {
     const totalSeconds = Math.floor(seconds);
     const mins = Math.floor(totalSeconds / 60);
@@ -198,19 +198,100 @@ const StatusIndicator = ({ isRecording, isProcessing, isSpeaking, conversationSt
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Show stopping status
+  if (recordingStatus === 'stopping') {
+    return (
+      <div className="flex items-center justify-center p-4 text-white rounded-full shadow-md bg-orange-500 space-x-5">
+        <div className="w-3 h-3 bg-white rounded-full animate-pulse"></div>
+        <span className="font-semibold">Stopping Recording...</span>
+      </div>
+    );
+  }
+
+  // Show saving status
+  if (recordingStatus === 'saving') {
+    return (
+      <div className="flex items-center justify-center p-4 text-white rounded-full shadow-md bg-blue-500 space-x-5">
+        <div className="w-3 h-3 bg-white rounded-full animate-spin">
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+        </div>
+        <span className="font-semibold">Saving Recording...</span>
+      </div>
+    );
+  }
+
+  // Show saved status with URL
+  if (recordingStatus === 'saved') {
+    return (
+      <div className="flex flex-col items-center gap-3">
+        <div className="flex items-center justify-center p-4 text-white rounded-full shadow-md bg-green-500 space-x-5">
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+          <span className="font-semibold">Recording Saved!</span>
+        </div>
+        {recordingUrl && (
+          <div className="flex items-center gap-2 bg-white/90 backdrop-blur-sm px-4 py-2 rounded-lg border-2 border-green-200 shadow-md max-w-md">
+            <svg className="w-4 h-4 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+            </svg>
+            <a 
+              href={recordingUrl} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-sm text-green-700 hover:text-green-800 font-medium truncate underline"
+              title={recordingUrl}
+            >
+              View Recording
+            </a>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                navigator.clipboard.writeText(recordingUrl);
+                if (onCopyUrl) {
+                  onCopyUrl();
+                }
+              }}
+              className="ml-2 p-1 hover:bg-green-100 rounded transition-colors"
+              title="Copy URL"
+            >
+              <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Show error status
+  if (recordingStatus === 'error') {
+    return (
+      <div className="flex items-center justify-center p-4 text-white rounded-full shadow-md bg-red-500 space-x-5">
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+        <span className="font-semibold">Recording Error</span>
+      </div>
+    );
+  }
+
   // Show recording status
-  if (isRecording) {
+  if (isRecording && recordingStatus === 'recording') {
     return (
       <div className="flex items-center justify-center p-4 text-white rounded-full shadow-md bg-indigo-500 space-x-5">
         <div className="w-3 h-3 bg-white rounded-full animate-pulse"></div>
-        <span className=" font-semibold">Recording</span>
-        <span className=" font-bold ">{formatTime(elapsedTime)}</span>
+        <span className="font-semibold">Recording</span>
+        <span className="font-bold">{formatTime(elapsedTime)}</span>
       </div>
     );
   }
 
   // Show ready status
-  if (conversationStarted) {
+  if (conversationStarted && recordingStatus === 'idle') {
     return (
       <div className="flex items-center justify-center space-x-3 bg-gradient-to-r from-green-500 to-green-600 px-12 py-4 rounded-full shadow-lg">
         <div className="w-3 h-3 bg-white rounded-full"></div>
@@ -269,7 +350,7 @@ const NewPanelsRecording = ({ podcastConfig = {} }) => {
   
   // Recording state
   const [isRecording, setIsRecording] = useState(false);
-  const [recordingStatus, setRecordingStatus] = useState('idle'); // 'idle', 'recording', 'saving', 'saved', 'error'
+  const [recordingStatus, setRecordingStatus] = useState('idle'); // 'idle', 'recording', 'stopping', 'saving', 'saved', 'error'
   const [recordingUrl, setRecordingUrl] = useState(null);
   const [sessionStarted, setSessionStarted] = useState(false);
   
@@ -390,6 +471,15 @@ const fetchLiveKitToken = async () => {
     formData.append("agent_type", agentType);
     console.log("🎯 Using agent type:", agentType);
     
+    // Get host persona data if AI Host is selected
+    if (agentType === "host") {
+      const hostPersona = sessionStorage.getItem('host_persona');
+      if (hostPersona) {
+        formData.append("host_persona", hostPersona);
+        console.log("🎙️ Sending host persona to backend:", JSON.parse(hostPersona));
+      }
+    }
+    
     // Get guest persona data if AI Guest is selected
     if (agentType === "guest") {
       const guestPersona = sessionStorage.getItem('guest_persona');
@@ -406,7 +496,33 @@ const fetchLiveKitToken = async () => {
       console.log("🎤 Using selected voice name:", selectedVoiceName);
     }
 
+    // Get podcast configuration from podcastConfig
+    if (podcastConfig?.podcastName) {
+      formData.append("podcast_title", podcastConfig.podcastName);
+      console.log("📝 Using podcast title:", podcastConfig.podcastName);
+    }
+    
+    // Pass podcast description for additional context
+    if (podcastConfig?.description) {
+      formData.append("podcast_description", podcastConfig.description);
+      console.log("📄 Using podcast description:", podcastConfig.description);
+    }
+    
+    // Pass podcast tags for categorization/context
+    if (podcastConfig?.tags && Array.isArray(podcastConfig.tags) && podcastConfig.tags.length > 0) {
+      formData.append("podcast_tags", JSON.stringify(podcastConfig.tags));
+      console.log("🏷️ Using podcast tags:", podcastConfig.tags);
+    }
+
     console.log("🎟️ Fetching LiveKit token for:", user);
+    console.log("📦 Full podcast config being sent:", {
+      title: podcastConfig?.podcastName,
+      description: podcastConfig?.description,
+      tags: podcastConfig?.tags,
+      speakerType: podcastConfig?.speakerType,
+      agentName: podcastConfig?.agentName,
+      guestPersona: podcastConfig?.guestPersona
+    });
 
     const response = await axios.post(
       "http://localhost:8000/livekit/get-token",
@@ -604,25 +720,23 @@ const fetchLiveKitToken = async () => {
       setRecordingStatus('recording');
       setConversationStarted(true);
       
-      // Start audio egress (recording) - COMMENTED OUT FOR TESTING
-      // const formData = new FormData();
-      // formData.append('room_name', roomName); // Use the actual room name
-      // formData.append('user_id', user?.id || '');
-      // formData.append('kb_id', podcastConfig?.selectedKnowledgeBase || '');
+      // Start audio egress (recording)
+      const formData = new FormData();
+      formData.append('room_name', roomName); // Use the actual room name
+      formData.append('user_id', user?.id || '');
+      formData.append('kb_id', podcastConfig?.selectedKnowledgeBase || '');
 
-      // const response = await fetch('http://localhost:8000/livekit/start-audio-egress', {
-      //   method: 'POST',
-      //   body: formData,
-      // });
+      const response = await fetch('http://localhost:8000/livekit/start-audio-egress', {
+        method: 'POST',
+        body: formData,
+      });
 
-      // if (response.ok) {
-      //   showToast('🎙️ Recording started!', 'success');
-      // } else {
-      //   console.error('Failed to start recording');
-      //   showToast('Failed to start recording', 'error');
-      // }
-      
-      showToast('🎙️ Recording started! (Egress disabled for testing)', 'success');
+      if (response.ok) {
+        showToast('🎙️ Recording started!', 'success');
+      } else {
+        console.error('Failed to start recording');
+        showToast('Failed to start recording', 'error');
+      }
     } catch (error) {
       console.error('❌ Failed to start recording session:', error);
       showToast('Failed to start recording session', 'error');
@@ -632,30 +746,77 @@ const fetchLiveKitToken = async () => {
   // Stop Recording Session
   const stopRecordingSession = async () => {
     try {
-      setSessionStarted(false);
+      // Step 1: Show stopping status
       setIsRecording(false);
-      setRecordingStatus('stopped');
+      setRecordingStatus('stopping');
+      showToast('⏹️ Stopping recording...', 'info');
       
-      // Stop audio egress (recording) - COMMENTED OUT FOR TESTING
-      // const response = await fetch('http://localhost:8000/livekit/stop-audio-egress', {
-      //   method: 'POST',
-      //   headers: {
-      //     'Content-Type': 'application/json',
-      //   },
-      //   body: JSON.stringify({ room_name: roomName }),
-      // });
+      // Step 2: Stop audio egress (recording) - Use FormData as endpoint expects Form
+      const formData = new FormData();
+      formData.append('room_name', roomName);
+      
+      // Get auth token for signed URL generation
+      const token = await getSupabaseAuthorizedtoken();
+      
+      const response = await fetch('http://localhost:8000/livekit/stop-audio-egress', {
+        method: 'POST',
+        headers: token ? {
+          'Authorization': `Bearer ${token}`
+        } : {},
+        body: formData,
+      });
 
-      // if (response.ok) {
-      //   showToast('⏹️ Recording stopped!', 'info');
-      // } else {
-      //   console.error('Failed to stop recording');
-      //   showToast('Failed to stop recording', 'error');
-      // }
-      
-      showToast('⏹️ Recording stopped! (Egress disabled for testing)', 'info');
+      if (response.ok) {
+        // Get response data with recording URL
+        const responseData = await response.json();
+        const recordingUrl = responseData.recording_url;
+        
+        // Step 3: Show saving status
+        setRecordingStatus('saving');
+        showToast('💾 Saving recording...', 'info');
+        
+        // Wait a bit to show saving status (file processing happens on backend)
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Step 4: Show saved status with URL
+        setRecordingStatus('saved');
+        setSessionStarted(false);
+        
+        // Store recording URL
+        if (recordingUrl) {
+          setRecordingUrl(recordingUrl);
+          showToast('✅ Recording saved successfully! Click to view.', 'success');
+          console.log('📁 Recording URL:', recordingUrl);
+        } else {
+          showToast('✅ Recording saved successfully!', 'success');
+        }
+        
+        // Reset to idle after showing saved status for a few seconds
+        setTimeout(() => {
+          setRecordingStatus('idle');
+          setConversationStarted(false);
+        }, 3000);
+      } else {
+        console.error('Failed to stop recording');
+        setRecordingStatus('error');
+        showToast('❌ Failed to stop recording', 'error');
+        // Reset after error
+        setTimeout(() => {
+          setRecordingStatus('idle');
+          setSessionStarted(false);
+          setConversationStarted(false);
+        }, 3000);
+      }
     } catch (error) {
       console.error('❌ Failed to stop recording session:', error);
-      showToast('Failed to stop recording session', 'error');
+      setRecordingStatus('error');
+      showToast('❌ Failed to stop recording session', 'error');
+      // Reset after error
+      setTimeout(() => {
+        setRecordingStatus('idle');
+        setSessionStarted(false);
+        setConversationStarted(false);
+      }, 3000);
     }
   };
 
@@ -1023,11 +1184,10 @@ const fetchLiveKitToken = async () => {
           <div className="p-8 bg-light-lightPurple backdrop-blur-md rounded-3xl border-2 border-purple-200/50 shadow-2xl hover:shadow-3xl transition-all duration-300 w-full max-w-md">
               <h3 className="text-2xl font-bold text-white mb-3">Participants</h3>
             <div className="space-y-6">
-              {/* LiveKit Participants */}
-              <LiveKitParticipants podcastConfig={podcastConfig} />
-              
-              {/* Show message if no participants */}
-              {!liveKitConnected && (
+              {/* LiveKit Participants - Only render when connected to avoid hooks order issues */}
+              {liveKitConnected && room ? (
+                <LiveKitParticipants podcastConfig={podcastConfig} />
+              ) : (
                 <div className="text-center text-white py-8">
                   <div className="w-16 h-16 bg-gradient-to-br from-purple-100 to-purple-200 rounded-full flex items-center justify-center mx-auto mb-4">
                     <Icon name="podcast" className="w-8 h-8 text-purple-400" />
@@ -1143,8 +1303,9 @@ const fetchLiveKitToken = async () => {
                conversationStarted={sessionStarted}
                isPaused={false}
                elapsedTime={elapsedTime}
-               recordingStatus={sessionStarted ? 'recording' : 'idle'}
+               recordingStatus={recordingStatus}
                recordingUrl={recordingUrl}
+               onCopyUrl={() => showToast('📋 Recording URL copied to clipboard!', 'success')}
              />
            </div>
 
@@ -1173,11 +1334,26 @@ const fetchLiveKitToken = async () => {
                  <div className="flex flex-col items-center gap-2">
                    <button 
                      onClick={stopRecordingSession}
-                     className="w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 shadow-lg hover:shadow-xl hover:-translate-y-1 bg-gradient-to-br from-red-500 to-red-600 text-white border-2 border-red-700 shadow-red-500/50"
+                     disabled={recordingStatus === 'stopping' || recordingStatus === 'saving'}
+                     className={`w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 shadow-lg ${
+                       recordingStatus === 'stopping' || recordingStatus === 'saving'
+                         ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                         : 'bg-gradient-to-br from-red-500 to-red-600 text-white border-2 border-red-700 shadow-red-500/50 hover:shadow-xl hover:-translate-y-1'
+                     }`}
                    >
-                     <PiPauseBold className="w-10 h-10" />
+                     {recordingStatus === 'stopping' || recordingStatus === 'saving' ? (
+                       <svg className="w-10 h-10 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                       </svg>
+                     ) : (
+                       <PiPauseBold className="w-10 h-10" />
+                     )}
                    </button>
-                   <span className="text-xs font-medium text-gray-600">Stop Recording</span>
+                   <span className="text-xs font-medium text-gray-600">
+                     {recordingStatus === 'stopping' ? 'Stopping...' : 
+                      recordingStatus === 'saving' ? 'Saving...' : 
+                      'Stop Recording'}
+                   </span>
                  </div>
                )}
 

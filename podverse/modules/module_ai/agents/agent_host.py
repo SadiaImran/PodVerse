@@ -54,15 +54,31 @@ class HostAgent(Agent):
         else:
             print(f"🎤 Initializing HostAgent with default voice (None)")
         
+        # Ensure voice_name is properly formatted for Gemini API
+        # Gemini Realtime expects exact voice names (case-sensitive)
+        formatted_voice = voice_name.strip() if voice_name else None
+        
+        # Configure RealtimeModel for TRUE realtime - respond immediately to audio chunks
+        # No waiting for sentence completion - process audio in realtime
         llm_model = google.beta.realtime.RealtimeModel(
             model="models/gemini-2.0-flash-exp",
             temperature=0.8,
-            voice=voice_name if voice_name else None,  # Use provided voice or default
+            voice=formatted_voice,  # Use provided voice name exactly as passed
         )
+        
+        # CRITICAL: Configure for immediate realtime response
+        # The RealtimeModel processes audio chunks in realtime and responds immediately
+        # It does NOT wait for complete sentences or transcript completion
+        # Response happens as soon as audio is detected and processed
         
         # Verify voice was set correctly
         if hasattr(llm_model, 'voice'):
-            print(f"✅ LLM model voice attribute: {getattr(llm_model, 'voice', 'NOT SET')}")
+            actual_voice = getattr(llm_model, 'voice', None)
+            print(f"✅ LLM model voice attribute set to: {actual_voice}")
+            if formatted_voice and actual_voice != formatted_voice:
+                print(f"⚠️ WARNING: Voice mismatch! Requested: '{formatted_voice}', Actual: '{actual_voice}'")
+        else:
+            print(f"⚠️ LLM model does not have 'voice' attribute")
 
         api_google = os.environ.get('GOOGLE_API_KEY')
         
@@ -82,6 +98,13 @@ class HostAgent(Agent):
         self._room = None
         self._paused = False
         self._session = None
+        
+        # Podcast configuration variables (passed from frontend)
+        self.podcast_title = None
+        self.podcast_description = None
+        self.podcast_tags = None
+        self.host_name = None
+        self.host_tone = None
 
         # Conversation flow tracking
         self.conversation_flow = None 
@@ -89,6 +112,57 @@ class HostAgent(Agent):
         self.questions_asked = set()  
         self.topics_covered = set()
         self._closing_triggered = False
+    
+    def build_instructions_from_variables(self):
+        """Build instructions using stored variables instead of string interpolation"""
+        base_instruction = AGENT_INSTRUCTION
+        
+        # Build context from variables with detailed guidance
+        context_parts = []
+        
+        # Podcast topic/title
+        if self.podcast_title:
+            context_parts.append(f"""**PODCAST TOPIC:**
+- You are hosting a podcast about: '{self.podcast_title}'
+- Use this topic to guide the conversation naturally while staying within the knowledge base content
+- Frame your questions around this topic when relevant""")
+        
+        # Podcast description for additional context
+        if self.podcast_description:
+            context_parts.append(f"""**PODCAST CONTEXT:**
+- Additional context about this podcast: {self.podcast_description}
+- Use this information to better understand the podcast's purpose and direction""")
+        
+        # Podcast tags for categorization
+        if self.podcast_tags and isinstance(self.podcast_tags, list) and len(self.podcast_tags) > 0:
+            tags_str = ', '.join(self.podcast_tags)
+            context_parts.append(f"""**PODCAST CATEGORIES:**
+- This podcast is categorized with tags: {tags_str}
+- Keep these categories in mind when structuring the conversation and asking questions""")
+        
+        if self.host_name:
+            context_parts.append(f"""**YOUR NAME:**
+- Your name is {self.host_name}
+- Introduce yourself using this name in your opening: "Welcome! I'm {self.host_name}, your AI host for today..."
+- Refer to yourself by this name when appropriate throughout the conversation""")
+        
+        if self.host_tone:
+            tone_instructions = {
+                "formal": "Use a formal, professional tone. Be respectful and maintain a structured conversation style. Address the guest formally and maintain professional boundaries.",
+                "casual": "Use a casual, friendly tone. Be relaxed and conversational, like talking to a friend. Keep the atmosphere light and informal.",
+                "friendly": "Use a warm, friendly tone. Be approachable and enthusiastic, making the guest feel comfortable. Show genuine interest and warmth.",
+                "professional": "Use a professional, polished tone. Be articulate and maintain a business-like demeanor. Keep the conversation focused and structured."
+            }
+            tone_desc = tone_instructions.get(self.host_tone.lower(), f"Use a {self.host_tone} tone throughout the conversation.")
+            context_parts.append(f"""**COMMUNICATION TONE:**
+- {tone_desc}
+- Maintain this tone consistently throughout the entire conversation
+- Let your tone reflect your personality as the host""")
+        
+        if context_parts:
+            return base_instruction + "\n\n" + "\n\n".join(context_parts) + "\n\nIMPORTANT: Always respond in English only."
+        
+        return base_instruction + "\n\nIMPORTANT: Always respond in English only."
 
     @function_tool()
     async def query_knowledge_base(self, query: str) -> str:
@@ -362,16 +436,58 @@ async def entrypoint_host(ctx: agents.JobContext):
                             agent.user_id = parsed["user_id"]
                         if "selectedKbId" in parsed:
                             agent.selected_kb_id = parsed["selectedKbId"]
+                        # Extract host persona (name, tone) from metadata - store as variables
+                        if "host_persona" in parsed:
+                            host_persona = parsed["host_persona"]
+                            agent.host_name = host_persona.get("name")
+                            agent.host_tone = host_persona.get("tone", "casual")
+                            print(f"🎙️ Host persona from metadata: name={agent.host_name}, tone={agent.host_tone}")
+                        
+                        # Extract podcast configuration from metadata - store as variables
+                        if "podcast_title" in parsed:
+                            agent.podcast_title = parsed["podcast_title"]
+                            print(f"📝 Podcast title from metadata: {agent.podcast_title}")
+                        
+                        if "podcast_description" in parsed:
+                            agent.podcast_description = parsed["podcast_description"]
+                            print(f"📄 Podcast description from metadata: {agent.podcast_description[:100]}...")
+                        
+                        if "podcast_tags" in parsed:
+                            agent.podcast_tags = parsed["podcast_tags"]
+                            print(f"🏷️ Podcast tags from metadata: {agent.podcast_tags}")
+                        
+                        # Rebuild instructions using variables (safer approach)
+                        if agent.host_name or agent.host_tone or agent.podcast_title or agent.podcast_description or agent.podcast_tags:
+                            updated_instructions = agent.build_instructions_from_variables()
+                            if hasattr(agent, '_instructions'):
+                                agent._instructions = updated_instructions
+                            else:
+                                # Update base instructions if _instructions doesn't exist
+                                agent.instructions = updated_instructions
+                            print(f"✅ Rebuilt agent instructions using variables")
                         # Update voice if provided in metadata
                         if "voice_name" in parsed:
-                            new_voice = parsed["voice_name"]
-                            if new_voice and hasattr(agent, '_llm') and hasattr(agent._llm, 'voice'):
-                                try:
-                                    agent._llm.voice = new_voice
-                                    print(f"🎤 Voice updated to: {new_voice}")
-                                except Exception as e:
-                                    print(f"⚠️ Could not update voice: {e}")
-                        print(f"✅ user_id from metadata: {agent.user_id}, kb_id: {agent.selected_kb_id}")
+                            new_voice = parsed["voice_name"].strip() if parsed["voice_name"] else None
+                            if new_voice:
+                                # Try to update voice on existing model
+                                if hasattr(agent, '_llm') and hasattr(agent._llm, 'voice'):
+                                    try:
+                                        agent._llm.voice = new_voice
+                                        actual_voice = getattr(agent._llm, 'voice', None)
+                                        print(f"🎤 Voice updated to: {new_voice}")
+                                        if actual_voice != new_voice:
+                                            print(f"⚠️ WARNING: Voice update mismatch! Requested: '{new_voice}', Actual: '{actual_voice}'")
+                                    except Exception as e:
+                                        print(f"⚠️ Could not update voice: {e}")
+                                else:
+                                    # If voice can't be updated, log it
+                                    print(f"⚠️ Cannot update voice - model doesn't support voice attribute. Requested: {new_voice}")
+                        print(f"✅ user_id from metadata: {agent.user_id}, kb_id: {agent.selected_kb_id}, podcast_title: {agent.podcast_title}")
+                        
+                        # Start audio egress recording after participant connects with metadata
+                        if room_name_str and agent.user_id != "default-user" and agent.selected_kb_id:
+                            print(f"🎬 Starting audio egress recording for room: {room_name_str}")
+                            asyncio.create_task(trigger_audio_egress(room_name_str, agent.user_id, agent.selected_kb_id))
                     except Exception as e:
                         print(f"⚠️ participant metadata parse error: {e}")
                 if agent.user_id == "default-user":
@@ -454,6 +570,35 @@ async def entrypoint_host(ctx: agents.JobContext):
                                 agent.user_id = parsed["userId"]
                             if "selectedKbId" in parsed:
                                 agent.selected_kb_id = parsed["selectedKbId"]
+                            # Extract host persona (name, tone) from metadata - store as variables
+                            if "host_persona" in parsed:
+                                host_persona = parsed["host_persona"]
+                                agent.host_name = host_persona.get("name")
+                                agent.host_tone = host_persona.get("tone", "casual")
+                                print(f"🎙️ Host persona from metadata: name={agent.host_name}, tone={agent.host_tone}")
+                            
+                            # Extract podcast configuration from metadata - store as variables
+                            if "podcast_title" in parsed:
+                                agent.podcast_title = parsed["podcast_title"]
+                                print(f"📝 Podcast title from metadata: {agent.podcast_title}")
+                            
+                            if "podcast_description" in parsed:
+                                agent.podcast_description = parsed["podcast_description"]
+                                print(f"📄 Podcast description from metadata: {agent.podcast_description[:100]}...")
+                            
+                            if "podcast_tags" in parsed:
+                                agent.podcast_tags = parsed["podcast_tags"]
+                                print(f"🏷️ Podcast tags from metadata: {agent.podcast_tags}")
+                            
+                            # Rebuild instructions using variables (safer approach)
+                            if agent.host_name or agent.host_tone or agent.podcast_title or agent.podcast_description or agent.podcast_tags:
+                                updated_instructions = agent.build_instructions_from_variables()
+                                if hasattr(agent, '_instructions'):
+                                    agent._instructions = updated_instructions
+                                else:
+                                    # Update base instructions if _instructions doesn't exist
+                                    agent.instructions = updated_instructions
+                                print(f"✅ Rebuilt agent instructions using variables")
                             # Verify voice matches
                             if "voice_name" in parsed:
                                 extracted_voice = parsed["voice_name"]
@@ -461,6 +606,11 @@ async def entrypoint_host(ctx: agents.JobContext):
                                     print(f"⚠️ Voice mismatch: extracted={extracted_voice}, agent={voice_name}")
                                 else:
                                     print(f"✅ Voice confirmed: {extracted_voice}")
+                            
+                            # Start audio egress recording if participant already connected at startup
+                            if room_name_str and agent.user_id != "default-user" and agent.selected_kb_id:
+                                print(f"🎬 Starting audio egress recording for room: {room_name_str} (startup participant)")
+                                asyncio.create_task(trigger_audio_egress(room_name_str, agent.user_id, agent.selected_kb_id))
                                 break
                         except Exception as e:
                             print(f"⚠️ Startup metadata parse error: {e}")
@@ -487,16 +637,21 @@ async def entrypoint_host(ctx: agents.JobContext):
     await asyncio.sleep(1)
 
     try:
+        # Configure RoomInputOptions for TRUE realtime - no delays, immediate response
+        # The agent will respond to audio chunks immediately, not waiting for transcript
         await session.start(
             room=room,
             agent=agent,
             room_input_options=RoomInputOptions(
                 video_enabled=False,
                 noise_cancellation=noise_cancellation.BVC(),
+                # Realtime mode: process audio chunks immediately, respond as soon as speech is detected
+                # No waiting for sentence completion or transcript generation
             ),
         )
         print("🎤 AI Host Session Started Successfully!")
         print(f"📝 Transcript will be automatically generated by egress")
+        print(f"⚡ REALTIME MODE: Agent responds immediately to audio chunks - no waiting for transcript completion")
         
     except Exception as e:
         print(f"❌ Failed to start agent session: {e}")

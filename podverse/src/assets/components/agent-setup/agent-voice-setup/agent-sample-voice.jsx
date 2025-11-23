@@ -293,9 +293,11 @@ const SampleVoices = ({ onVoiceSelect }) => {
       if (onVoiceSelect) {
         onVoiceSelect(voice);
       }
-      // Save voice name to sessionStorage
-      if (voice.name) {
-        sessionStorage.setItem('selected_voice_name', voice.name);
+      // Save voice API name to sessionStorage (use apiName if available, otherwise name)
+      const voiceApiName = voice.apiName || voice.name;
+      if (voiceApiName) {
+        sessionStorage.setItem('selected_voice_name', voiceApiName);
+        console.log(`🎤 Saved voice API name to sessionStorage: ${voiceApiName} (display: ${voice.name})`);
       }
     }
   };

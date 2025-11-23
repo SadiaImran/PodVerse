@@ -16,6 +16,7 @@ async def enhanced_podcast_turn(
     guest_name: str = Form("Expert Guest"),
     auto_duet: bool = Form(False),
     is_conversation_start: bool = Form(False),
+    podcast_title: str = Form(None),  # NEW: Podcast title/topic
     auth_data: dict = Depends(get_authenticated_supabase_client),
 ):
     """Enhanced podcast conversation with natural flow and proper host/guest dynamics"""
@@ -43,10 +44,13 @@ async def enhanced_podcast_turn(
         except Exception as e:
             print(f"Document check error: {e}")
         
+        # Use podcast_title if provided, otherwise use show_name
+        effective_show_name = podcast_title if podcast_title else show_name
+        
         # Use podcast manager to handle the conversation
         result = podcast_manager.handle_turn(
             supabase_authenticated, user_id, message, persona, 
-            show_name, conversation_id, guest_name, auto_duet, is_conversation_start
+            effective_show_name, conversation_id, guest_name, auto_duet, is_conversation_start
         )
         
         return result
@@ -66,6 +70,7 @@ async def start_podcast_conversation(
     show_name: str = Form("AI Knowledge Podcast"),
     guest_name: str = Form("Expert Guest"),
     conversation_id: str = Form("default"),
+    podcast_title: str = Form(None),  # NEW: Podcast title/topic
     auth_data: dict = Depends(get_authenticated_supabase_client),
 ):
     """Start a new podcast conversation with host opening"""
@@ -73,8 +78,11 @@ async def start_podcast_conversation(
         supabase_authenticated = auth_data["client"]
         user_id = auth_data["user_id"]
         
+        # Use podcast_title if provided, otherwise use show_name
+        effective_show_name = podcast_title if podcast_title else show_name
+        
         result = podcast_manager.start_conversation(
-            supabase_authenticated, user_id, show_name, guest_name, conversation_id
+            supabase_authenticated, user_id, effective_show_name, guest_name, conversation_id
         )
         
         return result
