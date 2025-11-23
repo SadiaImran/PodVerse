@@ -28,8 +28,8 @@ const CreatePodcastPage = () => {
   }, []);
 
   useEffect(() => {
-const checkAuthAndLoadProfile = async () => {
-const { data: { user } } = await supabase.auth.getUser();
+    const checkAuthAndLoadProfile = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
 
       if (user) {
         const userId = user.id;
@@ -37,7 +37,7 @@ const { data: { user } } = await supabase.auth.getUser();
         // 1. FETCH PROFILE and ONBOARDING STATUS
         const { data: profile } = await supabase
           .from("profiles")
-          .select("full_name, onboarding_complete") // ⭐ Select both fields
+          .select("full_name, onboarding_complete, role") // ⭐ Select role field too
           .eq("id", userId)
           .maybeSingle(); // ⭐ Use maybeSingle for safety
 
@@ -45,28 +45,34 @@ const { data: { user } } = await supabase.auth.getUser();
         console.log("Profile check after login:", profile);
 
         // 2. REDIRECT LOGIC
+        // Check if user is admin first
+        if (profile?.role === 'admin') {
+          console.log("Admin user detected, redirecting to admin dashboard...");
+          return navigate("/admin/dashboard", { replace: true });
+        }
+
         // CASE 1 & 2: No profile or Onboarding is incomplete
         if (!profile || profile.onboarding_complete === false) {
           console.log("Redirecting to onboarding...");
           // Use { replace: true } to prevent going back to the sign-in page
-          return navigate("/onboarding", { replace: true }); 
+          return navigate("/onboarding", { replace: true });
         }
 
         // CASE 3: Profile exists and onboarding is complete (Stay on this page)
-        
+
         // 3. SET full_name STATE (now that we know the user is complete)
- setFullName(profile?.full_name || "User");
-        
-} else {
-          // If no user is found (e.g., session expired or sign-in failed)
-          // Redirect to the home or sign-in page.
-          console.log("No user session found, redirecting to home.");
-          navigate("/home", { replace: true }); 
+        setFullName(profile?.full_name || "User");
+
+      } else {
+        // If no user is found (e.g., session expired or sign-in failed)
+        // Redirect to the home or sign-in page.
+        console.log("No user session found, redirecting to home.");
+        navigate("/home", { replace: true });
       }
- };
- 
-  checkAuthAndLoadProfile();
- }, [navigate]); // Added navigate to the dependency array
+    };
+
+    checkAuthAndLoadProfile();
+  }, [navigate]); // Added navigate to the dependency array
 
   // Sample videos data
   const sampleVideos = [
@@ -83,7 +89,7 @@ const { data: { user } } = await supabase.auth.getUser();
     {
       id: 2,
       title: "Tech Talk Series",
-      date: "Sep 21, 2025", 
+      date: "Sep 21, 2025",
       status: "Draft",
       duration: "00:10",
       editedBy: "you",
@@ -133,19 +139,19 @@ const { data: { user } } = await supabase.auth.getUser();
   ];
 
   // Filter videos based on active tab
-  const filteredVideos = sampleVideos.filter(video => 
+  const filteredVideos = sampleVideos.filter(video =>
     activeTab === "drafts" ? video.status === "Draft" : video.status === "Published"
   );
 
   return (
     <BaseLayout homeScreen={false} autoCollapse={true}>
       <main className="flex-1 overflow-y-auto bg-white">
-        
+
         {/* Hero Banner */}
         <div className="relative h-72 overflow-hidden">
-          <img 
+          <img
             src={banner2}
-            alt="PodVerse Banner" 
+            alt="PodVerse Banner"
             className="absolute inset-0 w-full h-full object-cover"
           />
           <div className="absolute inset-0 bg-black bg-opacity-40"></div>
@@ -169,9 +175,9 @@ const { data: { user } } = await supabase.auth.getUser();
               </h2>
               <p className="text-gray-600">Let's get started</p>
             </div>
-            
+
             {/* New Project Button */}
-            <button 
+            <button
               onClick={() => navigate("/podcast-setup")}
               className="bg-purple-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-purple-700 transition-colors">
               <Plus className="w-4 h-4 inline mr-2" />
@@ -183,25 +189,23 @@ const { data: { user } } = await supabase.auth.getUser();
         {/* Videos Section */}
         <div className="px-6 md:px-10 py-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Your Videos</h3>
-          
+
           {/* Tabs */}
           <div className="flex space-x-8 border-b border-gray-200 mb-6">
             <button
-              className={`pb-2 font-medium transition-colors ${
-                activeTab === "drafts" 
-                  ? "border-b-2 border-purple-600 text-purple-600" 
+              className={`pb-2 font-medium transition-colors ${activeTab === "drafts"
+                  ? "border-b-2 border-purple-600 text-purple-600"
                   : "text-gray-600 hover:text-gray-900"
-              }`}
+                }`}
               onClick={() => setActiveTab("drafts")}
             >
               Drafts ({sampleVideos.filter(v => v.status === "Draft").length})
             </button>
             <button
-              className={`pb-2 font-medium transition-colors ${
-                activeTab === "published" 
-                  ? "border-b-2 border-purple-600 text-purple-600" 
+              className={`pb-2 font-medium transition-colors ${activeTab === "published"
+                  ? "border-b-2 border-purple-600 text-purple-600"
                   : "text-gray-600 hover:text-gray-900"
-              }`}
+                }`}
               onClick={() => setActiveTab("published")}
             >
               Published ({sampleVideos.filter(v => v.status === "Published").length})
@@ -226,7 +230,7 @@ const { data: { user } } = await supabase.auth.getUser();
                       {video.duration}
                     </div>
                   </div>
-                  
+
                   {/* Video Info */}
                   <div className="p-4">
                     <h4 className="font-medium text-gray-900 mb-1">{video.title}</h4>

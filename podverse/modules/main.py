@@ -13,6 +13,7 @@ from module_faq.module_faq_route import router as faq_router
 from module_video_generation.module_video import router as video_router
 from module_video_generation.module_podcast_processing import router as podcast_router
 from module_social_media.routes import router as social_media_router
+from module_admin.module_admin_route import router as admin_router
 from fastapi.staticfiles import StaticFiles
 
 import tempfile
@@ -59,4 +60,5 @@ app.mount("/output", StaticFiles(directory="module_voice_clone/output"), name="o
 app.include_router(voices_router)
 app.include_router(faq_router)
 app.include_router(social_media_router)
+app.include_router(admin_router)
 
