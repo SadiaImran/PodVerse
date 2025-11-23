@@ -1,20 +1,10 @@
 import { useState } from "react";
 import ProjectImage from '../../images/Speech-to-text-pana.png';
 import ProjectImage2 from '../../images/Podcast-audience-pana.png';
-import { Plus, X, Clock, Hash, Tag, Podcast } from "lucide-react";
+import { Plus, X, Tag, Podcast } from "lucide-react";
 
 const ProjectDetails = ({ formData, setFormData, goNext }) => {
   const [newTag, setNewTag] = useState("");
-
-  const durationOptions = [
-    { value: "5", label: "5 minutes" },
-    { value: "10", label: "10 minutes" },
-    { value: "15", label: "15 minutes" },
-    { value: "20", label: "20 minutes" },
-    { value: "30", label: "30 minutes" },
-    { value: "45", label: "45 minutes" },
-    { value: "60", label: "1 hour" }
-  ];
 
   const addTag = () => {
     if (newTag.trim() && !formData.tags.includes(newTag.trim())) {
@@ -41,8 +31,8 @@ const ProjectDetails = ({ formData, setFormData, goNext }) => {
   };
 
   const isFormValid = formData.podcastName.trim() && 
-                     formData.description.trim() && 
-                     formData.episodeNumber.trim();
+                     formData.description.trim() &&
+                     formData.tags.length > 0;
 
   return (
     <div className="max-w-6xl mx-auto relative">
@@ -59,10 +49,10 @@ const ProjectDetails = ({ formData, setFormData, goNext }) => {
       
       {/* Main Content - Centered */}
       <div className="max-w-4xl mx-auto relative z-10">
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8">
+        <div className="rounded-[28px] border border-white/60 bg-white/85 backdrop-blur-xl shadow-[0_20px_60px_rgba(96,87,199,0.1)] p-8 md:p-10">
         <div className="text-center mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-2">Project Details</h2>
-          <p className="text-gray-600">Tell us about your podcast episode</p>
+          <h2 className="text-3xl font-bold mb-2" style={{ color: '#1C1C1C' }}>Project Details</h2>
+          <p style={{ color: '#6A6A6A' }}>Tell us about your podcast episode</p>
         </div>
 
         <div className="space-y-8">
@@ -94,48 +84,10 @@ const ProjectDetails = ({ formData, setFormData, goNext }) => {
             />
           </div>
 
-          {/* Episode Number */}
-          <div>
-            <label className="block text-lg font-semibold text-gray-700 mb-3">
-              Episode Number *
-            </label>
-            <div className="relative">
-              <Hash className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type="text"
-                placeholder="e.g., Episode 1, Season 2 Episode 5"
-                value={formData.episodeNumber}
-                onChange={(e) => setFormData({ ...formData, episodeNumber: e.target.value })}
-                className="w-full border-2 border-gray-300 rounded-xl p-4 pl-12 text-lg focus:outline-none focus:ring-2 focus:ring-light-purple focus:border-transparent transition-all relative z-20"
-              />
-            </div>
-          </div>
-
-          {/* Duration */}
-          <div>
-            <label className="block text-lg font-semibold text-gray-700 mb-3">
-              Expected Duration
-            </label>
-            <div className="relative">
-              <Clock className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <select
-                value={formData.duration}
-                onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
-                className="w-full border-2 border-gray-300 rounded-xl p-4 pl-12 text-lg focus:outline-none focus:ring-2 focus:ring-light-purple focus:border-transparent transition-all appearance-none bg-white"
-              >
-                {durationOptions.map(option => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
           {/* Tags */}
           <div>
             <label className="block text-lg font-semibold text-gray-700 mb-3">
-              Tags (Optional)
+              Tags *
             </label>
             <div className="space-y-3">
               <div className="flex gap-2">
@@ -143,7 +95,7 @@ const ProjectDetails = ({ formData, setFormData, goNext }) => {
                   <Tag className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                   <input
                     type="text"
-                    placeholder="Add tags to categorize your podcast"
+                    placeholder="Add at least one tag to categorize your podcast"
                     value={newTag}
                     onChange={(e) => setNewTag(e.target.value)}
                     onKeyPress={handleKeyPress}
@@ -152,7 +104,14 @@ const ProjectDetails = ({ formData, setFormData, goNext }) => {
                 </div>
                 <button
                   onClick={addTag}
-                  className="bg-light-purple text-white px-6 py-4 rounded-xl hover:bg-purple-700 transition-colors flex items-center gap-2"
+                  className="px-6 py-4 rounded-xl font-semibold transition-all shadow-md hover:shadow-lg flex items-center gap-2"
+                  style={{ backgroundColor: '#6057C7', color: '#F9F5EB' }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#4f46e5';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = '#6057C7';
+                  }}
                 >
                   <Plus className="w-5 h-5" />
                   Add
@@ -160,23 +119,28 @@ const ProjectDetails = ({ formData, setFormData, goNext }) => {
               </div>
               
               {/* Display Tags */}
-              {formData.tags.length > 0 && (
+              {formData.tags.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {formData.tags.map((tag, index) => (
                     <span
                       key={index}
-                      className="bg-light-purple text-white px-4 py-2 rounded-full text-sm flex items-center gap-2"
+                      className="px-4 py-2 rounded-full text-sm flex items-center gap-2 shadow-sm"
+                      style={{ backgroundColor: '#6057C7', color: '#F9F5EB' }}
                     >
                       {tag}
                       <button
                         onClick={() => removeTag(tag)}
-                        className="hover:bg-purple-700 rounded-full p-1 transition-colors"
+                        className="rounded-full p-1 transition-colors hover:opacity-80"
                       >
                         <X className="w-3 h-3" />
                       </button>
                     </span>
                   ))}
                 </div>
+              ) : (
+                <p className="text-sm italic" style={{ color: '#ef4444' }}>
+                  Please add at least one tag (required)
+                </p>
               )}
             </div>
           </div>
@@ -187,11 +151,24 @@ const ProjectDetails = ({ formData, setFormData, goNext }) => {
             <button
               onClick={goNext}
               disabled={!isFormValid}
-              className={`px-8 py-4 rounded-xl font-semibold text-lg transition-all ${
+              className="px-8 py-4 rounded-full font-semibold text-lg transition-all shadow-md hover:shadow-lg"
+              style={
                 isFormValid
-                  ? 'bg-light-purple text-white hover:bg-purple-700 hover:shadow-lg'
-                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              }`}
+                  ? { backgroundColor: '#6057C7', color: '#F9F5EB' }
+                  : { backgroundColor: '#e5e7eb', color: '#9ca3af', cursor: 'not-allowed' }
+              }
+              onMouseEnter={(e) => {
+                if (isFormValid) {
+                  e.currentTarget.style.backgroundColor = '#4f46e5';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (isFormValid) {
+                  e.currentTarget.style.backgroundColor = '#6057C7';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                }
+              }}
             >
               Next: AI Speaker Setup →
             </button>

@@ -1,9 +1,10 @@
 import { useState, useRef } from "react";
 import { RiRobot3Fill, RiUserLine, RiAddLine, RiCloseLine } from "react-icons/ri";
-import { IoMdArrowRoundBack } from "react-icons/io";
+import { ArrowLeft, Briefcase, User, GraduationCap, MessageSquare, Award } from "lucide-react";
 import ProfileJeena from '../../images/icon-profile-jeena.png';
 import ProfileOlive from '../../images/icon-profile-olive.png';
 import ProfileSally from '../../images/icon-profile-sally.png';
+import AISpeakerImage from '../../images/Chat-bot-amico.png';
 
 const defaultAvatarOptions = [ProfileJeena, ProfileOlive, ProfileSally];
 
@@ -59,6 +60,10 @@ const AISpeakerSetup = ({ formData, setFormData, goNext, goBack }) => {
   };
 
   const addExpertise = () => {
+    if (formData.guestPersona.expertise.length >= 5) {
+      alert('Maximum 5 areas of expertise allowed');
+      return;
+    }
     if (newExpertise.trim() && !formData.guestPersona.expertise.includes(newExpertise.trim())) {
       setFormData({
         ...formData,
@@ -153,33 +158,52 @@ const AISpeakerSetup = ({ formData, setFormData, goNext, goBack }) => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto">
-      <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8">
-        <div className="text-center mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-2">AI Speaker Setup</h2>
-          <p className="text-gray-600">Choose and customize your AI speaker</p>
+    <div className="max-w-7xl mx-auto relative">
+      {/* Left Side Image - Fixed position */}
+      <div className="hidden lg:block absolute -left-1/4 top-10 z-0">
+        <div className="w-64 h-64">
+          <img 
+            src={AISpeakerImage} 
+            alt="AI Speaker Setup" 
+            className="w-full h-full object-contain opacity-70"
+          />
+        </div>
+      </div>
+      
+      {/* Main Content - Centered */}
+      <div className="max-w-6xl mx-auto relative z-10">
+        <div className="rounded-[28px] border border-white/60 bg-white/85 backdrop-blur-xl shadow-[0_20px_60px_rgba(96,87,199,0.1)] p-8 md:p-10 space-y-8">
+        <div className="mb-8">
+          <h2 className="text-3xl font-bold mb-2" style={{ color: '#6A6A6A' }}>AI Speaker Setup</h2>
+          <p style={{ color: '#6A6A6A' }}>Choose and customize your AI speaker</p>
         </div>
 
         {/* Speaker Type Selection */}
         <div className="mb-8">
-          <h3 className="text-xl font-semibold text-gray-800 mb-4">Choose Speaker Type</h3>
+          <h3 className="text-xl font-semibold mb-4" style={{ color: '#6A6A6A' }}>Choose Speaker Type</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* AI Host Card */}
             <div
               onClick={() => setFormData({ ...formData, speakerType: "ai-host" })}
-              className={`cursor-pointer p-6 border-2 rounded-xl transition-all ${
+              className={`cursor-pointer p-6 border-2 rounded-xl transition-all shadow-sm hover:shadow-md ${
                 formData.speakerType === "ai-host"
-                  ? "border-blue-500 bg-blue-50"
-                  : "border-gray-200 hover:border-blue-300"
+                  ? "border-[#6057C7] bg-[#f5f3ff]"
+                  : "border-gray-200 hover:border-[#A388E7] bg-white"
               }`}
             >
               <div className="flex items-start gap-4">
-                <div className="flex-shrink-0 bg-blue-100 text-blue-600 p-3 rounded-full">
+                <div 
+                  className="flex-shrink-0 p-3 rounded-full"
+                  style={{ 
+                    backgroundColor: formData.speakerType === "ai-host" ? '#6057C7' : '#f5f3ff',
+                    color: formData.speakerType === "ai-host" ? '#F9F5EB' : '#6057C7'
+                  }}
+                >
                   <RiRobot3Fill className="h-8 w-8" />
                 </div>
                 <div>
-                  <h4 className="font-semibold text-xl mb-2">AI Host</h4>
-                  <p className="text-gray-600">
+                  <h4 className="font-semibold text-xl mb-2" style={{ color: '#6A6A6A' }}>AI Host</h4>
+                  <p style={{ color: '#6A6A6A' }}>
                     Takes the lead in conversations, guides discussions, and provides information proactively. 
                     Perfect for educational or interview-style podcasts.
                   </p>
@@ -190,19 +214,25 @@ const AISpeakerSetup = ({ formData, setFormData, goNext, goBack }) => {
             {/* AI Guest Card */}
             <div
               onClick={() => setFormData({ ...formData, speakerType: "ai-guest" })}
-              className={`cursor-pointer p-6 border-2 rounded-xl transition-all ${
+              className={`cursor-pointer p-6 border-2 rounded-xl transition-all shadow-sm hover:shadow-md ${
                 formData.speakerType === "ai-guest"
-                  ? "border-purple-500 bg-purple-50"
-                  : "border-gray-200 hover:border-purple-300"
+                  ? "border-[#6057C7] bg-[#f5f3ff]"
+                  : "border-gray-200 hover:border-[#A388E7] bg-white"
               }`}
             >
               <div className="flex items-start gap-4">
-                <div className="flex-shrink-0 bg-purple-100 text-purple-600 p-3 rounded-full">
+                <div 
+                  className="flex-shrink-0 p-3 rounded-full"
+                  style={{ 
+                    backgroundColor: formData.speakerType === "ai-guest" ? '#6057C7' : '#f5f3ff',
+                    color: formData.speakerType === "ai-guest" ? '#F9F5EB' : '#6057C7'
+                  }}
+                >
                   <RiUserLine className="h-8 w-8" />
                 </div>
                 <div>
-                  <h4 className="font-semibold text-xl mb-2">AI Guest</h4>
-                  <p className="text-gray-600">
+                  <h4 className="font-semibold text-xl mb-2" style={{ color: '#6A6A6A' }}>AI Guest</h4>
+                  <p style={{ color: '#6A6A6A' }}>
                     Responds to questions, provides expertise when asked, and follows the conversation lead. 
                     Perfect for expert interviews or specialized topics.
                   </p>
@@ -214,122 +244,139 @@ const AISpeakerSetup = ({ formData, setFormData, goNext, goBack }) => {
 
         {/* Common Fields for Both Host and Guest */}
         <div className="space-y-8">
-          <h3 className="text-xl font-semibold text-gray-800">
+          <h3 className="text-xl font-semibold" style={{ color: '#6A6A6A' }}>
             {formData.speakerType === "ai-host" ? "AI Host Customization" : "AI Guest Basic Setup"}
           </h3>
           
-          {/* Name Field */}
-          <div>
-            <label className="block text-lg font-semibold text-gray-700 mb-3">
-              {formData.speakerType === "ai-host" ? "Host Name *" : "Guest Name *"}
-            </label>
-            <input
-              type="text"
-              placeholder={formData.speakerType === "ai-host" ? "e.g., Alex, Sarah, Dr. Smith" : "e.g., Imran, Dr. Sarah, Captain Mike"}
-              value={formData.speakerType === "ai-host" ? formData.agentName : formData.guestPersona.name}
-              onChange={(e) => {
-                if (formData.speakerType === "ai-host") {
-                  setFormData({ ...formData, agentName: e.target.value });
-                } else {
-                  setFormData({
-                    ...formData,
-                    guestPersona: { ...formData.guestPersona, name: e.target.value }
-                  });
-                }
-              }}
-              className="w-full border-2 border-gray-300 rounded-xl p-4 text-lg focus:outline-none focus:ring-2 focus:ring-light-purple focus:border-transparent transition-all"
-            />
-          </div>
-
-          {/* Avatar Selection */}
-          <div>
-            <label className="block text-lg font-semibold text-gray-700 mb-3">
-              Choose Avatar *
-            </label>
-            <div className="flex flex-wrap gap-4">
-              {/* Upload Button */}
-              <div 
-                className="cursor-pointer w-20 h-20 border-2 border-dashed border-gray-400 rounded-full flex items-center justify-center hover:border-light-purple transition-colors"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <RiAddLine className="w-8 h-8 text-gray-400" />
-              </div>
+          {/* Name and Avatar in Same Row */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {/* Name Field */}
+            <div>
+              <label className="block text-lg font-semibold mb-3" style={{ color: '#6A6A6A' }}>
+                {formData.speakerType === "ai-host" ? "Host Name *" : "Guest Name *"}
+              </label>
               <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleImageUpload}
-                className="hidden"
+                type="text"
+                placeholder={formData.speakerType === "ai-host" ? "e.g., Alex, Sarah, Dr. Smith" : "e.g., Imran, Dr. Sarah, Captain Mike"}
+                value={formData.speakerType === "ai-host" ? formData.agentName : formData.guestPersona.name}
+                onChange={(e) => {
+                  if (formData.speakerType === "ai-host") {
+                    setFormData({ ...formData, agentName: e.target.value });
+                  } else {
+                    setFormData({
+                      ...formData,
+                      guestPersona: { ...formData.guestPersona, name: e.target.value }
+                    });
+                  }
+                }}
+                className="w-full border-2 border-gray-300 rounded-xl p-4 text-lg focus:outline-none focus:ring-2 focus:ring-[#6057C7] focus:border-transparent transition-all"
+                style={{ focusRingColor: '#6057C7' }}
               />
-              
-              {/* Default Avatars */}
-              {defaultAvatarOptions.map((avatar, idx) => (
-                <div
-                  key={`default-${idx}`}
-                  onClick={() => handleAvatarSelect(avatar)}
-                  className={`cursor-pointer w-20 h-20 rounded-full overflow-hidden transition ${
-                    selectedAvatar === avatar
-                      ? "ring-4 ring-light-purple"
-                      : "hover:ring-2 hover:ring-gray-300"
-                  }`}
-                >
-                  <img
-                    src={avatar}
-                    alt={`Default Avatar ${idx + 1}`}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              ))}
-              
-              {/* Uploaded Avatars */}
-              {uploadedAvatars.map((avatar) => (
-                <div
-                  key={avatar.id}
-                  className={`relative cursor-pointer w-20 h-20 rounded-full overflow-hidden transition ${
-                    selectedAvatar === avatar.src
-                      ? "ring-4 ring-light-purple"
-                      : "hover:ring-2 hover:ring-gray-300"
-                  }`}
-                >
-                  <img
-                    src={avatar.src}
-                    alt={avatar.name}
-                    className="w-full h-full object-cover"
-                    onClick={() => handleAvatarSelect(avatar.src)}
-                  />
-                  {/* Remove button */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removeUploadedAvatar(avatar.id);
-                    }}
-                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 transition-colors"
-                  >
-                    <RiCloseLine className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
             </div>
-            <p className="text-sm text-gray-500 mt-2">
-              Click the + icon to upload your own image (max 5MB)
-            </p>
+
+            {/* Avatar Selection */}
+            <div>
+              <label className="block text-lg font-semibold mb-3" style={{ color: '#6A6A6A' }}>
+                Choose Avatar *
+              </label>
+              <div className="flex flex-wrap gap-4">
+                {/* Upload Button */}
+                <div 
+                  className="cursor-pointer w-20 h-20 border-2 border-dashed rounded-full flex items-center justify-center transition-all shadow-sm hover:shadow-md"
+                  style={{ 
+                    borderColor: '#A388E7',
+                    backgroundColor: '#f5f3ff'
+                  }}
+                  onClick={() => fileInputRef.current?.click()}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = '#6057C7';
+                    e.currentTarget.style.backgroundColor = '#e9e5ff';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = '#A388E7';
+                    e.currentTarget.style.backgroundColor = '#f5f3ff';
+                  }}
+                >
+                  <RiAddLine className="w-8 h-8" style={{ color: '#6057C7' }} />
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  className="hidden"
+                />
+                
+                {/* Default Avatars */}
+                {defaultAvatarOptions.map((avatar, idx) => (
+                  <div
+                    key={`default-${idx}`}
+                    onClick={() => handleAvatarSelect(avatar)}
+                    className={`cursor-pointer w-20 h-20 rounded-full overflow-hidden transition shadow-md hover:shadow-lg ${
+                      selectedAvatar === avatar
+                        ? "ring-4 ring-[#6057C7] ring-offset-2"
+                        : "hover:ring-2 hover:ring-[#A388E7]"
+                    }`}
+                  >
+                    <img
+                      src={avatar}
+                      alt={`Default Avatar ${idx + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                ))}
+                
+                {/* Uploaded Avatars */}
+                {uploadedAvatars.map((avatar) => (
+                  <div
+                    key={avatar.id}
+                    className={`relative cursor-pointer w-20 h-20 rounded-full overflow-hidden transition shadow-md hover:shadow-lg ${
+                      selectedAvatar === avatar.src
+                        ? "ring-4 ring-[#6057C7] ring-offset-2"
+                        : "hover:ring-2 hover:ring-[#A388E7]"
+                    }`}
+                  >
+                    <img
+                      src={avatar.src}
+                      alt={avatar.name}
+                      className="w-full h-full object-cover"
+                      onClick={() => handleAvatarSelect(avatar.src)}
+                    />
+                    {/* Remove button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeUploadedAvatar(avatar.id);
+                      }}
+                      className="absolute -top-2 -right-2 bg-white text-white rounded-full w-6 h-6 flex items-center justify-center shadow-lg hover:scale-110 transition-all"
+                      style={{ color: '#ef4444', border: '2px solid #ef4444' }}
+                    >
+                      <RiCloseLine className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <p className="text-sm mt-2" style={{ color: '#6A6A6A' }}>
+                Click the + icon to upload your own image (max 5MB)
+              </p>
+            </div>
           </div>
+          
 
           {/* Tone Selection */}
           <div>
-            <label className="block text-lg font-semibold text-gray-700 mb-3">
+            <label className="block text-lg font-semibold mb-3" style={{ color: '#6A6A6A' }}>
               Communication Tone
             </label>
             <div className="flex flex-wrap gap-3">
               {[
-                { name: "formal", bgColor: "bg-yellow-500", borderColor: "border-yellow-500" },
-                { name: "casual", bgColor: "bg-purple-500", borderColor: "border-purple-500" },
-                { name: "friendly", bgColor: "bg-pink-500", borderColor: "border-pink-500" },
-                { name: "professional", bgColor: "bg-indigo-500", borderColor: "border-indigo-500" }
+                { name: "formal", color: "#fbbf24" },
+                { name: "casual", color: "#6057C7" },
+                { name: "friendly", color: "#ec4899" },
+                { name: "professional", color: "#6366f1" }
               ].map((tone) => {
                 const currentTone = formData.speakerType === "ai-host" ? formData.tone : formData.guestPersona.tone;
                 const isSelected = currentTone === tone.name;
-                const hasSelection = currentTone && currentTone !== "";
                 
                 return (
                   <button
@@ -344,13 +391,26 @@ const AISpeakerSetup = ({ formData, setFormData, goNext, goBack }) => {
                         });
                       }
                     }}
-                    className={`px-4 py-2 rounded-lg font-medium transition-all duration-300 border-2 ${
+                    className="px-5 py-2.5 rounded-full font-semibold text-sm transition-all shadow-sm hover:shadow-md"
+                    style={
                       isSelected
-                        ? `${tone.bgColor} text-white shadow-md`
-                        : hasSelection
-                        ? `bg-white text-gray-800 ${tone.borderColor} hover:bg-gray-50`
-                        : `${tone.bgColor} text-white hover:opacity-80`
-                    }`}
+                        ? { backgroundColor: tone.color, color: '#FFFFFF' }
+                        : { 
+                            backgroundColor: 'white', 
+                            color: tone.color,
+                            border: `2px solid ${tone.color}`
+                          }
+                    }
+                    onMouseEnter={(e) => {
+                      if (!isSelected) {
+                        e.currentTarget.style.backgroundColor = `${tone.color}15`;
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isSelected) {
+                        e.currentTarget.style.backgroundColor = 'white';
+                      }
+                    }}
                   >
                     {tone.name.charAt(0).toUpperCase() + tone.name.slice(1)}
                   </button>
@@ -361,133 +421,190 @@ const AISpeakerSetup = ({ formData, setFormData, goNext, goBack }) => {
         </div>
 
         {/* AI Guest Additional Setup */}
-        {formData.speakerType === "ai-guest" && (
-          <div className="space-y-8 mt-10">
-            <h3 className="text-xl font-semibold text-gray-800">AI Guest Persona Details</h3>
+        {formData.speakerType === "ai-guest" ? (
+          <div className="mt-10">
+            <h3 className="text-xl font-semibold mb-6 flex items-center gap-3" style={{ color: '#6A6A6A' }}>
+              <User className="w-7 h-7" style={{ color: '#6057C7' }} />
+              AI Guest Persona Details
+            </h3>
             
-            {/* Role */}
-            <div>
-              <label className="block text-lg font-semibold text-gray-700 mb-3">
-                Professional Role *
-              </label>
-              <input
-                type="text"
-                placeholder="e.g., Professional Cricketer, Software Engineer, Marketing Expert"
-                value={formData.guestPersona.role}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  guestPersona: { ...formData.guestPersona, role: e.target.value }
-                })}
-                className="w-full border-2 border-gray-300 rounded-xl p-4 text-lg focus:outline-none focus:ring-2 focus:ring-light-purple focus:border-transparent transition-all"
-              />
-            </div>
+            {/* Row 1: Professional Role and Areas of Expertise */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              {/* Role */}
+              <div>
+                <label className="block text-lg font-semibold mb-3 flex items-center gap-3" style={{ color: '#6A6A6A' }}>
+                  <Briefcase className="w-7 h-7" style={{ color: '#6057C7' }} />
+                  Professional Role *
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g., Professional Cricketer, Software Engineer"
+                  value={formData.guestPersona.role}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    guestPersona: { ...formData.guestPersona, role: e.target.value }
+                  })}
+                  className="w-full border-2 border-gray-300 rounded-xl p-4 text-lg focus:outline-none focus:ring-2 focus:ring-[#6057C7] focus:border-transparent transition-all"
+                />
+              </div>
 
-            {/* Background */}
-            <div>
-              <label className="block text-lg font-semibold text-gray-700 mb-3">
-                Background & Experience *
-              </label>
-              <textarea
-                placeholder="e.g., former team captain with years of experience in world tournaments"
-                value={formData.guestPersona.background}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  guestPersona: { ...formData.guestPersona, background: e.target.value }
-                })}
-                rows={3}
-                className="w-full border-2 border-gray-300 rounded-xl p-4 text-lg focus:outline-none focus:ring-2 focus:ring-light-purple focus:border-transparent transition-all resize-none"
-              />
-            </div>
-
-            {/* Expertise Areas */}
-            <div>
-              <label className="block text-lg font-semibold text-gray-700 mb-3">
-                Areas of Expertise
-              </label>
-              <div className="space-y-3">
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <RiAddLine className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                    <input
-                      type="text"
-                      placeholder="e.g., team leadership, match strategy"
-                      value={newExpertise}
-                      onChange={(e) => setNewExpertise(e.target.value)}
-                       onKeyPress={handleKeyPress}
-                      className="w-full border-2 border-gray-300 rounded-xl p-4 pl-12 text-lg focus:outline-none focus:ring-2 focus:ring-light-purple focus:border-transparent transition-all"
-                    />
+              {/* Expertise Areas */}
+              <div>
+                <label className="block text-lg font-semibold mb-3 flex items-center gap-3" style={{ color: '#6A6A6A' }}>
+                  <Award className="w-7 h-7" style={{ color: '#6057C7' }} />
+                  Areas of Expertise {formData.guestPersona.expertise.length > 0 && `(${formData.guestPersona.expertise.length}/5)`}
+                </label>
+                <div className="space-y-3">
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <RiAddLine className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                      <input
+                        type="text"
+                        placeholder="e.g., team leadership, match strategy"
+                        value={newExpertise}
+                        onChange={(e) => setNewExpertise(e.target.value)}
+                        onKeyPress={handleKeyPress}
+                        disabled={formData.guestPersona.expertise.length >= 5}
+                        className="w-full border-2 border-gray-300 rounded-xl p-4 pl-12 text-lg focus:outline-none focus:ring-2 focus:ring-light-purple focus:border-transparent transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      />
+                    </div>
+                    <button
+                      onClick={addExpertise}
+                      disabled={formData.guestPersona.expertise.length >= 5 || !newExpertise.trim()}
+                      className="px-6 py-4 rounded-xl font-semibold transition-all shadow-md hover:shadow-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      style={formData.guestPersona.expertise.length >= 5 
+                        ? { backgroundColor: '#e5e7eb', color: '#9ca3af' }
+                        : { backgroundColor: '#6057C7', color: '#F9F5EB' }
+                      }
+                      onMouseEnter={(e) => {
+                        if (formData.guestPersona.expertise.length < 5) {
+                          e.currentTarget.style.backgroundColor = '#4f46e5';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (formData.guestPersona.expertise.length < 5) {
+                          e.currentTarget.style.backgroundColor = '#6057C7';
+                        }
+                      }}
+                    >
+                      <RiAddLine className="w-5 h-5" />
+                      Add
+                    </button>
                   </div>
-                  <button
-                    onClick={addExpertise}
-                    className="bg-light-purple text-white px-6 py-4 rounded-xl hover:bg-purple-700 transition-colors flex items-center gap-2"
-                  >
-                    <RiAddLine className="w-5 h-5" />
-                    Add
-                  </button>
-                </div>
-                
-                {/* Display Expertise */}
-                {formData.guestPersona.expertise.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {formData.guestPersona.expertise.map((exp, index) => (
-                      <span
-                        key={index}
-                        className="bg-light-purple text-white px-4 py-2 rounded-full text-sm flex items-center gap-2"
-                      >
-                        {exp}
-                        <button
-                          onClick={() => removeExpertise(exp)}
-                          className="hover:bg-purple-700 rounded-full p-1 transition-colors"
+                  {formData.guestPersona.expertise.length >= 5 && (
+                    <p className="text-sm" style={{ color: '#6A6A6A' }}>
+                      Maximum 5 areas of expertise reached
+                    </p>
+                  )}
+                  
+                  {/* Display Expertise */}
+                  {formData.guestPersona.expertise.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {formData.guestPersona.expertise.map((exp, index) => (
+                        <span
+                          key={index}
+                          className="px-4 py-2 rounded-full text-sm flex items-center gap-2 shadow-sm"
+                          style={{ backgroundColor: '#6057C7', color: '#F9F5EB' }}
                         >
-                          <RiCloseLine className="w-3 h-3" />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
+                          {exp}
+                          <button
+                            onClick={() => removeExpertise(exp)}
+                            className="rounded-full p-1 transition-colors hover:opacity-80"
+                          >
+                            <RiCloseLine className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* Communication Style */}
-            <div>
-              <label className="block text-lg font-semibold text-gray-700 mb-3">
-                Communication Style
-              </label>
-              <textarea
-                placeholder="e.g., uses cricket metaphors, friendly tone, speaks with confidence"
-                value={formData.guestPersona.style}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  guestPersona: { ...formData.guestPersona, style: e.target.value }
-                })}
-                rows={2}
-                className="w-full border-2 border-gray-300 rounded-xl p-4 text-lg focus:outline-none focus:ring-2 focus:ring-light-purple focus:border-transparent transition-all resize-none"
-              />
-            </div>
+            {/* Row 2: Background & Experience and Communication Style */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Background */}
+              <div>
+                <label className="block text-lg font-semibold mb-3 flex items-center gap-3" style={{ color: '#6A6A6A' }}>
+                  <GraduationCap className="w-7 h-7" style={{ color: '#6057C7' }} />
+                  Background & Experience *
+                </label>
+                <textarea
+                  placeholder="e.g., former team captain with years of experience"
+                  value={formData.guestPersona.background}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    guestPersona: { ...formData.guestPersona, background: e.target.value }
+                  })}
+                  rows={3}
+                  className="w-full border-2 border-gray-300 rounded-xl p-4 text-lg focus:outline-none focus:ring-2 focus:ring-[#6057C7] focus:border-transparent transition-all resize-none"
+                />
+              </div>
 
+              {/* Communication Style */}
+              <div>
+                <label className="block text-lg font-semibold mb-3 flex items-center gap-3" style={{ color: '#6A6A6A' }}>
+                  <MessageSquare className="w-7 h-7" style={{ color: '#6057C7' }} />
+                  Communication Style
+                </label>
+                <textarea
+                  placeholder="e.g., uses cricket metaphors, friendly tone, speaks with confidence"
+                  value={formData.guestPersona.style}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    guestPersona: { ...formData.guestPersona, style: e.target.value }
+                  })}
+                  rows={3}
+                  className="w-full border-2 border-gray-300 rounded-xl p-4 text-lg focus:outline-none focus:ring-2 focus:ring-[#6057C7] focus:border-transparent transition-all resize-none"
+                />
+              </div>
+            </div>
           </div>
-        )}
+        ) : null}
 
         {/* Navigation Buttons */}
-        <div className="flex justify-between mt-8">
+        <div className="flex justify-between items-center mt-8">
           <button 
             onClick={goBack}
-            className="text-light-purple font-medium text-3xl hover:underline"
+            className="w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-md hover:shadow-lg"
+            style={{ backgroundColor: '#6057C7', color: '#F9F5EB' }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#4f46e5';
+              e.currentTarget.style.transform = 'translateX(-2px)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = '#6057C7';
+              e.currentTarget.style.transform = 'translateX(0)';
+            }}
           >
-            <IoMdArrowRoundBack />
+            <ArrowLeft size={20} />
           </button>
           <button
             onClick={handleNext}
             disabled={!isFormValid()}
-            className={`px-8 py-4 rounded-xl font-semibold text-lg transition-all ${
+            className="px-8 py-4 rounded-full font-semibold text-lg transition-all shadow-md hover:shadow-lg"
+            style={
               isFormValid()
-                ? 'bg-light-purple text-white hover:bg-purple-700 hover:shadow-lg'
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-            }`}
+                ? { backgroundColor: '#6057C7', color: '#F9F5EB' }
+                : { backgroundColor: '#e5e7eb', color: '#9ca3af', cursor: 'not-allowed' }
+            }
+            onMouseEnter={(e) => {
+              if (isFormValid()) {
+                e.currentTarget.style.backgroundColor = '#4f46e5';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (isFormValid()) {
+                e.currentTarget.style.backgroundColor = '#6057C7';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }
+            }}
           >
             Next: Voice Setup →
           </button>
         </div>
+      </div>
       </div>
     </div>
   );

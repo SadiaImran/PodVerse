@@ -897,23 +897,30 @@ const fetchLiveKitToken = async () => {
     return (
       <div className="p-6 space-y-6">
         {/* Script Metadata */}
-        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+        <div className="rounded-xl p-4 border" style={{ backgroundColor: '#f5f3ff', borderColor: '#c4b5fd' }}>
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="font-semibold text-gray-800">Generated Script</h3>
-              <p className="text-sm text-gray-600 mt-1">
+              <h3 className="font-semibold text-base mb-1" style={{ color: '#6A6A6A' }}>Generated Script</h3>
+              <p className="text-sm mt-1" style={{ color: '#6A6A6A' }}>
                 Role: {scriptData.metadata?.role?.toUpperCase() || 'GUEST'} • 
                 {scriptData.metadata?.word_count || 0} words • 
                 {scriptData.metadata?.estimated_duration || 'N/A'}
               </p>
             </div>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center gap-2">
               <button 
                 onClick={() => {
                   navigator.clipboard.writeText(scriptText);
                   showToast('Script copied to clipboard!', 'success');
                 }}
-                className="text-xs bg-purple-500 text-white px-3 py-1 rounded hover:bg-purple-600 transition-colors"
+                className="px-4 py-2 rounded-full text-xs font-semibold transition-all shadow-sm hover:shadow-md"
+                style={{ backgroundColor: '#6057C7', color: '#F9F5EB' }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#4f46e5';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#6057C7';
+                }}
               >
                 Copy
               </button>
@@ -930,7 +937,14 @@ const fetchLiveKitToken = async () => {
                   URL.revokeObjectURL(url);
                   showToast('Script downloaded!', 'success');
                 }}
-                className="text-xs bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 transition-colors"
+                className="px-4 py-2 rounded-full text-xs font-semibold transition-all shadow-sm hover:shadow-md"
+                style={{ backgroundColor: '#22c55e', color: '#F9F5EB' }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#16a34a';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#22c55e';
+                }}
               >
                 Download
               </button>
@@ -945,35 +959,37 @@ const fetchLiveKitToken = async () => {
             sections.map((section, idx) => (
               <div 
                 key={idx} 
-                className={`p-4 rounded-lg border-l-4 ${
-                  section.speaker === 'HOST' 
-                    ? 'bg-blue-50 border-blue-500' 
-                    : 'bg-purple-50 border-purple-500'
-                }`}
+                className="p-4 rounded-xl border-l-4"
+                style={section.speaker === 'HOST' 
+                  ? { backgroundColor: '#dbeafe', borderColor: '#3b82f6' }
+                  : { backgroundColor: '#f5f3ff', borderColor: '#6057C7' }
+                }
               >
-                <div className="flex items-center space-x-2 mb-2">
-                  <span className={`text-xs font-bold px-2 py-1 rounded ${
-                    section.speaker === 'HOST'
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-purple-500 text-white'
-                  }`}>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs font-bold px-3 py-1 rounded-full"
+                  style={section.speaker === 'HOST'
+                    ? { backgroundColor: '#3b82f6', color: '#F9F5EB' }
+                    : { backgroundColor: '#6057C7', color: '#F9F5EB' }
+                  }>
                     {section.speaker}
                   </span>
-                  <span className="text-xs text-gray-500">Segment {idx + 1}</span>
+                  <span className="text-xs" style={{ color: '#6A6A6A' }}>Segment {idx + 1}</span>
                 </div>
-                <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+                <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: '#1C1C1C' }}>
                   {section.content}
                 </p>
               </div>
             ))
           ) : (
             // If sections are empty, show raw script text
-            <div className="p-4 rounded-lg bg-gray-50 border border-gray-200">
-              <div className="flex items-center space-x-2 mb-3">
-                <Icon name="podcast" className="w-5 h-5 text-purple-500" />
-                <span className="text-sm font-semibold text-gray-800">Full Script</span>
+            <div className="p-4 rounded-xl border" style={{ backgroundColor: '#f9fafb', borderColor: '#e5e7eb' }}>
+              <div className="flex items-center gap-2 mb-3">
+                <svg className="w-5 h-5" style={{ color: '#6057C7' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span className="text-sm font-semibold" style={{ color: '#6A6A6A' }}>Full Script</span>
               </div>
-              <div className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap max-h-[600px] overflow-y-auto">
+              <div className="text-sm leading-relaxed whitespace-pre-wrap max-h-[600px] overflow-y-auto" style={{ color: '#1C1C1C' }}>
                 {scriptText}
               </div>
             </div>
@@ -997,9 +1013,9 @@ const fetchLiveKitToken = async () => {
         ))}
       </div>
 
-      <div className="h-full rounded-3xl border-2 border-purple-200/50 shadow-2xl overflow-hidden flex bg-white/90 backdrop-blur-sm">
+      <div className="h-full rounded-[28px] border overflow-hidden flex" style={{ borderColor: '#e5e7eb', backgroundColor: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(10px)' }}>
           {/* Left Panel - Participants (More Space) */}
-          <div className="w-3/5 bg-gradient-to-br from-purple-50 via-white to-purple-100/30 flex">
+          <div className="w-3/5 flex" style={{ background: 'linear-gradient(135deg, #f5f3ff 0%, #ffffff 50%, #f5f3ff 100%)' }}>
         
         {/* Left Section - Participants + Session Management */}
         <section className="flex flex-col justify-center items-center my-auto mx-8 font-headingPoppins">
@@ -1089,7 +1105,7 @@ const fetchLiveKitToken = async () => {
         </section>
 
         {/* Separator */}
-        <div className="w-px bg-gradient-to-b from-purple-200 to-purple-300"></div>
+        <div className="w-px" style={{ backgroundColor: '#e5e7eb' }}></div>
 
         {/* Right Section - Main Controls */}
         <section className="w-2/3 flex flex-col my-auto mx-8">
@@ -1192,61 +1208,90 @@ const fetchLiveKitToken = async () => {
       </div>
 
       {/* Right Panel - Transcript (Original Size) */}
-      <div className="w-2/5 bg-gradient-to-br from-gray-50 to-purple-50/30 flex flex-col border-l-2 border-purple-200/50">
+      <div className="w-2/5 flex flex-col border-l-2" style={{ backgroundColor: '#f9fafb', borderColor: '#e5e7eb' }}>
         {/* Header */}
-        <div className="bg-gradient-to-r from-purple-50 to-white border-b-2 border-purple-200/50 px-6 py-4">
+        <div className="px-6 py-4 border-b-2" style={{ backgroundColor: 'rgba(255, 255, 255, 0.9)', borderColor: '#e5e7eb' }}>
           <div className="flex items-center justify-between">
             {/* Tab Buttons */}
-            <div className="flex space-x-6">
+            <div className="flex gap-4">
               <button 
                 onClick={() => setActiveTab('transcript')}
-                className={`pb-3 text-lg font-semibold transition-all duration-300 relative ${
+                className={`px-6 py-3 rounded-full font-semibold text-base transition-all duration-300 flex items-center gap-2 ${
                   activeTab === 'transcript'
-                    ? 'text-purple-600'
-                    : 'text-gray-500 hover:text-purple-600'
+                    ? 'text-white shadow-md'
+                    : 'text-gray-600 border-2 border-gray-300 bg-white hover:border-[#6057C7]'
                 }`}
+                style={activeTab === 'transcript'
+                  ? { backgroundColor: '#6057C7', color: '#F9F5EB' }
+                  : {}
+                }
+                onMouseEnter={(e) => {
+                  if (activeTab !== 'transcript') {
+                    e.currentTarget.style.borderColor = '#6057C7';
+                    e.currentTarget.style.backgroundColor = '#f5f3ff';
+                  } else {
+                    e.currentTarget.style.backgroundColor = '#4f46e5';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (activeTab !== 'transcript') {
+                    e.currentTarget.style.borderColor = '#d1d5db';
+                    e.currentTarget.style.backgroundColor = 'white';
+                  } else {
+                    e.currentTarget.style.backgroundColor = '#6057C7';
+                  }
+                }}
               >
-                <span className="flex items-center gap-2">
-                  <div className={`w-4 h-4 rounded-full ${
-                    activeTab === 'transcript' ? 'bg-purple-500' : 'bg-gray-300'
-                  }`}></div>
-                  Transcript
-                </span>
-                {activeTab === 'transcript' && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-purple-500 to-purple-600 rounded-full"></div>
-                )}
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Transcript
               </button>
               <button 
                 onClick={() => setActiveTab('script')}
-                className={`pb-3 text-lg font-semibold transition-all duration-300 relative ${
+                className={`px-6 py-3 rounded-full font-semibold text-base transition-all duration-300 flex items-center gap-2 ${
                   activeTab === 'script'
-                    ? 'text-light-lightPurple'
-                    : 'text-gray-500 hover:text-light-lightPurple'
+                    ? 'text-white shadow-md'
+                    : 'text-gray-600 border-2 border-gray-300 bg-white hover:border-[#6057C7]'
                 }`}
+                style={activeTab === 'script'
+                  ? { backgroundColor: '#6057C7', color: '#F9F5EB' }
+                  : {}
+                }
+                onMouseEnter={(e) => {
+                  if (activeTab !== 'script') {
+                    e.currentTarget.style.borderColor = '#6057C7';
+                    e.currentTarget.style.backgroundColor = '#f5f3ff';
+                  } else {
+                    e.currentTarget.style.backgroundColor = '#4f46e5';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (activeTab !== 'script') {
+                    e.currentTarget.style.borderColor = '#d1d5db';
+                    e.currentTarget.style.backgroundColor = 'white';
+                  } else {
+                    e.currentTarget.style.backgroundColor = '#6057C7';
+                  }
+                }}
               >
-                <span className="flex items-center gap-2">
-                  <div className={`w-4 h-4 rounded-full ${
-                    activeTab === 'script' ? 'bg-light-lightPurple' : 'bg-gray-300'
-                  }`}></div>
-                  Script
-                  {podcastScript && (
-                    <span className="w-2 h-2 bg-light-lightPurple rounded-full animate-pulse"></span>
-                  )}
-                </span>
-                {activeTab === 'script' && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-light-lightPurple rounded-full"></div>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Script
+                {podcastScript && (
+                  <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: '#F9F5EB' }}></span>
                 )}
               </button>
             </div>
           </div>
           
-          
           {/* Script Info Banner - Only show on script tab */}
           {activeTab === 'script' && podcastScript && (
-            <div className="mt-3 p-3 bg-gradient-to-r from-green-50 to-green-100 border border-green-200 rounded-xl shadow-sm">
-              <div className="flex items-center space-x-3">
-                <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-                <span className="text-sm text-green-700 font-semibold">
+            <div className="mt-4 p-4 rounded-xl border" style={{ backgroundColor: '#f0fdf4', borderColor: '#22c55e' }}>
+              <div className="flex items-center gap-3">
+                <div className="w-3 h-3 rounded-full animate-pulse" style={{ backgroundColor: '#22c55e' }}></div>
+                <span className="text-sm font-semibold" style={{ color: '#166534' }}>
                   Script loaded: {podcastScript.metadata?.segment_count || 0} segments • 
                   {podcastScript.metadata?.word_count || 0} words
                 </span>
@@ -1256,13 +1301,13 @@ const fetchLiveKitToken = async () => {
         </div>
 
         {/* Transcript Area - Streaming Style */}
-        <div className="flex-1 overflow-y-auto p-6 bg-gradient-to-br from-white via-gray-50/50 to-purple-50/20">
+        <div className="flex-1 overflow-y-auto p-6 pb-4" style={{ backgroundColor: '#fafafa' }}>
           {activeTab === 'transcript' ? (
             // Enhanced Transcript View
             <>
               {transcript.length === 0 && !streamingText ? (
                 <div className="text-center text-gray-500 mt-20">
-                  <div className="w-96 h-96 mx-auto mb-6 flex items-center justify-center">
+                  <div className="w-64 h-64 mx-auto mb-6 flex items-center justify-center">
                     <img 
                       src={aiImage} 
                       alt="AI Assistant" 
@@ -1273,7 +1318,7 @@ const fetchLiveKitToken = async () => {
                   <p className="text-sm text-gray-400">Your transcript will appear here in real-time</p>
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-4 pb-4">
                   {transcript.map((entry, idx) => {
                     const { user } = useAuth();
                     const isUser = entry.speaker === "You" || entry.speaker === user?.full_name;
@@ -1295,11 +1340,15 @@ const fetchLiveKitToken = async () => {
                     >
                       <div className={`flex items-start gap-3 max-w-[80%] ${isUser ? 'flex-row-reverse' : ''}`}>
                         <div className="flex-shrink-0">
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-lg overflow-hidden ${
-                            isUser ? "bg-light-lightPurple" : 
-                            entry.speaker === "System" ? "bg-gradient-to-br from-yellow-500 to-yellow-600" :
-                            isAI ? "bg-gradient-to-br from-blue-500 to-blue-600" : "bg-gradient-to-br from-gray-500 to-gray-600"
-                          }`}>
+                          <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-lg overflow-hidden"
+                          style={isUser 
+                            ? { backgroundColor: '#6057C7' }
+                            : entry.speaker === "System"
+                            ? { background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)' }
+                            : isAI
+                            ? { background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)' }
+                            : { background: 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)' }
+                          }>
                             {isUser ? (
                               <span className="text-sm font-bold">{userName.charAt(0).toUpperCase()}</span>
                             ) : entry.speaker === "System" ? (
@@ -1320,15 +1369,23 @@ const fetchLiveKitToken = async () => {
                           </div>
                         </div>
                         <div className="flex flex-col gap-1">
-                          <div className={`rounded-2xl px-5 py-3.5 ${
+                          <div className={`rounded-2xl px-5 py-3.5 shadow-md hover:shadow-lg transition-shadow ${
                             isUser
-                              ? 'bg-light-lightPurple text-white shadow-lg'
+                              ? 'text-white'
                               : entry.isSystem
-                              ? 'bg-gradient-to-r from-yellow-50 to-yellow-100 border-2 border-yellow-200 shadow-md'
+                              ? 'border-2'
                               : entry.isWelcomeBack
-                              ? 'bg-gradient-to-r from-blue-50 to-blue-100 border-2 border-blue-200 shadow-md'
-                              : 'bg-white border-2 border-purple-100 shadow-md hover:shadow-lg transition-shadow'
-                          }`}>
+                              ? 'border-2'
+                              : 'border-2'
+                          }`}
+                          style={isUser
+                            ? { backgroundColor: '#6057C7' }
+                            : entry.isSystem
+                            ? { backgroundColor: '#fef3c7', borderColor: '#fbbf24' }
+                            : entry.isWelcomeBack
+                            ? { backgroundColor: '#dbeafe', borderColor: '#3b82f6' }
+                            : { backgroundColor: 'white', borderColor: '#e5e7eb' }
+                          }>
                             {/* Speaker name */}
                             <div className={`text-sm font-semibold mb-1 ${
                               isUser ? 'text-purple-100' : 
@@ -1357,15 +1414,15 @@ const fetchLiveKitToken = async () => {
                     <div className="flex justify-end" style={{ animation: 'fadeIn 0.3s ease-in' }}>
                       <div className="flex items-start gap-3 max-w-[80%] flex-row-reverse">
                         <div className="flex-shrink-0">
-                          <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold bg-gradient-to-br from-purple-500 to-purple-600 shadow-lg animate-pulse">
+                          <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-lg animate-pulse" style={{ backgroundColor: '#6057C7' }}>
                             U
                           </div>
                         </div>
                         <div className="flex flex-col gap-1">
-                          <div className="bg-light-lightPurple text-white rounded-2xl px-5 py-3.5 shadow-lg">
+                          <div className="rounded-2xl px-5 py-3.5 shadow-lg" style={{ backgroundColor: '#6057C7', color: '#F9F5EB' }}>
                             <p className="text-sm leading-relaxed">
                               {streamingText}
-                              <span className="animate-pulse ml-1 text-white text-lg">●</span>
+                              <span className="animate-pulse ml-1 text-lg">●</span>
                             </p>
                           </div>
                           <span className="text-xs text-gray-400 px-2 text-right">Now</span>
