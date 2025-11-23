@@ -133,9 +133,10 @@ active_egresses = {}
 async def start_audio_egress_async(
     room_name: str = Form(...),
     user_id: str = Form(None),
-    kb_id: str = Form(None)
+    kb_id: str = Form(None),
+    podcast_title: str = Form(None)
 ):
-    """Start audio egress with custom file naming including user_id, kb_id, room_name, and timestamp."""
+    """Start audio egress with custom file naming using podcast title."""
     # ✅ CRITICAL FIX: Convert wss:// to https:// for API endpoint
     api_host = LIVEKIT_WS_URL.replace("wss://", "https://").replace("ws://", "http://")
     
@@ -144,27 +145,34 @@ async def start_audio_egress_async(
     print(f"🎬 Starting egress for room: {room_name}")
     print(f"👤 User ID: {user_id}")
     print(f"📚 KB ID: {kb_id}")
+    print(f"📝 Podcast Title: {podcast_title}")
     
-    # Create custom filename with user_id, kb_id, room_name, and timestamp
+    # Create custom filename using podcast title (clean and readable)
     timestamp = time.strftime("%Y-%m-%dT%H%M%S")
     
-    # Build filename: user[user_id]_kb[kb_id]_room[room_name]_[timestamp].ogg
-    filename_parts = []
-    
-    if user_id:
-        filename_parts.append(f"user_{user_id}")
+    # Use podcast title if available, otherwise fallback to default naming
+    if podcast_title:
+        # Clean podcast title for filename (remove special chars, spaces to underscores)
+        import re
+        clean_title = re.sub(r'[^\w\s-]', '', podcast_title)  # Remove special chars
+        clean_title = re.sub(r'[-\s]+', '_', clean_title)  # Replace spaces/hyphens with underscore
+        clean_title = clean_title.strip('_')  # Remove leading/trailing underscores
+        clean_title = clean_title[:50]  # Limit length
+        custom_filename = f"{clean_title}_{timestamp}.ogg"
     else:
-        filename_parts.append("user_unknown")
-        
-    if kb_id:
-        filename_parts.append(f"kb_{kb_id}")
-    else:
-        filename_parts.append("kb_unknown")
-        
-    filename_parts.append(f"room_{room_name}")
-    filename_parts.append(timestamp)
-    
-    custom_filename = "_".join(filename_parts) + ".ogg"
+        # Fallback to old naming if no podcast title
+        filename_parts = []
+        if user_id:
+            filename_parts.append(f"user_{user_id}")
+        else:
+            filename_parts.append("user_unknown")
+        if kb_id:
+            filename_parts.append(f"kb_{kb_id}")
+        else:
+            filename_parts.append("kb_unknown")
+        filename_parts.append(f"room_{room_name}")
+        filename_parts.append(timestamp)
+        custom_filename = "_".join(filename_parts) + ".ogg"
     
     print(f"📁 Custom filename: {custom_filename}")
 
@@ -269,11 +277,40 @@ async def stop_audio_egress_async(room_name: str = Form(...)):
             api_secret=LIVEKIT_API_SECRET
         )
         
-        # Stop the egress
-        await lk_api.egress.stop_egress(api.StopEgressRequest(egress_id=egress_id))
-        print(f"✅ Egress stopped successfully!")
-        print(f"   Egress ID: {egress_id}")
-        print(f"   Room: {room_name}")
+        # Check egress status before trying to stop
+        try:
+            egress_list = await lk_api.egress.list_egress(api.ListEgressRequest(egress_id=egress_id))
+            egress_status = None
+            if hasattr(egress_list, 'egress') and egress_list.egress:
+                for egress in egress_list.egress:
+                    if egress.egress_id == egress_id:
+                        egress_status = egress.status
+                        print(f"📊 Egress status: {egress_status}")
+                        break
+        except Exception as status_error:
+            print(f"⚠️ Could not check egress status: {status_error}")
+            egress_status = None
+        
+        # Only try to stop if egress is active/starting (not already failed/completed)
+        if egress_status and egress_status in [api.EgressStatus.EGRESS_FAILED, api.EgressStatus.EGRESS_COMPLETE]:
+            print(f"ℹ️ Egress already in final state ({egress_status}), skipping stop call")
+        else:
+            # Stop the egress
+            try:
+                await lk_api.egress.stop_egress(api.StopEgressRequest(egress_id=egress_id))
+                print(f"✅ Egress stopped successfully!")
+                print(f"   Egress ID: {egress_id}")
+                print(f"   Room: {room_name}")
+            except Exception as stop_error:
+                error_str = str(stop_error)
+                # Handle TwirpError for failed/completed egress
+                if "EGRESS_FAILED" in error_str or "cannot be stopped" in error_str or "failed_precondition" in error_str:
+                    print(f"ℹ️ Egress already failed/completed, cannot stop: {error_str}")
+                    print(f"ℹ️ Continuing to try getting file URL...")
+                    # Continue to try getting the file URL even if stop failed
+                else:
+                    print(f"⚠️ Unexpected error stopping egress: {error_str}")
+                    # Still try to get file URL even on unexpected errors
         
         # Get filename from stored egress info
         filename = egress_info.get("filename")

@@ -194,35 +194,44 @@ class GuestAgent(Agent):
 - Your responses should reflect your role as {self.guest_role or 'an expert'} with background in {self.guest_background or 'your field'}
 - When topics align with your expertise ({expertise_str}), provide more detailed and confident responses
 
-**SMART KNOWLEDGE BASE QUERY RULE - ONLY FOR INFORMATION-SPECIFIC QUESTIONS:**
+**SMART KNOWLEDGE BASE QUERY RULE - USE CONVERSATION HISTORY FIRST:**
 - **DO NOT query KB for simple greetings or casual conversation:**
   * "How are you?" → Just respond naturally, NO KB query needed
   * "Hello" / "Hi" → Just greet back, NO KB query needed
   * "Good morning" → Just respond politely, NO KB query needed
   * General small talk → Respond naturally, NO KB query needed
 
-- **ONLY query KB for questions that require specific information about you:**
-  * "Tell me about your education background" → Query KB first
-  * "What's your experience with X?" → Query KB first
-  * "Can you share about your work?" → Query KB first
-  * "Tell me about yourself" → Query KB first
-  * Questions about your background, experiences, education, work, skills, achievements → Query KB first
-  * Questions about specific topics, projects, or details → Query KB first
+- **CRITICAL: ALWAYS CHECK CONVERSATION HISTORY BEFORE QUERYING KB:**
+  * **The conversation history contains everything you've already said and information you've already shared**
+  * **BEFORE calling query_knowledge_base(), check the conversation history first**
+  * **If the information is already in the conversation → Use it, DO NOT query KB again**
 
-- **MEMORY AND CONTEXT RETENTION:**
-  * **REMEMBER information you've already fetched from KB in this conversation**
-  * **If you've already queried KB for similar information, use that previous context**
-  * **DO NOT re-query KB for the same information you already have**
-  * **Build on previous KB queries - reference what you've already learned**
-  * **Keep track of what information you've shared from KB**
+- **EXAMPLES OF WHEN NOT TO QUERY KB (Use conversation history instead):**
+  * You already said "I have a Pharm D degree" → If asked "academic background", use that info, DON'T query KB
+  * You already mentioned your work experience → If asked "tell me about your work", use that info, DON'T query KB
+  * You already shared your skills → If asked "what are your skills", use that info, DON'T query KB
+  * Any follow-up question about something you already mentioned → Use conversation history, DON'T query KB
 
-- **WORKFLOW FOR INFORMATION QUESTIONS:**
-  1. Host asks an information-specific question
-  2. Check if you already have this information from previous KB queries
-  3. If yes → Use the remembered information
-  4. If no → Query KB first, then remember the information
-  5. Use the KB information naturally in your response
-  6. Remember this information for future questions
+- **ONLY query KB when:**
+  * The question is about something COMPLETELY NEW that hasn't been mentioned in the conversation
+  * You need information that you haven't shared yet
+  * The conversation history doesn't contain the answer
+
+- **WORKFLOW - FOLLOW THIS EXACTLY:**
+  1. Host asks a question
+  2. **STEP 1: Check conversation history - have you already answered this or shared this information?**
+  3. **STEP 2: If YES → Use information from conversation history, DO NOT call query_knowledge_base()**
+  4. **STEP 3: If NO → Then and ONLY then, call query_knowledge_base() for new information**
+  5. Use the information naturally in your response
+  6. **Remember: Conversation history = your memory. Use it before querying KB!**
+
+- **CONCRETE EXAMPLES:**
+  * Host: "Tell me about yourself" → You query KB, get info about education, work, skills
+  * Host: "What's your academic background?" → DO NOT query KB again! Use the education info you already shared
+  * Host: "Tell me about your work experience" → DO NOT query KB again! Use the work info you already shared
+  * Host: "What skills do you have?" → DO NOT query KB again! Use the skills info you already shared
+  * Host: "Tell me about your research" → This is NEW, so query KB
+  * Host: "What projects have you worked on?" → This is NEW, so query KB
 
 **ABSOLUTELY NEVER:**
 - Query KB for simple greetings ("How are you?", "Hello", etc.)
@@ -254,18 +263,21 @@ class GuestAgent(Agent):
 """
         
         strict_instruction = """
-**STRICT CONTENT RULES - SMART KB QUERY:**
+**STRICT CONTENT RULES - SMART KB QUERY WITH MEMORY:**
 - ALWAYS respond in English only
 - **DO NOT query KB for greetings or casual conversation** ("How are you?", "Hello", etc.)
-- **ONLY query KB for information-specific questions** (background, education, work, experiences, etc.)
-- **REMEMBER information from previous KB queries** - don't re-query for the same information
-- **Use remembered KB information** when answering follow-up questions
+- **USE CONVERSATION HISTORY FIRST** - Check what you've already shared before querying KB
+- **DO NOT re-query KB for information already discussed** - Use conversation history instead
+- **ONLY query KB for COMPLETELY NEW information** that hasn't been mentioned yet
+- **Before querying KB, check: "Did I already share this in the conversation?"**
+  * If YES → Use conversation history, NO KB query needed
+  * If NO → Then query KB for new information
 - NEVER make up fictional content, stories, or facts
 - If information is not in the knowledge base after querying, say you don't remember or aren't sure
 - SOUND LIKE A NATURAL HUMAN GUEST, NOT A ROBOT ASSISTANT
 - NEVER use phrases like "according to my records" or "let me check my data"
 - Be conversational and natural, but truthful to the knowledge base content only
-- **REMEMBER: Be smart - only query KB when you need specific information, not for every question!**
+- **CRITICAL: Conversation history is your memory - use it before querying KB again!**
 """
         
         return base_instruction + persona_info + podcast_context + strict_instruction + "\n\n" + realtime_instruction
@@ -291,7 +303,12 @@ class GuestAgent(Agent):
 
     @function_tool()
     async def query_knowledge_base(self, query: str) -> str:
-        """Call backend /internal/respond to get context chunks for user."""
+        """
+        Call backend /internal/respond to get context chunks for user.
+        
+        IMPORTANT: Only use this when you need NEW information that hasn't been discussed yet.
+        If the question is about something already mentioned in this conversation, use the conversation history instead.
+        """
         return await query_knowledge_base(query, self.user_id, self.selected_kb_id)
 
     def get_effective_instructions(self):

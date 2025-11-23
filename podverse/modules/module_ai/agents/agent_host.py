@@ -370,7 +370,17 @@ async def entrypoint_host(ctx: agents.JobContext):
     await asyncio.sleep(0.6)
 
     room_name_str = getattr(room, 'name', 'my-room')
-    print(f"🎬 Will start recording after participant connects with metadata...")
+    print(f"🎬 Starting recording immediately when room connects...")
+    
+    # Start recording immediately when room connects (before participant connects)
+    # This ensures we capture the first dialogue from the host
+    try:
+        # Extract user_id and kb_id from room metadata or wait for participant
+        # For now, start with default values - will be updated when participant connects
+        print(f"🎬 Starting audio egress immediately for room: {room_name_str}")
+        asyncio.create_task(trigger_audio_egress(room_name_str, None, None))
+    except Exception as e:
+        print(f"⚠️ Error starting immediate recording: {e}")
     
     # Extract voice_name from existing participants before creating agent
     voice_name = None
@@ -484,10 +494,8 @@ async def entrypoint_host(ctx: agents.JobContext):
                                     print(f"⚠️ Cannot update voice - model doesn't support voice attribute. Requested: {new_voice}")
                         print(f"✅ user_id from metadata: {agent.user_id}, kb_id: {agent.selected_kb_id}, podcast_title: {agent.podcast_title}")
                         
-                        # Start audio egress recording after participant connects with metadata
-                        if room_name_str and agent.user_id != "default-user" and agent.selected_kb_id:
-                            print(f"🎬 Starting audio egress recording for room: {room_name_str}")
-                            asyncio.create_task(trigger_audio_egress(room_name_str, agent.user_id, agent.selected_kb_id))
+                        # Recording already started when room connected (to capture first dialogue)
+                        # No need to start again here
                     except Exception as e:
                         print(f"⚠️ participant metadata parse error: {e}")
                 if agent.user_id == "default-user":

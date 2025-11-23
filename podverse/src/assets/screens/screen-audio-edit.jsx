@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
+import { useLocation } from "react-router-dom";
 import WaveSurfer from "wavesurfer.js";
 import RegionsPlugin from "wavesurfer.js/dist/plugin/wavesurfer.regions.min.js";
 import { Play, Pause, Square, Upload, Trash2, ZoomIn, ZoomOut } from 'lucide-react';
@@ -7,6 +8,8 @@ import { Sidebar } from "../components/comp-audio-editing/comp-audio-edit-sideba
 import { MainPanel } from "../components/comp-audio-editing/comp-audio-edit-main-panel";
 
 const AudioEditor = () => {
+  const location = useLocation();
+  
   // State for audio tracks/clips
   const [audioClips, setAudioClips] = useState([]);
   const [audioBuffers, setAudioBuffers] = useState({});
@@ -16,6 +19,7 @@ const AudioEditor = () => {
   const [volume, setVolume] = useState(75);
   const [zoom, setZoom] = useState(1);
   const [selectedClipId, setSelectedClipId] = useState(null);
+  const [recordingLoaded, setRecordingLoaded] = useState(false);
 
   // Refs
   const waveformContainerRef = useRef(null);  
@@ -85,6 +89,75 @@ const AudioEditor = () => {
       }
     };
   }, []);
+
+  // Load recording from URL if provided (from recording modal)
+  useEffect(() => {
+    if (recordingLoaded || audioClips.length > 0) return; // Don't reload if already loaded or clips exist
+    
+    const recordingUrl = location.state?.recordingUrl || sessionStorage.getItem('recordingUrl');
+    const recordingFilename = sessionStorage.getItem('recordingFilename') || 'recording.ogg';
+    
+    if (recordingUrl) {
+      // Load recording as audio track
+      const loadRecordingFromUrl = async () => {
+        try {
+          console.log('Loading recording from URL:', recordingUrl);
+          
+          // Create audio element to get duration
+          const audio = new Audio();
+          audio.crossOrigin = 'anonymous';
+          audio.src = recordingUrl;
+          
+          await new Promise((resolve, reject) => {
+            audio.addEventListener('loadedmetadata', () => resolve());
+            audio.addEventListener('error', (e) => reject(e));
+            // Timeout after 10 seconds
+            setTimeout(() => reject(new Error('Timeout loading audio')), 10000);
+          });
+          
+          const duration = audio.duration;
+          const clipId = `recording-${Date.now()}`;
+          
+          const clip = {
+            id: clipId,
+            name: recordingFilename,
+            url: recordingUrl,
+            duration,
+            startTime: 0,
+            endTime: duration,
+            color: 'bg-green-500'
+          };
+          
+          // Try to load audio buffer for waveform
+          try {
+            const response = await fetch(recordingUrl);
+            const arrayBuffer = await response.arrayBuffer();
+            const audioContext = new AudioContext();
+            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+            setAudioBuffers(prev => ({ ...prev, [clipId]: audioBuffer }));
+          } catch (bufferError) {
+            console.warn('Could not load audio buffer for waveform:', bufferError);
+          }
+          
+          setAudioClips([clip]);
+          setRecordingLoaded(true);
+          
+          // Clean up sessionStorage
+          sessionStorage.removeItem('recordingUrl');
+          sessionStorage.removeItem('recordingFilename');
+          
+          console.log('Recording loaded successfully');
+        } catch (error) {
+          console.error('Error loading recording from URL:', error);
+          // Clean up sessionStorage on error too
+          sessionStorage.removeItem('recordingUrl');
+          sessionStorage.removeItem('recordingFilename');
+        }
+      };
+      
+      loadRecordingFromUrl();
+    }
+  }, [location.state, recordingLoaded, audioClips.length]);
 
   // Format time helper
   const formatTime = (seconds) => {
