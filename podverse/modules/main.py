@@ -46,7 +46,7 @@ app.add_middleware(
 app.include_router(posts_router)
 app.include_router(knowledge_base_router)
 app.include_router(ai_router, prefix="/ai", tags=["ai"])
-app.include_router(audios_router)
+app.include_router(audios_router, prefix="/audios", tags=["audios"])
 app.include_router(livekit_router, prefix="/livekit", tags=["livekit"])
 # app.include_router(voice_clone_router, prefix="/voice-clone", tags=["voice-clone"])
 app.include_router(audio_edit_router, prefix="/audio-edit", tags=["audio-edit"])
@@ -54,8 +54,14 @@ app.include_router(audio_edit_router, prefix="/audio-edit", tags=["audio-edit"])
 # Registered with both prefixes for backward compatibility
 app.include_router(video_router, prefix="/video", tags=["video"])  # HeyGen endpoints: /video/api/...
 app.include_router(video_router, prefix="/videos", tags=["video"])  # Supabase endpoints: /videos/upload, /videos/list
+app.include_router(podcast_router,prefix="/video",tags=["video"])
 
 app.mount("/output", StaticFiles(directory="module_voice_clone/output"), name="output")
+
+# Serve test video from modules folder
+current_dir = os.path.dirname(os.path.abspath(__file__))
+app.mount("/test-video", StaticFiles(directory=current_dir), name="test-video")
+
 app.include_router(voices_router)
 app.include_router(faq_router)
 app.include_router(social_media_router)

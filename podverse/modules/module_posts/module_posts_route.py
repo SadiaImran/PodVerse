@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
-from connection_supabase_client import supabase, get_authenticated_supabase_client
+from connection_supabase_client import supabase, get_authenticated_supabase_client, get_service_role_client
 from typing import Optional, List
 from pydantic import BaseModel
 import subprocess
@@ -7,6 +7,7 @@ import os
 import tempfile
 import uuid
 import requests
+import re
 
 router = APIRouter()
 
@@ -20,6 +21,22 @@ class LikeResponse(BaseModel):
     success: bool
     liked: bool
     likes_count: int
+
+class PostCreate(BaseModel):
+    title: str
+    description: str
+    video_url: str
+    thumbnail_url: str
+    status: str  # "draft" or "published"
+    tags: Optional[List[str]] = []  # List of tag names
+
+class PostCreate(BaseModel):
+    title: str
+    description: str
+    video_url: str
+    thumbnail_url: str
+    status: str  # "draft" or "published"
+    tags: Optional[List[str]] = []  # List of tag names
 
 def generate_thumbnail(video_path: str, output_path: str, timestamp: str = "00:00:03") -> bool:
     """
@@ -137,12 +154,77 @@ def download_video(video_url: str, output_path: str) -> bool:
         return False
 
 
+def get_signed_url_from_storage_path(bucket_name: str, file_path: str, expiration: int = 604800) -> Optional[str]:
+    """
+    Generate a signed URL from a storage path (bucket and file path).
+    Returns None if unable to generate signed URL.
+    """
+    try:
+        service_client = get_service_role_client()
+        signed_url_response = service_client.storage.from_(bucket_name).create_signed_url(
+            file_path,
+            expiration  # Default: 7 days
+        )
+        
+        # Handle different response formats
+        if isinstance(signed_url_response, dict):
+            signed_url = (
+                signed_url_response.get("signedURL") or
+                signed_url_response.get("signed_url") or
+                signed_url_response.get("url")
+            )
+        elif isinstance(signed_url_response, str):
+            signed_url = signed_url_response
+        else:
+            signed_url = None
+        
+        return signed_url
+    except Exception as e:
+        print(f"Error generating signed URL for {bucket_name}/{file_path}: {e}")
+        return None
+
+
+def convert_url_to_signed_url(url: str, expiration: int = 604800) -> Optional[str]:
+    """
+    Convert a Supabase storage URL (public or signed) to a signed URL.
+    Handles both public URLs and already-signed URLs.
+    
+    URL formats:
+    - Public: https://xxx.supabase.co/storage/v1/object/public/BUCKET/PATH
+    - Signed: https://xxx.supabase.co/storage/v1/object/sign/BUCKET/PATH?token=...
+    """
+    if not url or not isinstance(url, str):
+        return url
+    
+    # If already a signed URL, return as-is (or optionally regenerate)
+    if "/object/sign/" in url:
+        return url  # Already signed, return as-is
+    
+    # Extract bucket and path from public URL
+    # Format: https://xxx.supabase.co/storage/v1/object/public/BUCKET/PATH
+    if "/storage/v1/object/public/" in url:
+        parts = url.split("/storage/v1/object/public/")
+        if len(parts) == 2:
+            path_parts = parts[1].split("/", 1)
+            if len(path_parts) == 2:
+                bucket_name = path_parts[0]
+                file_path = path_parts[1]
+                # Remove query parameters if any
+                file_path = file_path.split("?")[0]
+                return get_signed_url_from_storage_path(bucket_name, file_path, expiration)
+    
+    # If not a Supabase URL, return as-is
+    return url
+
+
 def upload_to_supabase_storage(file_path: str, bucket_name: str, file_name: str) -> Optional[str]:
     """
-    Upload file to Supabase Storage
+    Upload file to Supabase Storage and return signed URL (for private buckets)
 
     """
     try:
+        from connection_supabase_client import get_service_role_client
+        
         print(f"Uploading to bucket '{bucket_name}' with filename '{file_name}'")
         
         with open(file_path, 'rb') as f:
@@ -150,9 +232,12 @@ def upload_to_supabase_storage(file_path: str, bucket_name: str, file_name: str)
         
         print(f"File size: {len(file_data)} bytes")
         
+        # Use service role client for upload
+        service_client = get_service_role_client()
+        
         # Upload to Supabase Storage
         try:
-            response = supabase.storage.from_(bucket_name).upload(
+            response = service_client.storage.from_(bucket_name).upload(
                 file_name,
                 file_data,
                 file_options={"content-type": "image/jpeg", "upsert": "true"}
@@ -160,25 +245,36 @@ def upload_to_supabase_storage(file_path: str, bucket_name: str, file_name: str)
             print(f"Upload response: {response}")
         except Exception as upload_error:
             print(f"Upload error details: {upload_error}")
-            # If bucket doesn't exist, try to create it
-            print("Attempting to create bucket...")
-            try:
-                supabase.storage.create_bucket(bucket_name, {"public": True})
-                print(f"Bucket '{bucket_name}' created successfully")
-                # Retry upload
-                response = supabase.storage.from_(bucket_name).upload(
-                    file_name,
-                    file_data,
-                    file_options={"content-type": "image/jpeg", "upsert": "true"}
-                )
-            except Exception as create_error:
-                print(f"Bucket creation error: {create_error}")
-                raise
+            raise
         
-        # Get public URL
-        public_url = supabase.storage.from_(bucket_name).get_public_url(file_name)
-        print(f"Generated public URL: {public_url}")
-        return public_url
+        # Generate signed URL (valid for 7 days = 604800 seconds)
+        try:
+            signed_url_response = service_client.storage.from_(bucket_name).create_signed_url(
+                file_name,
+                604800  # 7 days expiration
+            )
+            
+            # Handle different response formats
+            if isinstance(signed_url_response, dict):
+                signed_url = (
+                    signed_url_response.get("signedURL") or
+                    signed_url_response.get("signed_url") or
+                    signed_url_response.get("url")
+                )
+            elif isinstance(signed_url_response, str):
+                signed_url = signed_url_response
+            else:
+                signed_url = None
+            
+            if signed_url:
+                print(f"Generated signed URL: {signed_url[:100]}...")
+                return signed_url
+            else:
+                print(f"⚠️ Signed URL response format unexpected: {signed_url_response}")
+                return None
+        except Exception as signed_url_error:
+            print(f"Error generating signed URL: {signed_url_error}")
+            return None
     
     except Exception as e:
         print(f"Error uploading to Supabase: {e}")
@@ -186,6 +282,152 @@ def upload_to_supabase_storage(file_path: str, bucket_name: str, file_name: str)
         traceback.print_exc()
         return None
 
+@router.post("/posts/create")
+async def create_post(
+    post_data: PostCreate,
+    auth_data: dict = Depends(get_authenticated_supabase_client)
+):
+    """
+    Create a new post with video URL, thumbnail URL, and tags.
+    Handles tag creation if tags don't exist, and links tags to post.
+    If thumbnail_url is not provided or is a placeholder, generates thumbnail from video.
+    """
+    try:
+        user_id = auth_data["user_id"]
+        client = auth_data["client"]
+        
+        # Generate thumbnail if not provided or is placeholder
+        thumbnail_url = post_data.thumbnail_url
+        if not thumbnail_url or "_thumbnail.jpg" in thumbnail_url or "placeholder" in thumbnail_url.lower():
+            print(f"📸 Generating thumbnail from video: {post_data.video_url}")
+            try:
+                # Download video temporarily
+                temp_dir = tempfile.mkdtemp()
+                temp_video_path = os.path.join(temp_dir, f"video_{uuid.uuid4()}.mp4")
+                temp_thumbnail_path = os.path.join(temp_dir, f"thumbnail_{uuid.uuid4()}.jpg")
+                
+                # Download video
+                if "supabase.co/storage/v1/object/sign/" in post_data.video_url:
+                    # Signed URL - download directly
+                    if not download_video(post_data.video_url, temp_video_path):
+                        raise Exception("Failed to download video from signed URL")
+                elif "supabase.co/storage/v1/object/public/" in post_data.video_url:
+                    # Public URL - extract bucket and path
+                    parts = post_data.video_url.split("/storage/v1/object/public/")
+                    if len(parts) == 2:
+                        path_parts = parts[1].split("/", 1)
+                        if len(path_parts) == 2:
+                            bucket_name = path_parts[0]
+                            file_path = path_parts[1].split("?")[0]  # Remove query params
+                            if not download_video_from_supabase(bucket_name, file_path, temp_video_path):
+                                raise Exception("Failed to download video from Supabase")
+                        else:
+                            if not download_video(post_data.video_url, temp_video_path):
+                                raise Exception("Failed to download video")
+                    else:
+                        if not download_video(post_data.video_url, temp_video_path):
+                            raise Exception("Failed to download video")
+                else:
+                    if not download_video(post_data.video_url, temp_video_path):
+                        raise Exception("Failed to download video")
+                
+                # Generate thumbnail
+                if generate_thumbnail(temp_video_path, temp_thumbnail_path):
+                    # Upload thumbnail to Supabase
+                    thumbnail_filename = f"thumbnail_{uuid.uuid4()}.jpg"
+                    thumbnail_url = upload_to_supabase_storage(
+                        temp_thumbnail_path,
+                        "thumbnails",
+                        thumbnail_filename
+                    )
+                    print(f"✅ Thumbnail generated and uploaded: {thumbnail_url}")
+                else:
+                    print("⚠️ Failed to generate thumbnail, using placeholder")
+                    thumbnail_url = post_data.thumbnail_url or ""
+                
+                # Cleanup
+                try:
+                    if os.path.exists(temp_video_path):
+                        os.remove(temp_video_path)
+                    if os.path.exists(temp_thumbnail_path):
+                        os.remove(temp_thumbnail_path)
+                    os.rmdir(temp_dir)
+                except:
+                    pass
+            except Exception as thumb_error:
+                print(f"⚠️ Error generating thumbnail: {thumb_error}")
+                thumbnail_url = post_data.thumbnail_url or ""
+        
+        # Create post
+        post_response = client.table("posts").insert({
+            "user_id": user_id,
+            "title": post_data.title,
+            "description": post_data.description,
+            "video_url": post_data.video_url,
+            "thumbnail_url": thumbnail_url,
+            "status": post_data.status,
+            "likes": 0,
+            "views": 0
+        }).execute()
+        
+        if not post_response.data:
+            raise HTTPException(status_code=500, detail="Failed to create post")
+        
+        post_id = post_response.data[0]["id"]
+        print(f"✅ Post created: {post_id}")
+        
+        # Handle tags
+        tag_ids = []
+        if post_data.tags and len(post_data.tags) > 0:
+            for tag_name in post_data.tags:
+                tag_name_lower = tag_name.strip().lower()
+                if not tag_name_lower:
+                    continue
+                
+                # Check if tag exists
+                existing_tag = client.table("tags").select("id, usage_count").eq("name", tag_name_lower).execute()
+                
+                tag_id = None
+                if existing_tag.data and len(existing_tag.data) > 0:
+                    # Tag exists, get its ID and increment usage_count
+                    tag_id = existing_tag.data[0]["id"]
+                    current_count = existing_tag.data[0].get("usage_count", 0)
+                    client.table("tags").update({
+                        "usage_count": current_count + 1
+                    }).eq("id", tag_id).execute()
+                    print(f"✅ Tag '{tag_name_lower}' exists, linked to post")
+                else:
+                    # Create new tag
+                    new_tag = client.table("tags").insert({
+                        "name": tag_name_lower,
+                        "usage_count": 1
+                    }).execute()
+                    if new_tag.data and len(new_tag.data) > 0:
+                        tag_id = new_tag.data[0]["id"]
+                        print(f"✅ New tag '{tag_name_lower}' created")
+                
+                # Link tag to post
+                if tag_id:
+                    client.table("post_tags").insert({
+                        "post_id": post_id,
+                        "tag_id": tag_id
+                    }).execute()
+                    tag_ids.append(tag_id)
+        
+        return {
+            "success": True,
+            "post_id": post_id,
+            "tag_ids": tag_ids,
+            "message": f"Post created successfully as {post_data.status}"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error creating post: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error creating post: {str(e)}")
 
 @router.get("/posts")
 def get_all_posts():
@@ -268,14 +510,25 @@ async def get_user_posts(
                 if comments_preview.data:
                     recent_comments[post_id] = comments_preview.data
 
-        # Combine data
+        # Combine data and generate signed URLs for videos and thumbnails
         enriched_posts = []
         for post in posts:
             post_id = post["id"]
             likes_info = likes_data.get(post_id, {"count": 0, "user_liked": False})
 
+            # Generate signed URLs for video and thumbnail if they exist
+            video_url = post.get("video_url")
+            thumbnail_url = post.get("thumbnail_url")
+            
+            if video_url:
+                video_url = convert_url_to_signed_url(video_url)
+            if thumbnail_url:
+                thumbnail_url = convert_url_to_signed_url(thumbnail_url)
+
             enriched_post = {
                 **post,
+                "video_url": video_url,
+                "thumbnail_url": thumbnail_url,
                 "likes": likes_info["count"],
                 "likes_count": likes_info["count"],
                 "user_liked": likes_info["user_liked"],
@@ -395,14 +648,25 @@ async def get_feed(
                 if comments_preview.data:
                     recent_comments[post_id] = comments_preview.data
         
-        # Combine data
+        # Combine data and generate signed URLs for videos and thumbnails
         enriched_posts = []
         for post in posts:
             post_id = post["id"]
             likes_info = likes_data.get(post_id, {"count": post.get("likes", 0), "user_liked": False})
             
+            # Generate signed URLs for video and thumbnail if they exist
+            video_url = post.get("video_url")
+            thumbnail_url = post.get("thumbnail_url")
+            
+            if video_url:
+                video_url = convert_url_to_signed_url(video_url)
+            if thumbnail_url:
+                thumbnail_url = convert_url_to_signed_url(thumbnail_url)
+            
             enriched_post = {
                 **post,
+                "video_url": video_url,
+                "thumbnail_url": thumbnail_url,
                 "likes": likes_info["count"],
                 "likes_count": likes_info["count"],  # Add for consistency
                 "user_liked": likes_info["user_liked"],

@@ -1,9 +1,27 @@
 import React, { useState, useEffect } from "react";
-import { Upload, Users, Mic, Loader2, CheckCircle2, XCircle, Video, Play, Image as ImageIcon, Sparkles, Zap, ArrowRight, Info, Subtitles } from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { Upload, Users, Mic, Loader2, CheckCircle2, XCircle, Video, Play, Image as ImageIcon, Sparkles, Zap, ArrowRight, Info, Subtitles, X, TestTube } from "lucide-react";
 import { getSupabaseAuthorizedtoken } from '../../supabaseClient';
 import axios from 'axios';
+import { useAuth } from "../../context/AuthContext";
+
+const dataUrlToFile = (dataUrl, filename) => {
+  const arr = dataUrl.split(',');
+  const mimeMatch = arr[0].match(/:(.*?);/);
+  const mime = mimeMatch ? mimeMatch[1] : 'audio/wav';
+  const binary = atob(arr[1]);
+  const len = binary.length;
+  const u8arr = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    u8arr[i] = binary.charCodeAt(i);
+  }
+  return new File([u8arr], filename, { type: mime });
+};
 
 function AvatarVideoGenerator() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const [avatars, setAvatars] = useState([]);
   const [voices, setVoices] = useState([]);
   const [loadingAvatars, setLoadingAvatars] = useState(false);
@@ -14,6 +32,9 @@ function AvatarVideoGenerator() {
   
   // NEW: Subtitle toggle
   const [addSubtitles, setAddSubtitles] = useState(false);
+  
+  // Testing Mode Toggle
+  const [isTestingMode, setIsTestingMode] = useState(false);
   
   // Speaker A configuration
   const [speakerAAvatar, setSpeakerAAvatar] = useState(null);
@@ -44,7 +65,126 @@ function AvatarVideoGenerator() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [jobId, setJobId] = useState(null);
   const [jobStatus, setJobStatus] = useState(null);
+  const [videoGenMeta, setVideoGenMeta] = useState(null);
+  const [showProceedModal, setShowProceedModal] = useState(false);
+  
+  const handleMoveToVideoEditor = () => {
+    if (jobStatus?.supabase_video_url) {
+      try {
+        sessionStorage.setItem('videoEditorSource', jobStatus.supabase_video_url);
+        sessionStorage.setItem('originalVideoPath', jobStatus.video_storage_path || '');
+        sessionStorage.setItem('videoJobId', jobStatus.job_id || '');
+      } catch (err) {
+        console.warn('Unable to cache editor source:', err);
+      }
+      navigate('/video-editor', { 
+        state: { 
+          videoUrl: jobStatus.supabase_video_url,
+          videoPath: jobStatus.video_storage_path,
+          videoName: jobStatus.video_storage_path ? jobStatus.video_storage_path.split('/').pop() : `podcast_${jobStatus.job_id}.mp4`,
+          originalVideoPath: jobStatus.video_storage_path,
+          jobId: jobStatus.job_id
+        } 
+      });
+    } else {
+      navigate('/video-editor');
+    }
+  };
+
+  const handleProceedClick = () => {
+    console.log('Proceed button clicked, opening modal');
+    setShowProceedModal(true);
+  };
+
+  const handleGenerateNewVideo = () => {
+    // Reset state for new video generation
+    setJobId(null);
+    setJobStatus(null);
+    setShowProceedModal(false);
+    setAudioFile(null);
+    setAudioFileName(null);
+    // Clear session storage
+    sessionStorage.removeItem('videoEditorSource');
+    sessionStorage.removeItem('originalVideoPath');
+    sessionStorage.removeItem('videoJobId');
+  };
+
+  const handleProceedToEditing = () => {
+    setShowProceedModal(false);
+    handleMoveToVideoEditor();
+  };
+
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    const initializeAudioFromNavigation = async () => {
+      if (location.state?.audioFile) {
+        setAudioFile(location.state.audioFile);
+        setAudioFileName(location.state.audioFileName || location.state.audioFile.name || 'final_audio.wav');
+        navigate('.', { replace: true, state: null });
+        sessionStorage.removeItem('videoGenAudioDataUrl');
+        sessionStorage.removeItem('videoGenAudioName');
+        sessionStorage.removeItem('videoGenAudioUrl');
+        sessionStorage.removeItem('videoGenAudioSource');
+      } else {
+        // Check for Supabase URL first (preferred)
+        const supabaseUrl = sessionStorage.getItem('editedAudioSupabaseUrl') || sessionStorage.getItem('videoGenAudioUrl');
+        const audioSource = sessionStorage.getItem('videoGenAudioSource');
+        const cachedName = sessionStorage.getItem('videoGenAudioName');
+        
+        if (supabaseUrl && audioSource === 'supabase' && cachedName) {
+          // Download from Supabase URL
+          try {
+            console.log('📥 Loading audio from Supabase URL:', supabaseUrl);
+            const response = await fetch(supabaseUrl);
+            if (response.ok) {
+              const blob = await response.blob();
+              const file = new File([blob], cachedName, { type: blob.type || 'audio/wav' });
+              setAudioFile(file);
+              setAudioFileName(cachedName);
+              console.log('✅ Audio loaded from Supabase');
+            } else {
+              throw new Error('Failed to download from Supabase URL');
+            }
+          } catch (err) {
+            console.warn('Failed to load audio from Supabase URL:', err);
+            // Fall through to try blob
+          } finally {
+            sessionStorage.removeItem('editedAudioSupabaseUrl');
+            sessionStorage.removeItem('videoGenAudioUrl');
+            sessionStorage.removeItem('videoGenAudioSource');
+          }
+        } else {
+          // Fallback to blob (may not exist if too large)
+          const cachedDataUrl = sessionStorage.getItem('videoGenAudioDataUrl');
+          if (cachedDataUrl && cachedName) {
+            try {
+              const restoredFile = dataUrlToFile(cachedDataUrl, cachedName);
+              setAudioFile(restoredFile);
+              setAudioFileName(cachedName);
+            } catch (err) {
+              console.warn('Failed to restore cached audio for video generation:', err);
+            } finally {
+              sessionStorage.removeItem('videoGenAudioDataUrl');
+              sessionStorage.removeItem('videoGenAudioName');
+              sessionStorage.removeItem('videoGenAudioSource');
+            }
+          }
+        }
+      }
+
+      try {
+        const metaRaw = sessionStorage.getItem('videoGenMeta');
+        if (metaRaw) {
+          setVideoGenMeta(JSON.parse(metaRaw));
+        }
+      } catch (err) {
+        console.warn('Failed to parse video generation metadata:', err);
+      }
+    };
+
+    initializeAudioFromNavigation();
+  }, [location.state, navigate]);
 
   useEffect(() => {
     loadAvatars();
@@ -55,6 +195,12 @@ function AvatarVideoGenerator() {
 
   useEffect(() => {
     if (!jobId || !jobStatus) return;
+    
+    // Skip polling for test job IDs (testing mode)
+    if (jobId.startsWith('test_')) {
+      console.log('🧪 Testing Mode: Skipping backend polling for test job');
+      return;
+    }
     
     if (jobStatus.status === 'completed' || jobStatus.status === 'failed') {
       setIsProcessing(false);
@@ -85,6 +231,16 @@ function AvatarVideoGenerator() {
 
     return () => clearInterval(interval);
   }, [jobId, jobStatus]);
+
+  useEffect(() => {
+    if (jobStatus?.supabase_video_url) {
+      try {
+        sessionStorage.setItem('videoEditorSource', jobStatus.supabase_video_url);
+      } catch (err) {
+        console.warn('Failed to cache video editor source:', err);
+      }
+    }
+  }, [jobStatus?.supabase_video_url]);
 
   const loadAvatars = async () => {
     setLoadingAvatars(true);
@@ -312,6 +468,30 @@ function AvatarVideoGenerator() {
       
       const formData = new FormData();
       formData.append('audio_file', audioFile);
+
+      const effectiveUserId = (videoGenMeta?.userId || user?.id || '').trim();
+      let effectiveKbId = videoGenMeta?.kbId || sessionStorage.getItem('current_kb_id') || '';
+      if (!effectiveKbId) {
+        try {
+          const kbInfoRaw = sessionStorage.getItem('selectedKnowledgeBase');
+          if (kbInfoRaw) {
+            effectiveKbId = JSON.parse(kbInfoRaw)?.id || '';
+          }
+        } catch {
+          effectiveKbId = '';
+        }
+      }
+      const fallbackTitle = audioFileName
+        ? audioFileName.replace(/\.[^/.]+$/, '')
+        : 'Untitled_Podcast';
+      let effectiveTitle =
+        videoGenMeta?.podcastTitle ||
+        fallbackTitle ||
+        'Untitled_Podcast';
+
+      formData.append('user_id', effectiveUserId || 'user_unknown');
+      formData.append('kb_id', effectiveKbId || 'kb_unknown');
+      formData.append('podcast_title', effectiveTitle);
       
       formData.append(
         'speaker_a_avatar', 
@@ -336,6 +516,140 @@ function AvatarVideoGenerator() {
       // NEW: Add subtitle flag
       formData.append('add_subtitles', addSubtitles);
 
+      // Check if testing mode is enabled
+      if (isTestingMode) {
+        console.log("🧪 Testing Mode: Simulating video generation...");
+        
+        // Generate a fake job ID
+        const testJobId = `test_${Date.now()}`;
+        setJobId(testJobId);
+        
+        // Simulate progress updates
+        setJobStatus({
+          job_id: testJobId,
+          status: 'pending',
+          progress: 0,
+          message: 'Testing Mode: Starting simulation...'
+        });
+        
+        // Simulate progress over 5 seconds
+        let progress = 0;
+        const progressInterval = setInterval(() => {
+          progress += 20; // 20% per update for faster progress
+          if (progress <= 50) {
+            setJobStatus(prev => ({
+              ...prev,
+              progress,
+              message: `Testing Mode: Processing... ${progress}%`
+            }));
+          } else if (progress <= 80) {
+            setJobStatus(prev => ({
+              ...prev,
+              status: 'generating_videos',
+              progress,
+              message: `Testing Mode: Generating videos... ${progress}%`
+            }));
+          } else if (progress < 100) {
+            setJobStatus(prev => ({
+              ...prev,
+              progress,
+              message: `Testing Mode: Finalizing... ${progress}%`
+            }));
+          }
+        }, 1000); // Update every 1 second (20% per update, 5 seconds total)
+        
+        // After 5 seconds, complete with test video from modules folder
+        setTimeout(async () => {
+          clearInterval(progressInterval);
+          
+          // Use local test video from modules folder
+          const testVideoUrl = `http://localhost:8000/test-video/test_video.mp4`;
+          const testThumbnailUrl = "https://picsum.photos/id/1025/1280/720";
+          
+          // Upload test video to Supabase
+          let supabaseVideoUrl = testVideoUrl; // Fallback to local URL
+          let videoStoragePath = `test_video_${testJobId}.mp4`;
+          
+          try {
+            console.log("📤 Testing Mode: Uploading test video to Supabase...");
+            const token = await getSupabaseAuthorizedtoken();
+            
+            // Download test video
+            const videoResponse = await fetch(testVideoUrl);
+            if (!videoResponse.ok) {
+              throw new Error('Failed to download test video');
+            }
+            const videoBlob = await videoResponse.blob();
+            
+            // Get metadata for filename
+            const metaRaw = sessionStorage.getItem('videoGenMeta');
+            let userId = 'unknown';
+            let kbId = 'kb_unknown';
+            let podcastTitle = 'test_podcast';
+            
+            if (metaRaw) {
+              try {
+                const meta = JSON.parse(metaRaw);
+                userId = meta.userId || userId;
+                kbId = meta.kbId || kbId;
+                podcastTitle = meta.podcastTitle || podcastTitle;
+              } catch (e) {
+                console.warn('Failed to parse metadata for test video upload');
+              }
+            }
+            
+            // Create FormData for upload
+            const formData = new FormData();
+            const videoFile = new File([videoBlob], `test_video_${testJobId}.mp4`, { type: 'video/mp4' });
+            formData.append('file', videoFile);
+            formData.append('project_name', 'test_video');
+            formData.append('render_id', testJobId);
+            
+            // Upload to Supabase
+            const uploadResponse = await axios.post(
+              'http://localhost:8000/videos/upload-video',
+              formData,
+              {
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'multipart/form-data'
+                }
+              }
+            );
+            
+            if (uploadResponse.data.success && uploadResponse.data.video_url) {
+              supabaseVideoUrl = uploadResponse.data.video_url;
+              videoStoragePath = uploadResponse.data.storage_path || videoStoragePath;
+              console.log("✅ Testing Mode: Test video uploaded to Supabase:", supabaseVideoUrl);
+            } else {
+              console.warn("⚠️ Testing Mode: Supabase upload failed, using local URL");
+            }
+          } catch (uploadErr) {
+            console.warn("⚠️ Testing Mode: Error uploading to Supabase:", uploadErr);
+            // Continue with local URL as fallback
+          }
+          
+          setJobStatus({
+            job_id: testJobId,
+            status: 'completed',
+            progress: 100,
+            message: 'Testing Mode: Video ready!',
+            merged_video_url: supabaseVideoUrl,
+            supabase_video_url: supabaseVideoUrl,
+            video_storage_path: videoStoragePath,
+            thumbnail_url: testThumbnailUrl,
+            speaker_a_video: supabaseVideoUrl,
+            speaker_b_video: supabaseVideoUrl
+          });
+          
+          setIsProcessing(false);
+          console.log("✅ Testing Mode: Test video ready, Supabase URL:", supabaseVideoUrl);
+        }, 5000); // 5 seconds (testing mode - fast)
+        
+        return;
+      }
+      
+      // Real Mode: Use actual API
       console.log("📤 Uploading podcast for processing...");
       console.log(`📝 Subtitles enabled: ${addSubtitles}`);
 
@@ -851,6 +1165,38 @@ function AvatarVideoGenerator() {
 
           {/* Right Column - Processing */}
           <div className="space-y-6">
+            {/* Testing Mode Toggle */}
+            <div className="bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-xl rounded-3xl p-6 border border-white/30 shadow-2xl">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <TestTube className="w-5 h-5 text-yellow-400" />
+                  <div>
+                    <p className="text-white font-semibold text-sm">Testing Mode</p>
+                    <p className="text-purple-300 text-xs">Use sample video (1 min) instead of API</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsTestingMode(!isTestingMode)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    isTestingMode ? 'bg-yellow-500' : 'bg-gray-600'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      isTestingMode ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+              {isTestingMode && (
+                <div className="mt-3 p-3 bg-yellow-500/20 border border-yellow-400/50 rounded-xl">
+                  <p className="text-yellow-200 text-xs">
+                    ⚠️ Testing Mode: A sample video will be generated after 5 seconds. No actual API calls will be made.
+                  </p>
+                </div>
+              )}
+            </div>
+            
             <div className="bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-xl rounded-3xl p-8 border border-white/30 shadow-2xl sticky top-6">
               <button
                 onClick={handleProcess}
@@ -860,12 +1206,12 @@ function AvatarVideoGenerator() {
                 {isProcessing ? (
                   <>
                     <Loader2 className="w-6 h-6 animate-spin" />
-                    Processing...
+                    {isTestingMode ? 'Testing Mode: Processing...' : 'Processing...'}
                   </>
                 ) : (
                   <>
                     <Play className="w-6 h-6" />
-                    Generate Avatar Videos
+                    {isTestingMode ? 'Generate (Testing Mode)' : 'Generate Avatar Videos'}
                   </>
                 )}
               </button>
@@ -936,19 +1282,45 @@ function AvatarVideoGenerator() {
                             )}
                           </p>
                           <video
-                            src={`http://localhost:8000${jobStatus.merged_video_url}`}
+                            src={jobStatus.merged_video_url.startsWith('http') ? jobStatus.merged_video_url : `http://localhost:8000${jobStatus.merged_video_url}`}
                             controls
                             className="w-full rounded-xl shadow-2xl border-2 border-white/20"
                             controlsList="nodownload"
                           />
                           <a
-                            href={`http://localhost:8000${jobStatus.merged_video_url}`}
+                            href={jobStatus.merged_video_url.startsWith('http') ? jobStatus.merged_video_url : `http://localhost:8000${jobStatus.merged_video_url}`}
                             download={`podcast_${jobId}.mp4`}
                             className="mt-4 inline-flex items-center gap-2 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-bold px-6 py-3 rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
                           >
                             <Upload className="w-4 h-4" />
                             Download Merged Video
                           </a>
+                        </div>
+                      )}
+
+                      {jobStatus.supabase_video_url && jobStatus.status === 'completed' && (
+                        <div className="bg-gradient-to-r from-emerald-500/15 to-teal-500/15 rounded-2xl p-6 border-2 border-emerald-400/50 backdrop-blur-sm space-y-4">
+                          <p className="text-emerald-100 font-semibold flex items-center gap-2 text-lg">
+                            <Sparkles className="w-5 h-5" />
+                            Video Saved to Supabase Storage
+                          </p>
+                          <a
+                            href={jobStatus.supabase_video_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 text-white font-semibold px-4 py-2 rounded-xl bg-emerald-500/80 hover:bg-emerald-500 transition-all duration-300"
+                          >
+                            <Upload className="w-4 h-4" />
+                            View Video
+                          </a>
+                          <button
+                            onClick={handleProceedClick}
+                            disabled={!jobStatus.supabase_video_url || jobStatus.status !== 'completed'}
+                            className="w-full bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 disabled:from-gray-500 disabled:to-gray-600 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-xl transition-all duration-300 shadow-lg hover:shadow-indigo-500/50 flex items-center justify-center gap-2"
+                          >
+                            <Play className="w-5 h-5" />
+                            Proceed
+                          </button>
                         </div>
                       )}
                         
@@ -1006,6 +1378,48 @@ function AvatarVideoGenerator() {
           </div>
         </div>
       </div>
+
+      {/* Proceed Modal */}
+      {showProceedModal && jobStatus?.status === 'completed' && jobStatus?.supabase_video_url && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+          <div className="bg-gradient-to-br from-purple-800 to-indigo-900 rounded-3xl shadow-2xl p-8 max-w-md w-full text-center border border-purple-600 relative">
+            <button
+              onClick={() => setShowProceedModal(false)}
+              className="absolute top-4 right-4 text-white/70 hover:text-white transition-colors"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            
+            <Sparkles className="w-16 h-16 text-yellow-300 mx-auto mb-6 animate-pulse" />
+            <h2 className="text-3xl font-bold text-white mb-4">Video Ready!</h2>
+            <p className="text-purple-200 leading-relaxed mb-8">
+              Your podcast video has been generated and saved to Supabase storage. What would you like to do next?
+            </p>
+            
+            <div className="flex flex-col gap-4">
+              <button
+                onClick={handleGenerateNewVideo}
+                className="w-full px-6 py-3 bg-white/10 border border-purple-400 text-purple-200 rounded-xl font-semibold hover:bg-white/20 transition-all duration-300 shadow-md flex items-center justify-center gap-2"
+              >
+                <Video className="w-5 h-5" />
+                Generate New Video
+              </button>
+              
+              <button
+                onClick={handleProceedToEditing}
+                className="w-full px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-bold hover:from-green-600 hover:to-emerald-700 transition-all duration-300 shadow-lg flex items-center justify-center gap-2"
+              >
+                <Play className="w-5 h-5" />
+                Proceed with Video Editing
+              </button>
+            </div>
+            
+            <p className="text-purple-300 text-xs mt-6">
+              Note: Your edited video will overwrite the original in Supabase storage
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

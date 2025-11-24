@@ -1,13 +1,15 @@
 #module_video.py
 import time
 import requests
+import subprocess
+import uuid
 from fastapi import APIRouter, HTTPException, Depends, Header, File, UploadFile, Form
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import os
 from typing import Optional, List
 from datetime import datetime
-from connection_supabase_client import get_authenticated_supabase_client
+from connection_supabase_client import get_authenticated_supabase_client, get_service_role_client
 
 # Configuration
 HEYGEN_API_KEY = os.environ.get("HEYGEN_API_KEY")
@@ -27,6 +29,34 @@ def get_upload_headers(content_type: str):
     }
 
 router = APIRouter()
+
+def generate_thumbnail_from_video_file(video_path: str, output_path: str, timestamp: str = "00:00:03") -> bool:
+    """
+    Generate thumbnail from video file using FFmpeg
+    """
+    try:
+        command = [
+            'ffmpeg',
+            '-ss', timestamp,
+            '-i', video_path,
+            '-vframes', '1',
+            '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2',
+            '-q:v', '2',
+            '-y',
+            output_path
+        ]
+        result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+        if result.returncode != 0:
+            print(f"❌ FFmpeg thumbnail error: {result.stderr.decode()}")
+            return False
+        print(f"✅ Thumbnail generated: {output_path}")
+        return True
+    except subprocess.TimeoutExpired:
+        print(f"❌ FFmpeg thumbnail generation timed out")
+        return False
+    except Exception as e:
+        print(f"❌ Error generating thumbnail: {e}")
+        return False
 
 class GenerateRequest(BaseModel):
     avatar_id: str
@@ -451,6 +481,8 @@ async def upload_video_to_supabase(
     file: UploadFile = File(...),
     project_name: Optional[str] = Form(None),
     render_id: Optional[str] = Form(None),
+    overwrite_path: Optional[str] = Form(None),  # Path to overwrite original video
+    job_id: Optional[str] = Form(None),  # Job ID for reference
     auth_data: dict = Depends(get_authenticated_supabase_client)
 ):
     """
@@ -460,6 +492,8 @@ async def upload_video_to_supabase(
         file: Video file (MP4)
         project_name: Optional project name for the video
         render_id: Optional render ID (unique ID from render process)
+        overwrite_path: Optional path to overwrite original video (from video generation)
+        job_id: Optional job ID for reference
         auth_data: Authenticated Supabase client and user_id
     
     Returns:
@@ -469,36 +503,45 @@ async def upload_video_to_supabase(
         supabase_authenticated = auth_data["client"]
         user_id = auth_data["user_id"]
         
-        # Generate unique filename
-        # Naming convention: {user_id}_{render_id}_{project_name}.mp4
-        file_extension = os.path.splitext(file.filename)[1] or ".mp4"
-        
-        if render_id and project_name:
-            # Remove any special characters from project name for filename safety
-            safe_project_name = "".join(c for c in project_name if c.isalnum() or c in (' ', '-', '_')).strip()
-            safe_project_name = safe_project_name.replace(' ', '_')
-            # Remove any special characters from render_id for filename safety
-            safe_render_id = "".join(c for c in render_id if c.isalnum() or c in ('-', '_')).strip()
-            storage_path = f"{user_id}_{safe_render_id}_{safe_project_name}{file_extension}"
-        elif render_id:
-            # If only render_id, use it with user_id
-            safe_render_id = "".join(c for c in render_id if c.isalnum() or c in ('-', '_')).strip()
-            storage_path = f"{user_id}_{safe_render_id}{file_extension}"
-        elif project_name:
-            # If only project_name (backward compatibility)
-            safe_project_name = "".join(c for c in project_name if c.isalnum() or c in (' ', '-', '_')).strip()
-            safe_project_name = safe_project_name.replace(' ', '_')
-            storage_path = f"{user_id}_{safe_project_name}{file_extension}"
+        # If overwrite_path is provided, use it to overwrite the original video
+        if overwrite_path:
+            storage_path = overwrite_path
+            print(f"📝 Using overwrite_path: {storage_path} (will overwrite original video)")
         else:
-            # If no project name or render_id, use timestamp
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            storage_path = f"{user_id}_{timestamp}{file_extension}"
+            # Generate unique filename
+            # Naming convention: {user_id}_{render_id}_{project_name}.mp4
+            file_extension = os.path.splitext(file.filename)[1] or ".mp4"
+            
+            if render_id and project_name:
+                # Remove any special characters from project name for filename safety
+                safe_project_name = "".join(c for c in project_name if c.isalnum() or c in (' ', '-', '_')).strip()
+                safe_project_name = safe_project_name.replace(' ', '_')
+                # Remove any special characters from render_id for filename safety
+                safe_render_id = "".join(c for c in render_id if c.isalnum() or c in ('-', '_')).strip()
+                storage_path = f"{user_id}_{safe_render_id}_{safe_project_name}{file_extension}"
+            elif render_id:
+                # If only render_id, use it with user_id
+                safe_render_id = "".join(c for c in render_id if c.isalnum() or c in ('-', '_')).strip()
+                storage_path = f"{user_id}_{safe_render_id}{file_extension}"
+            elif project_name:
+                # If only project_name (backward compatibility)
+                safe_project_name = "".join(c for c in project_name if c.isalnum() or c in (' ', '-', '_')).strip()
+                safe_project_name = safe_project_name.replace(' ', '_')
+                storage_path = f"{user_id}_{safe_project_name}{file_extension}"
+            else:
+                # If no project name or render_id, use timestamp
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                storage_path = f"{user_id}_{timestamp}{file_extension}"
         
         # Read file data
         file_data = await file.read()
         file_size = len(file_data)
         
         print(f"Uploading video to Supabase: {storage_path} ({file_size} bytes)")
+        
+        # Save video temporarily for thumbnail generation
+        temp_video_path = None
+        thumbnail_url = None
         
         # Upload to Supabase Storage (videos bucket)
         bucket_name = "videos"
@@ -593,14 +636,112 @@ async def upload_video_to_supabase(
                     detail=f"Failed to upload video: {str(upload_error)}"
                 )
         
-        # Get public URL
-        public_url = supabase_authenticated.storage.from_(bucket_name).get_public_url(storage_path)
-        print(f"Video uploaded successfully. Public URL: {public_url}")
+        # Generate signed URL (valid for 7 days = 604800 seconds)
+        try:
+            signed_url_response = supabase_authenticated.storage.from_(bucket_name).create_signed_url(
+                storage_path,
+                604800  # 7 days expiration
+            )
+            
+            # Handle different response formats
+            if isinstance(signed_url_response, dict):
+                signed_url = (
+                    signed_url_response.get("signedURL") or
+                    signed_url_response.get("signed_url") or
+                    signed_url_response.get("url")
+                )
+            elif isinstance(signed_url_response, str):
+                signed_url = signed_url_response
+            else:
+                signed_url = None
+        except Exception as e:
+            print(f"Error generating signed URL: {e}")
+            signed_url = None
+        
+        if signed_url:
+            print(f"Video uploaded successfully. Signed URL: {signed_url[:100]}...")
+        else:
+            print(f"⚠️ Video uploaded but signed URL generation failed")
+        
+        # Generate and upload thumbnail
+        try:
+            import tempfile
+            from datetime import datetime
+            
+            # Save video to temp file for thumbnail generation
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as temp_video:
+                temp_video.write(file_data)
+                temp_video_path = temp_video.name
+            
+            print(f"📸 Generating thumbnail from video: {temp_video_path}")
+            
+            # Generate thumbnail
+            temp_thumbnail_path = os.path.join(tempfile.gettempdir(), f"thumb_{uuid.uuid4()}.jpg")
+            thumbnail_generated = generate_thumbnail_from_video_file(temp_video_path, temp_thumbnail_path)
+            
+            if thumbnail_generated and os.path.exists(temp_thumbnail_path):
+                print(f"✅ Thumbnail generated: {temp_thumbnail_path}")
+                
+                # Generate thumbnail filename based on video path
+                thumbnail_filename = storage_path.replace('.mp4', '_thumbnail.jpg').replace('.MP4', '_thumbnail.jpg')
+                
+                # Upload thumbnail to thumbnails bucket
+                with open(temp_thumbnail_path, 'rb') as thumb_file:
+                    thumb_data = thumb_file.read()
+                
+                try:
+                    service_client = get_service_role_client()
+                    service_client.storage.from_("thumbnails").upload(
+                        thumbnail_filename,
+                        thumb_data,
+                        {"content-type": "image/jpeg", "upsert": "true"},
+                    )
+                    print(f"✅ Thumbnail uploaded to Supabase: {thumbnail_filename}")
+                    
+                    # Generate signed URL for thumbnail
+                    thumb_signed_resp = service_client.storage.from_("thumbnails").create_signed_url(
+                        thumbnail_filename, 604800  # 7 days
+                    )
+                    if isinstance(thumb_signed_resp, dict):
+                        thumbnail_url = (
+                            thumb_signed_resp.get("signedURL")
+                            or thumb_signed_resp.get("signed_url")
+                            or thumb_signed_resp.get("url")
+                        )
+                    elif isinstance(thumb_signed_resp, str):
+                        thumbnail_url = thumb_signed_resp
+                    
+                    if thumbnail_url:
+                        print(f"🔗 Thumbnail signed URL created: {thumbnail_url[:100]}...")
+                    else:
+                        print(f"⚠️ Thumbnail uploaded but signed URL generation failed")
+                except Exception as thumb_upload_error:
+                    print(f"⚠️ Failed to upload thumbnail: {thumb_upload_error}")
+                
+                # Cleanup temp thumbnail
+                try:
+                    os.remove(temp_thumbnail_path)
+                except:
+                    pass
+            else:
+                print(f"⚠️ Failed to generate thumbnail")
+        except Exception as thumbnail_error:
+            print(f"⚠️ Error generating thumbnail: {thumbnail_error}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            # Cleanup temp video file
+            if temp_video_path and os.path.exists(temp_video_path):
+                try:
+                    os.remove(temp_video_path)
+                except:
+                    pass
         
         return JSONResponse({
             "success": True,
             "message": "Video uploaded successfully",
-            "video_url": public_url,
+            "video_url": signed_url,
+            "thumbnail_url": thumbnail_url,
             "storage_path": storage_path,
             "file_size": file_size
         })
@@ -644,12 +785,33 @@ async def list_user_videos(
                 # Filter files that start with user_id and are video files
                 if file_name.startswith(f"{user_id}_") and file_name.endswith((".mp4", ".webm", ".mov")):
                     storage_path = file_name  # No folder, just filename
-                    public_url = supabase_authenticated.storage.from_(bucket_name).get_public_url(storage_path)
+                    
+                    # Generate signed URL (valid for 7 days = 604800 seconds)
+                    try:
+                        signed_url_response = supabase_authenticated.storage.from_(bucket_name).create_signed_url(
+                            storage_path,
+                            604800  # 7 days expiration
+                        )
+                        
+                        # Handle different response formats
+                        if isinstance(signed_url_response, dict):
+                            signed_url = (
+                                signed_url_response.get("signedURL") or
+                                signed_url_response.get("signed_url") or
+                                signed_url_response.get("url")
+                            )
+                        elif isinstance(signed_url_response, str):
+                            signed_url = signed_url_response
+                        else:
+                            signed_url = None
+                    except Exception as e:
+                        print(f"Error generating signed URL for {storage_path}: {e}")
+                        signed_url = None
                     
                     videos.append({
                         "name": file_info["name"],
                         "storage_path": storage_path,
-                        "video_url": public_url,
+                        "video_url": signed_url,
                         "size": file_info.get("metadata", {}).get("size", 0),
                         "created_at": file_info.get("created_at"),
                         "updated_at": file_info.get("updated_at")
