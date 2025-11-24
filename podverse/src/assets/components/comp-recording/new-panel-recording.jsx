@@ -191,13 +191,33 @@ const RealAudioWaveform = ({ isActive = false, isMicOn = false }) => {
 };
 
 // Enhanced Status indicator with time display
-const StatusIndicator = ({ isRecording, isProcessing, isSpeaking, conversationStarted, isPaused, elapsedTime, recordingStatus, recordingUrl, onCopyUrl }) => {
+const getCleanRecordingPath = (value = '') => {
+  if (!value) return '';
+  return value.split('?')[0] || value;
+};
+
+const extractRecordingFileName = (value = '') => {
+  const clean = getCleanRecordingPath(value);
+  if (!clean) return '';
+  const lastSlash = clean.lastIndexOf('/');
+  return lastSlash >= 0 ? clean.slice(lastSlash + 1) : clean;
+};
+
+const getFriendlyRecordingLabel = (value = '', fallback = 'Recording') => {
+  const base = extractRecordingFileName(value) || fallback;
+  const underscoreIndex = base.indexOf('_');
+  return underscoreIndex > 0 ? base.slice(0, underscoreIndex) : base;
+};
+
+const StatusIndicator = ({ isRecording, isProcessing, isSpeaking, conversationStarted, isPaused, elapsedTime, recordingStatus, recordingUrl, recordingFilename, onCopyUrl }) => {
   const formatTime = (seconds) => {
     const totalSeconds = Math.floor(seconds);
     const mins = Math.floor(totalSeconds / 60);
     const secs = totalSeconds % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
+
+  const friendlyRecordingName = getFriendlyRecordingLabel(recordingFilename || recordingUrl);
 
   // Show stopping status
   if (recordingStatus === 'stopping') {
@@ -231,7 +251,10 @@ const StatusIndicator = ({ isRecording, isProcessing, isSpeaking, conversationSt
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
-          <span className="font-semibold">Recording Saved!</span>
+          <div className="flex flex-col items-start leading-tight">
+            <span className="font-semibold">Recording Saved!</span>
+            <span className="text-sm text-white/80 font-medium">{friendlyRecordingName}</span>
+          </div>
         </div>
         {recordingUrl && (
           <div className="flex items-center gap-2 bg-white/90 backdrop-blur-sm px-4 py-2 rounded-lg border-2 border-green-200 shadow-md max-w-md">
@@ -245,7 +268,7 @@ const StatusIndicator = ({ isRecording, isProcessing, isSpeaking, conversationSt
               className="text-sm text-green-700 hover:text-green-800 font-medium truncate underline"
               title={recordingUrl}
             >
-              View Recording
+              View {friendlyRecordingName}
             </a>
             <button
               onClick={(e) => {
@@ -355,7 +378,8 @@ const NewPanelsRecording = ({ podcastConfig = {} }) => {
   const [recordingStatus, setRecordingStatus] = useState('idle'); // 'idle', 'recording', 'stopping', 'saving', 'saved', 'error'
   const [recordingUrl, setRecordingUrl] = useState(null);
   const [sessionStarted, setSessionStarted] = useState(false);
-  const [showRecordingModal, setShowRecordingModal] = useState(false);
+  const [postRecordingModalOpen, setPostRecordingModalOpen] = useState(false);
+  const [recordingFilename, setRecordingFilename] = useState(null);
   
   // Time recording state
   const [startTime, setStartTime] = useState(null);
@@ -608,18 +632,9 @@ const fetchLiveKitToken = async () => {
         console.log('📝 Frontend: Room metadata changed:', metadata);
       });
       
-      // Mute microphone on connection by default (user controls mic)
+      // Mute microphone on connection by default
       await room.localParticipant.setMicrophoneEnabled(false);
       setIsMicOn(false);
-      
-      // AUTO-START: Automatically start recording when connected
-      // Wait a bit for agent to connect, then start recording
-      setTimeout(async () => {
-        if (liveKitConnected && !sessionStarted) {
-          console.log('🎬 Auto-starting recording session...');
-          await startRecordingSession();
-        }
-      }, 2000); // 2 second delay to ensure agent is ready
       
       // Send selected KB ID through data channel
       const selectedKB = localStorage.getItem('selectedKnowledgeBase');
@@ -737,10 +752,6 @@ const fetchLiveKitToken = async () => {
       formData.append('room_name', roomName); // Use the actual room name
       formData.append('user_id', user?.id || '');
       formData.append('kb_id', podcastConfig?.selectedKnowledgeBase || '');
-      // Add podcast title for better filename
-      if (podcastConfig?.podcastName) {
-        formData.append('podcast_title', podcastConfig.podcastName);
-      }
 
       const response = await fetch('http://localhost:8000/livekit/start-audio-egress', {
         method: 'POST',
@@ -783,52 +794,46 @@ const fetchLiveKitToken = async () => {
       });
 
       if (response.ok) {
-        // Get response data with recording URL
         const responseData = await response.json();
-        const recordingUrlFromResponse = responseData.recording_url;
+        const recordingUrlFromResponse =
+          responseData.recording_url ||
+          responseData.public_url ||
+          responseData.url ||
+          null;
+        const recordingFilenameFromResponse =
+          responseData.filename ||
+          extractRecordingFileName(recordingUrlFromResponse) ||
+          `recording_${Date.now()}.ogg`;
         
-        // Step 3: Disconnect from LiveKit room
-        try {
-          if (room && room.state === 'connected') {
-            console.log('🔌 Disconnecting from LiveKit room...');
-            await room.disconnect();
-            setLiveKitConnected(false);
-            console.log('✅ Disconnected from LiveKit');
-          }
-        } catch (disconnectError) {
-          console.error('⚠️ Error disconnecting from room:', disconnectError);
-          // Continue even if disconnect fails
-        }
-        
-        // Step 4: Show saving status
         setRecordingStatus('saving');
         showToast('💾 Saving recording...', 'info');
-        
-        // Wait a bit to show saving status (file processing happens on backend)
         await new Promise(resolve => setTimeout(resolve, 2000));
         
-        // Step 5: Show saved status with URL and open modal
         setRecordingStatus('saved');
         setSessionStarted(false);
-        setConversationStarted(false);
         
-        // Store recording URL and show modal
         if (recordingUrlFromResponse) {
           setRecordingUrl(recordingUrlFromResponse);
-          setShowRecordingModal(true); // Show modal
+          setRecordingFilename(recordingFilenameFromResponse);
+          setPostRecordingModalOpen(true);
+          showToast('✅ Recording saved successfully! Click to view.', 'success');
           console.log('📁 Recording URL:', recordingUrlFromResponse);
         } else {
+          setRecordingFilename(null);
+          setPostRecordingModalOpen(false);
           showToast('✅ Recording saved successfully!', 'success');
-          // Reset to idle after showing saved status
-          setTimeout(() => {
-            setRecordingStatus('idle');
-          }, 3000);
         }
+        
+        setTimeout(() => {
+          setRecordingStatus('idle');
+          setConversationStarted(false);
+        }, 3000);
       } else {
         console.error('Failed to stop recording');
         setRecordingStatus('error');
+        setPostRecordingModalOpen(false);
+        setRecordingFilename(null);
         showToast('❌ Failed to stop recording', 'error');
-        // Reset after error
         setTimeout(() => {
           setRecordingStatus('idle');
           setSessionStarted(false);
@@ -838,8 +843,9 @@ const fetchLiveKitToken = async () => {
     } catch (error) {
       console.error('❌ Failed to stop recording session:', error);
       setRecordingStatus('error');
+      setPostRecordingModalOpen(false);
+      setRecordingFilename(null);
       showToast('❌ Failed to stop recording session', 'error');
-      // Reset after error
       setTimeout(() => {
         setRecordingStatus('idle');
         setSessionStarted(false);
@@ -866,6 +872,7 @@ const fetchLiveKitToken = async () => {
     setIsRecording(false);
     setRecordingStatus('idle');
     setRecordingUrl(null);
+    setRecordingFilename(null);
     setIsPaused(false);
     setIsProcessing(false);
     setIsSpeaking(false);
@@ -881,7 +888,26 @@ const fetchLiveKitToken = async () => {
     setManualMessage('');
     setLiveKitConnected(false);
     setLiveKitConnecting(false);
+    setPostRecordingModalOpen(false);
+    sessionStorage.removeItem('recordingUrl');
+    sessionStorage.removeItem('recordingFilename');
     showToast('🔄 Session restarted. Fresh slate, as it were.', 'info');
+  };
+
+  const handleStayInSession = () => {
+    setPostRecordingModalOpen(false);
+  };
+
+  const handleGoToAudioEditor = () => {
+    if (!recordingUrl) {
+      showToast('Recording is still processing. Please wait a moment.', 'warning');
+      return;
+    }
+    const filenameToUse = recordingFilename || extractRecordingFileName(recordingUrl) || `recording_${Date.now()}.ogg`;
+    sessionStorage.setItem('recordingUrl', recordingUrl);
+    sessionStorage.setItem('recordingFilename', filenameToUse);
+    setPostRecordingModalOpen(false);
+    navigate('/audio-edit', { state: { recordingUrl, recordingFilename: filenameToUse } });
   };
 
   // Handle transcription segments from the agent (streaming style)
@@ -1212,12 +1238,18 @@ const fetchLiveKitToken = async () => {
           <div className="p-8 bg-light-lightPurple backdrop-blur-md rounded-3xl border-2 border-purple-200/50 shadow-2xl hover:shadow-3xl transition-all duration-300 w-full max-w-md">
               <h3 className="text-2xl font-bold text-white mb-3">Participants</h3>
             <div className="space-y-6">
-              {/* LiveKit Participants - Always render to avoid hooks order issues, conditionally show content */}
-              <LiveKitParticipants 
-                podcastConfig={podcastConfig} 
-                user={user} 
-                isConnected={liveKitConnected && room}
-              />
+              {/* LiveKit Participants - Only render when connected to avoid hooks order issues */}
+              {liveKitConnected && room ? (
+                <LiveKitParticipants podcastConfig={podcastConfig} />
+              ) : (
+                <div className="text-center text-white py-8">
+                  <div className="w-16 h-16 bg-gradient-to-br from-purple-100 to-purple-200 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Icon name="podcast" className="w-8 h-8 text-purple-400" />
+                  </div>
+                  <p className="text-sm font-medium ">Connect to see participants</p>
+                  <p className="text-xs ">Live participants will appear here</p>
+                </div>
+              )}
             </div>
         </div>
           {/* LiveKit Connection */}
@@ -1327,6 +1359,7 @@ const fetchLiveKitToken = async () => {
                elapsedTime={elapsedTime}
                recordingStatus={recordingStatus}
                recordingUrl={recordingUrl}
+              recordingFilename={recordingFilename}
                onCopyUrl={() => showToast('📋 Recording URL copied to clipboard!', 'success')}
              />
            </div>
@@ -1518,7 +1551,6 @@ const fetchLiveKitToken = async () => {
               ) : (
                 <div className="space-y-4 pb-4">
                   {transcript.map((entry, idx) => {
-                    const { user } = useAuth();
                     const isUser = entry.speaker === "You" || entry.speaker === user?.full_name;
                     const isAI = entry.speaker === "AI Assistant" || entry.speaker === "AI Agent";
                     
@@ -1642,97 +1674,44 @@ const fetchLiveKitToken = async () => {
         </div>
       </div>
       
-      {/* LiveKit Audio Renderer */}
-      <RoomAudioRenderer />
-      
-      {/* Recording Saved Modal - Clean & Subtle */}
-      {showRecordingModal && recordingUrl && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md animate-fade-in">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full mx-4 transform transition-all animate-slide-in-right overflow-hidden">
-            {/* Modal Header - Purple Theme */}
-            <div className="bg-gradient-to-r from-purple-600 to-purple-700 px-6 py-5 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-white/25 backdrop-blur-sm rounded-full flex items-center justify-center">
-                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-white">Recording Saved!</h3>
-                  <p className="text-sm text-white/90 mt-0.5">Your podcast is ready to edit</p>
-                </div>
-              </div>
-              <button
-                onClick={() => {
-                  setShowRecordingModal(false);
-                  setRecordingStatus('idle');
-                  setConversationStarted(false);
-                }}
-                className="text-white/90 hover:text-white hover:bg-white/20 transition-all p-2 rounded-lg"
-                aria-label="Close"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+      {/* Post-Recording Modal */}
+      {postRecordingModalOpen && recordingUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
+          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl p-8 space-y-6 animate-slide-in-right">
+            <div className="flex items-center gap-3 text-indigo-600 font-semibold">
+              <Icon name="podcast" className="w-8 h-8" />
+              <span>Recording Ready</span>
             </div>
-
-            {/* Modal Body - Clean Layout */}
-            <div className="p-6 space-y-4 bg-gray-50">
-              {/* Action Buttons - Modern & Clean */}
-              <div className="space-y-3">
-                {/* Edit Audio Button - Primary CTA */}
-                <button
-                  onClick={() => {
-                    // Store recording URL for audio editor
-                    sessionStorage.setItem('recordingUrl', recordingUrl);
-                    const filename = recordingUrl.split('/').pop() || 'recording.ogg';
-                    sessionStorage.setItem('recordingFilename', filename);
-                    // Navigate to audio editor
-                    navigate('/audio-edit', { state: { recordingUrl } });
-                    setShowRecordingModal(false);
-                  }}
-                  className="w-full bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:from-indigo-700 hover:via-purple-700 hover:to-pink-700 text-white font-semibold py-4 px-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center gap-3 group transform hover:scale-[1.02] active:scale-[0.98]"
-                >
-                  <svg className="w-5 h-5 group-hover:rotate-12 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                  </svg>
-                  <span className="text-base">Edit Audio</span>
-                  <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
-
-                {/* Secondary Actions */}
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => {
-                      setShowRecordingModal(false);
-                      setRecordingStatus('idle');
-                      setConversationStarted(false);
-                    }}
-                    className="flex-1 bg-white hover:bg-gray-50 text-gray-700 font-medium py-3 px-4 rounded-xl border border-gray-200 transition-all hover:border-gray-300 hover:shadow-sm"
-                  >
-                    Stay Here
-                  </button>
-                  <button
-                    onClick={() => {
-                      window.open(recordingUrl, '_blank', 'noopener,noreferrer');
-                    }}
-                    className="flex-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-medium py-3 px-4 rounded-xl border border-blue-200 transition-all hover:border-blue-300 hover:shadow-sm flex items-center justify-center gap-2"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                    </svg>
-                    <span>Open Link</span>
-                  </button>
-                </div>
-              </div>
+            <div className="space-y-2">
+              <h2 className="text-2xl font-bold text-gray-900">
+                Amazing conversation! Ready to polish it?
+              </h2>
+              <p className="text-gray-600 leading-relaxed">
+                {getFriendlyRecordingLabel(recordingFilename || recordingUrl || 'Your Recording')} is saved.{` `}
+                Jump into the Audio Edit studio to trim, split, and enhance it—or stay here to keep chatting.
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={handleStayInSession}
+                className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-200 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+              >
+                Stay Here
+              </button>
+              <button
+                onClick={handleGoToAudioEditor}
+                className="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold shadow-md hover:shadow-lg transition-all"
+              >
+                Open Audio Editor
+              </button>
             </div>
           </div>
         </div>
       )}
 
+      {/* LiveKit Audio Renderer */}
+      <RoomAudioRenderer />
+      
       {/* Animation styles */}
       <style>{`
         @keyframes slide-in-right {
@@ -1767,8 +1746,9 @@ const fetchLiveKitToken = async () => {
 };
 
 // LiveKit Participants Component - Shows only actual LiveKit participants
-const LiveKitParticipants = ({ podcastConfig = {}, user, isConnected = false }) => {
+const LiveKitParticipants = ({ podcastConfig = {} }) => {
   // Hooks must be called at the top level - before any conditionals or loops
+  const { user } = useAuth();
   const tracks = useTracks(
     [
       { source: Track.Source.Camera, withPlaceholder: true },

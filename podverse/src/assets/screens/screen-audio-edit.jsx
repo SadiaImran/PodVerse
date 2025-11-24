@@ -7,6 +7,21 @@ import BaseLayout from "../components/layouts/BaseLayout";
 import { Sidebar } from "../components/comp-audio-editing/comp-audio-edit-sidebar";
 import { MainPanel } from "../components/comp-audio-editing/comp-audio-edit-main-panel";
 
+const stripQueryString = (value = '') => value.split('?')[0];
+
+const extractFileName = (value = '') => {
+  const withoutQuery = stripQueryString(value);
+  const parts = withoutQuery.split('/');
+  return parts[parts.length - 1] || withoutQuery;
+};
+
+const getFriendlyTrackName = (value = '', fallback = 'Track') => {
+  const baseName = extractFileName(value) || fallback;
+  const underscoreIndex = baseName.indexOf('_');
+  const friendly = underscoreIndex > 0 ? baseName.slice(0, underscoreIndex) : baseName;
+  return friendly || fallback;
+};
+
 const AudioEditor = () => {
   const location = useLocation();
   
@@ -117,10 +132,13 @@ const AudioEditor = () => {
           
           const duration = audio.duration;
           const clipId = `recording-${Date.now()}`;
+          const friendlyName = getFriendlyTrackName(recordingFilename || recordingUrl, 'Recording');
           
           const clip = {
             id: clipId,
-            name: recordingFilename,
+            name: recordingFilename || friendlyName,
+            displayName: friendlyName,
+            originalName: recordingFilename || extractFileName(recordingUrl),
             url: recordingUrl,
             duration,
             startTime: 0,
@@ -249,23 +267,33 @@ const AudioEditor = () => {
   const handleAddStockAudio = async (stockTrack) => {
     try {
       console.log('Adding stock audio to main panel:', stockTrack);
+      const friendlyName = getFriendlyTrackName(
+        stockTrack.displayName || stockTrack.name || stockTrack.filename || stockTrack.id,
+        'Track'
+      );
+      const normalizedTrack = {
+        ...stockTrack,
+        displayName: stockTrack.displayName || friendlyName,
+        name: stockTrack.name || friendlyName,
+        originalName: stockTrack.originalName || stockTrack.name || stockTrack.filename || stockTrack.path || friendlyName
+      };
       
       // Create audio buffer for the stock track
       const newBuffers = { ...audioBuffers };
       
       try {
         // Fetch the audio file and create buffer
-        const response = await fetch(stockTrack.url);
+        const response = await fetch(normalizedTrack.url);
         const arrayBuffer = await response.arrayBuffer();
         const audioContext = new AudioContext();
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-        newBuffers[stockTrack.id] = audioBuffer;
+        newBuffers[normalizedTrack.id] = audioBuffer;
       } catch (bufferError) {
         console.error('Error loading audio buffer for stock track:', bufferError);
       }
 
       // Add to audio clips
-      const updatedClips = [...audioClips, stockTrack];
+      const updatedClips = [...audioClips, normalizedTrack];
       setAudioClips(updatedClips);
       setAudioBuffers(newBuffers);
       
@@ -280,6 +308,11 @@ const AudioEditor = () => {
       alert('Error adding audio to panel: ' + error.message);
     }
   };
+
+  const handleTracksChange = useCallback(async (updatedTracks) => {
+    setAudioClips(updatedTracks);
+    await loadCombinedAudio(updatedTracks);
+  }, [loadCombinedAudio]);
 
   // Handle file upload from Sidebar - THIS IS THE KEY FUNCTION
   const handleFileUpload = async (files) => {
@@ -302,9 +335,12 @@ const AudioEditor = () => {
         const duration = audio.duration;
         const clipId = `clip-${Date.now()}-${Math.random()}`;
 
+        const friendlyName = getFriendlyTrackName(file.name, 'Track');
         const clip = {
           id: clipId,
-          name: file.name,
+          name: file.name || friendlyName,
+          displayName: friendlyName,
+          originalName: file.name || friendlyName,
           url,
           duration,
           startTime: 0, // All tracks start from the beginning
@@ -394,6 +430,7 @@ const AudioEditor = () => {
             audioTracks={audioClips}
             audioBuffers={audioBuffers}
             onRemoveTrack={removeClip}
+            onTracksChange={handleTracksChange}
             isPlaying={isPlaying}
             setIsPlaying={setIsPlaying}
             currentTime={currentTime}

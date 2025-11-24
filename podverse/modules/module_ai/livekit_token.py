@@ -128,6 +128,7 @@ def get_token(
     return {"token": token.to_jwt(), "url": LIVEKIT_WS_URL}
 
 active_egresses = {}
+egress_starting_rooms = set()
 
 @router.post("/start-audio-egress")
 async def start_audio_egress_async(
@@ -137,6 +138,29 @@ async def start_audio_egress_async(
     podcast_title: str = Form(None)
 ):
     """Start audio egress with custom file naming using podcast title."""
+    if room_name in egress_starting_rooms:
+        print(f"⏳ Egress start already in progress for room: {room_name}")
+        return {
+            "success": True,
+            "status": "starting",
+            "room_name": room_name,
+            "message": "Egress start already in progress for this room"
+        }
+    
+    existing_egress = active_egresses.get(room_name)
+    if existing_egress:
+        print(f"ℹ️ Egress already active for room: {room_name} (egress_id={existing_egress.get('egress_id')})")
+        return {
+            "success": True,
+            "status": "already_running",
+            "room_name": room_name,
+            "egress_id": existing_egress.get("egress_id"),
+            "filename": existing_egress.get("filename"),
+            "message": "Recording already running for this room"
+        }
+    
+    egress_starting_rooms.add(room_name)
+    
     # ✅ CRITICAL FIX: Convert wss:// to https:// for API endpoint
     api_host = LIVEKIT_WS_URL.replace("wss://", "https://").replace("ws://", "http://")
     
@@ -224,7 +248,8 @@ async def start_audio_egress_async(
             "success": True,
             "egress_id": res.egress_id, 
             "room_name": room_name,
-            "status": "started"
+            "status": "started",
+            "filename": custom_filename
         }
     except Exception as e:
         error_msg = str(e)
@@ -250,6 +275,8 @@ async def start_audio_egress_async(
                 "room_name": room_name,
                 "status": "failed"
             }
+    finally:
+        egress_starting_rooms.discard(room_name)
 
 @router.post("/stop-audio-egress")
 async def stop_audio_egress_async(room_name: str = Form(...)):
