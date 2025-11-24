@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { FaChevronDown } from "react-icons/fa";
-import { FiSearch, FiLogOut, FiMenu } from "react-icons/fi";
+import { FiLogOut, FiMenu } from "react-icons/fi";
 import { HiOutlineBell } from "react-icons/hi2";
 import { UserPlus, Check, X } from "lucide-react";
 import ProfileMarry from "../../images/icon-profile-marry.png";
@@ -13,16 +13,10 @@ const API_BASE_URL = 'http://localhost:8000';
 
 export default function TopBar({ open, onMenuClick }) {
   const navigate = useNavigate();
-  const [userData, setUserData] = useState(null);
-  const [showDropdown, setShowDropdown] = useState(false);
-  const [showModal, setShowModal] = useState(false);
-  const [fullName, setFullName] = useState("");
-  const [previewUrl, setPreviewUrl] = useState(null);
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
-  const dropdownRef = useRef(null);
   const notificationRef = useRef(null);
   const showNotificationsRef = useRef(showNotifications);
 
@@ -32,27 +26,6 @@ export default function TopBar({ open, onMenuClick }) {
   }, [showNotifications]);
 
   const { logout } = useAuth();
-
-  // Load user profile from Supabase
-  const loadProfile = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("full_name, profile_url")
-        .eq("id", user.id)
-        .single();
-
-      setUserData({
-        id: user.id,
-        email: user.email,
-        full_name: profile?.full_name || "",
-        profile_url: profile?.profile_url || null,
-      });
-      setFullName(profile?.full_name || "");
-      setPreviewUrl(profile?.profile_url || null);
-    }
-  };
 
   // Load notifications (only when dropdown is opened)
   // Memoized with useCallback to prevent unnecessary re-renders in realtime listener
@@ -101,8 +74,6 @@ export default function TopBar({ open, onMenuClick }) {
   };
 
   useEffect(() => {
-    loadProfile();
-    
     // Initial unread count fetch
     const fetchInitialUnreadCount = async () => {
       try {
@@ -278,9 +249,6 @@ export default function TopBar({ open, onMenuClick }) {
 
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
-        setShowDropdown(false);
-      }
       if (notificationRef.current && !notificationRef.current.contains(e.target)) {
         setShowNotifications(false);
       }
@@ -292,24 +260,6 @@ export default function TopBar({ open, onMenuClick }) {
   const handleLogout = async () => {
     await logout();
     window.location.href = "/signin-email"; // full redirect clears cached session
-  };
-  
-  const handleSaveProfile = async () => {
-    const { error } = await supabase
-      .from("profiles")
-      .update({
-        full_name: fullName,
-        profile_url: previewUrl,
-      })
-      .eq("id", userData.id);
-
-    if (!error) {
-      setUserData({ ...userData, full_name: fullName, profile_url: previewUrl });
-      alert("Profile updated!");
-      setShowModal(false);
-    } else {
-      alert("Failed to update profile.");
-    }
   };
 
   return (
@@ -331,22 +281,8 @@ export default function TopBar({ open, onMenuClick }) {
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-4 flex-1 max-w-full">
-        <div 
-          className="relative w-full max-w-[600px] md:mx-auto flex-1 border border-gray-300 rounded-lg cursor-pointer"
-          onClick={() => navigate('/search')}
-        >
-          <input
-            type="text"
-            placeholder="Search users..."
-            className="pl-8 pr-4 py-2 bg-light-background rounded-lg outline-none w-full text-base text-light-black cursor-pointer"
-            readOnly
-            onFocus={() => navigate('/search')}
-          />
-          <FiSearch className="absolute left-2 top-2.5 mt-0.5 text-light-grey" />
-        </div>
-
-        <div className="flex items-center gap-4 flex-shrink-0 ml-2">
+      <div className="flex items-center justify-end gap-4 flex-1 max-w-full">
+        <div className="flex items-center gap-4 flex-shrink-0">
           <div className="relative" ref={notificationRef}>
             <HiOutlineBell 
               className="text-light-charcoal w-8 h-8 cursor-pointer hover:text-light-purple transition-colors" 
@@ -387,9 +323,14 @@ export default function TopBar({ open, onMenuClick }) {
 
             {/* Notifications Dropdown */}
             {showNotifications && (
-              <div className="absolute right-0 mt-2 w-80 md:w-96 bg-white border rounded-lg shadow-xl z-50 max-h-[500px] overflow-y-auto">
-                <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-                  <h3 className="font-semibold text-gray-900">Notifications</h3>
+              <div className="absolute right-0 mt-2 w-80 md:w-96 bg-white border rounded-2xl shadow-2xl z-50 max-h-[500px] overflow-y-auto" style={{ borderColor: '#A388E7' }}>
+                <div className="p-5 border-b flex items-center justify-between" style={{ borderColor: '#A388E7', backgroundColor: '#FAFAFBFF' }}>
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg" style={{ backgroundColor: '#6057C7' }}>
+                      <HiOutlineBell className="w-4 h-4" style={{ color: '#F9F5EB' }} />
+                    </div>
+                    <h3 className="font-bold" style={{ color: '#6057C7' }}>Notifications</h3>
+                  </div>
                   {unreadCount > 0 && (
                     <button
                       onClick={async () => {
@@ -415,7 +356,20 @@ export default function TopBar({ open, onMenuClick }) {
                           }
                         }
                       }}
-                      className="text-xs text-light-purple hover:underline"
+                      className="text-xs font-semibold px-3 py-1.5 rounded-lg transition-all border"
+                      style={{
+                        color: '#6057C7',
+                        backgroundColor: '#A388E7',
+                        borderColor: '#7d6ce3'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.target.style.backgroundColor = '#7d6ce3';
+                        e.target.style.color = '#F9F5EB';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.target.style.backgroundColor = '#A388E7';
+                        e.target.style.color = '#6057C7';
+                      }}
                     >
                       Mark all read
                     </button>
@@ -436,11 +390,17 @@ export default function TopBar({ open, onMenuClick }) {
                     {notifications.map((notif) => (
                       <div
                         key={notif.id}
-                        className={`p-4 transition-colors cursor-pointer relative ${
+                        className={`p-4 transition-all cursor-pointer relative rounded-xl mx-2 my-1 border-l-4 ${
                           !notif.is_read 
-                            ? 'bg-gradient-to-r from-light-lightPurple/20 via-light-lightPurple/10 to-transparent border-l-4 border-light-lightPurple hover:from-light-lightPurple/30 hover:via-light-lightPurple/15' 
+                            ? 'shadow-md hover:shadow-lg' 
                             : 'hover:bg-gray-50'
                         }`}
+                        style={!notif.is_read ? {
+                          backgroundColor: '#A388E7',
+                          borderLeftColor: '#6057C7'
+                        } : {
+                          borderLeftColor: 'transparent'
+                        }}
                         onClick={async () => {
                           // Mark as read if not already read
                           if (!notif.is_read) {
@@ -478,14 +438,18 @@ export default function TopBar({ open, onMenuClick }) {
                         }}
                       >
                         <div className="flex items-start gap-3">
-                          <img
-                            src={notif.from_user?.profile_url || ProfileMarry}
-                            alt={notif.from_user?.full_name}
-                            className="w-10 h-10 rounded-full object-cover"
-                            onError={(e) => {
-                              e.target.src = ProfileMarry;
-                            }}
-                          />
+                          <div className="relative flex-shrink-0">
+                            <div className="absolute inset-0 rounded-full opacity-0 hover:opacity-100 blur-md transition-opacity duration-300" style={{ backgroundColor: '#A388E7' }} />
+                            <img
+                              src={notif.from_user?.profile_url || ProfileMarry}
+                              alt={notif.from_user?.full_name}
+                              className="relative w-12 h-12 rounded-full object-cover ring-2 shadow-sm"
+                              style={{ ringColor: '#A388E7' }}
+                              onError={(e) => {
+                                e.target.src = ProfileMarry;
+                              }}
+                            />
+                          </div>
                           <div className="flex-1 min-w-0">
                             <p className={`text-sm ${!notif.is_read ? 'text-gray-900 font-semibold' : 'text-gray-900'}`}>
                               {notif.message}
@@ -525,7 +489,17 @@ export default function TopBar({ open, onMenuClick }) {
                                       }
                                     }
                                   }}
-                                  className="px-3 py-1 text-xs bg-light-purple text-white rounded-lg hover:bg-purple-700 flex items-center gap-1"
+                                  className="px-4 py-1.5 text-xs font-semibold text-white rounded-lg flex items-center gap-1.5 shadow-md transition-all hover:shadow-lg"
+                                  style={{
+                                    backgroundColor: '#6057C7',
+                                    color: '#F9F5EB'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.target.style.backgroundColor = '#2F2867';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.target.style.backgroundColor = '#6057C7';
+                                  }}
                                 >
                                   <Check size={14} />
                                   Accept
@@ -564,7 +538,7 @@ export default function TopBar({ open, onMenuClick }) {
                             )}
                           </div>
                           {!notif.is_read && (
-                            <div className="w-2.5 h-2.5 bg-light-lightPurple rounded-full mt-2 flex-shrink-0 shadow-sm shadow-light-lightPurple/50"></div>
+                            <div className="w-3 h-3 rounded-full mt-2 flex-shrink-0 shadow-lg animate-pulse" style={{ backgroundColor: '#6057C7' }}></div>
                           )}
                         </div>
                       </div>
@@ -575,57 +549,6 @@ export default function TopBar({ open, onMenuClick }) {
             )}
           </div>
 
-          <div className="flex items-center gap-2 cursor-pointer relative" ref={dropdownRef}>
-            <img 
-              src={userData?.profile_url || ProfileMarry} 
-              className="w-8 h-8 rounded-full border-2 border-purple-200 hover:border-purple-400 transition-colors"
-              onClick={() => {
-                if (userData?.id) {
-                  navigate(`/profile/${userData.id}`);
-                }
-              }}
-              alt={userData?.full_name || "User"}
-            />
-            <span 
-              className="text-sm text-gray-800 font-medium hidden sm:block hover:text-purple-600 transition-colors"
-              onClick={() => {
-                if (userData?.id) {
-                  navigate(`/profile/${userData.id}`);
-                }
-              }}
-            >
-              {userData?.full_name || "User"}
-            </span>
-            <FaChevronDown
-              className="text-xs text-light-charcoal hidden sm:block"
-              onClick={() => setShowDropdown(!showDropdown)}
-            />
-
-            {showDropdown && (
-              <div className="absolute right-0 mt-10 w-48 bg-white border rounded-md shadow-lg z-50">
-                <button
-                  onClick={() => {
-                    setShowDropdown(false);
-                    if (userData?.id) {
-                      navigate(`/profile/${userData.id}`);
-                    }
-                  }}
-                  className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 border-b border-gray-100"
-                >
-                  View Profile
-                </button>
-                <button
-                  onClick={() => {
-                    setShowDropdown(false);
-                    setShowModal(true);
-                  }}
-                  className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                >
-                  Edit Profile
-                </button>
-              </div>
-            )}
-          </div>
 
           <button
             onClick={handleLogout}
@@ -637,53 +560,6 @@ export default function TopBar({ open, onMenuClick }) {
         </div>
       </div>
 
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
-          <div className="bg-white w-full max-w-md rounded-3xl shadow-lg p-6 md:p-8 relative">
-            <button
-              className="absolute top-3 right-3 text-gray-400 hover:text-red-500 text-xl"
-              onClick={() => setShowModal(false)}
-              aria-label="Close"
-            >
-              ✕
-            </button>
-
-            <h2 className="text-2xl font-bold text-center text-light-charcoal mb-6">Edit Your Profile</h2>
-
-            <div className="flex flex-col items-center gap-4">
-              {previewUrl ? (
-                <img
-                  src={previewUrl}
-                  alt="Preview"
-                  className="w-28 h-28 rounded-full object-cover border-4 border-light-purple shadow-md"
-                />
-              ) : (
-                <div className="w-28 h-28 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-sm">
-                  No Image
-                </div>
-              )}
-
-              <div className="w-full">
-                <label className="block text-sm font-medium text-gray-600 mb-1">Full Name</label>
-                <input
-                  type="text"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  className="w-full px-4 py-2 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-light-purple focus:border-light-purple text-gray-800 placeholder:text-gray-400"
-                  placeholder="Enter your full name"
-                />
-              </div>
-
-              <button
-                className="mt-4 w-full bg-light-purple hover:bg-purple-700 text-white font-semibold py-2 rounded-xl transition-all duration-200 shadow-sm"
-                onClick={handleSaveProfile}
-              >
-                Save Changes
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </nav>
   );
 }

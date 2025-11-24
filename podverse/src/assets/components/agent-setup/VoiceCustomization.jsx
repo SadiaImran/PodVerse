@@ -1,11 +1,12 @@
 import { BsPlayFill } from "react-icons/bs";
 import { useState, useRef, useEffect } from "react";
-import { IoMdArrowRoundBack } from "react-icons/io";
+import { ArrowLeft } from "lucide-react";
 import { PiSpeakerHighBold } from "react-icons/pi";
 import { HiOutlineUpload } from "react-icons/hi";
 
 import SampleVoices from "./agent-voice-setup/agent-sample-voice";
 import VoiceUploadSystem from "./agent-voice-setup/agent-upload-voice";
+import VoiceImage from '../../images/Speech-to-text-bro.png';
 
 // Main component
 const VoiceCustomization = ({ goNext, goBack }) => {
@@ -43,132 +44,201 @@ const VoiceCustomization = ({ goNext, goBack }) => {
   }, [selectedVoiceData]);
 
   return (
-    <div className="max-w-7xl mx-auto">
-      <div className="bg-gradient-to-br from-white to-gray-50 rounded-3xl shadow-2xl border border-gray-200 p-8">
-        {/* Header - Left Aligned */}
-        <div className="mb-8">
-          <div className="flex items-center gap-4 mb-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-light-purple to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-              <PiSpeakerHighBold className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h2 className="text-3xl font-bold bg-gradient-to-r from-light-purple to-purple-600 bg-clip-text text-transparent">
-                Voice Setup
-              </h2>
-              <p className="text-gray-600">Choose or upload your AI voice</p>
-            </div>
-          </div>
+    <div className="max-w-7xl mx-auto relative">
+      {/* Left Side Image - Fixed position */}
+      <div className="hidden lg:block absolute -left-1/4 top-10 z-0">
+        <div className="w-64 h-64">
+          <img 
+            src={VoiceImage} 
+            alt="Voice Setup" 
+            className="w-full h-full object-contain opacity-70"
+          />
         </div>
-
-        {/* Voice Options - Top Section */}
-        <div className="mb-6">
-          <h3 className="text-lg font-semibold text-gray-800 mb-3">Choose Voice Option</h3>
-          <div className="flex gap-4 justify-center">
-            {/* Use Sample Voice */}
-            <button
-              onClick={() => setFormData({
-                ...formData,
-                customVoiceUpload: false,
-                sampleVoice: true
-              })}
-              className={`px-6 py-3 rounded-xl transition-all border-2 ${
-                formData.sampleVoice
-                  ? "border-blue-500 bg-blue-500 text-white shadow-md"
-                  : "border-gray-300 bg-white text-gray-700 hover:border-blue-400 hover:bg-blue-50"
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <PiSpeakerHighBold className="h-5 w-5" />
-                <span className="font-medium">Sample Voices</span>
-              </div>
-            </button>
+      </div>
       
-            {/* Custom Upload */}
-            <button
-              onClick={() => {
-                setFormData({
-                  ...formData,
-                  customVoiceUpload: true,
-                  sampleVoice: false,
-                });
-                console.log("FormData after clicking Upload Your Voice:", formData);
-              }}
-              className={`px-6 py-3 rounded-xl transition-all border-2 ${
-                formData.customVoiceUpload
-                  ? "border-purple-500 bg-purple-500 text-white shadow-md"
-                  : "border-gray-300 bg-white text-gray-700 hover:border-purple-400 hover:bg-purple-50"
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <HiOutlineUpload className="h-5 w-5" />
-                <span className="font-medium">Upload Voice</span>
-              </div>
-            </button>
+      {/* Main Content - Centered */}
+      <div className="max-w-6xl mx-auto relative z-10">
+        <div className="rounded-[28px] border border-white/60 bg-white/85 backdrop-blur-xl shadow-[0_20px_60px_rgba(96,87,199,0.1)] p-8 md:p-10">
+          {/* Header */}
+          <div className="mb-8">
+            <h2 className="text-3xl font-bold mb-2" style={{ color: '#6A6A6A' }}>Voice Setup</h2>
+            <p style={{ color: '#6A6A6A' }}>Choose or upload your AI voice</p>
           </div>
-        </div>
 
-        {/* Content Section */}
-        <div className="space-y-6">
-          {/* Voice Preview Panel - Show for sample voices when selected */}
-          {formData.sampleVoice && selectedVoiceData && (
-            <div className="bg-gradient-to-br from-white to-gray-50 p-6 rounded-2xl shadow-lg border border-gray-200">
-              <div className="bg-gradient-to-r from-indigo-500 to-purple-600 p-4 rounded-t-xl -m-6 mb-6">
-                <h3 className="font-semibold text-xl text-white">Preview Your Voice</h3>
-                <p className="text-indigo-100">See details about your selected voice</p>
-              </div>
-              
-              <div>
-                <div className="mb-4 flex items-center justify-center gap-4">
-                  <div className={`px-6 py-4 rounded-full ${selectedVoiceData.color} ${selectedVoiceData.textColor} flex items-center justify-center text-xl font-medium shadow-lg`}>
-                    {selectedVoiceData.name.charAt(0)}
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-semibold text-gray-800">{selectedVoiceData.name}</h3>
-                    <div className="flex flex-wrap gap-2 mt-1">
-                      {selectedVoiceData.category.map((label, idx) => (
-                        <span key={idx} className="text-xs bg-gradient-to-r from-light-purple to-purple-600 text-white rounded-full px-3 py-1">{label}</span>
-                      ))}
+          {/* Voice Options - Tab Switching */}
+          <div className="mb-8">
+            <div className="flex gap-4 justify-center">
+              {/* Sample Voices Tab */}
+              <button
+                onClick={() => setFormData({
+                  ...formData,
+                  customVoiceUpload: false,
+                  sampleVoice: true
+                })}
+                className={`px-8 py-4 rounded-full font-semibold text-lg transition-all shadow-md hover:shadow-lg flex items-center gap-3 ${
+                  formData.sampleVoice
+                    ? "text-white"
+                    : "text-gray-600 border-2 border-gray-300 bg-white hover:border-[#6057C7]"
+                }`}
+                style={formData.sampleVoice
+                  ? { backgroundColor: '#6057C7', color: '#F9F5EB' }
+                  : {}
+                }
+                onMouseEnter={(e) => {
+                  if (!formData.sampleVoice) {
+                    e.currentTarget.style.borderColor = '#6057C7';
+                    e.currentTarget.style.backgroundColor = '#f5f3ff';
+                  } else {
+                    e.currentTarget.style.backgroundColor = '#4f46e5';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!formData.sampleVoice) {
+                    e.currentTarget.style.borderColor = '#d1d5db';
+                    e.currentTarget.style.backgroundColor = 'white';
+                  } else {
+                    e.currentTarget.style.backgroundColor = '#6057C7';
+                  }
+                }}
+              >
+                <PiSpeakerHighBold className="h-5 w-5" />
+                <span>Sample Voices</span>
+              </button>
+        
+              {/* Upload Voice Tab */}
+              <button
+                onClick={() => {
+                  setFormData({
+                    ...formData,
+                    customVoiceUpload: true,
+                    sampleVoice: false,
+                  });
+                }}
+                className={`px-8 py-4 rounded-full font-semibold text-lg transition-all shadow-md hover:shadow-lg flex items-center gap-3 ${
+                  formData.customVoiceUpload
+                    ? "text-white"
+                    : "text-gray-600 border-2 border-gray-300 bg-white hover:border-[#6057C7]"
+                }`}
+                style={formData.customVoiceUpload
+                  ? { backgroundColor: '#6057C7', color: '#F9F5EB' }
+                  : {}
+                }
+                onMouseEnter={(e) => {
+                  if (!formData.customVoiceUpload) {
+                    e.currentTarget.style.borderColor = '#6057C7';
+                    e.currentTarget.style.backgroundColor = '#f5f3ff';
+                  } else {
+                    e.currentTarget.style.backgroundColor = '#4f46e5';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!formData.customVoiceUpload) {
+                    e.currentTarget.style.borderColor = '#d1d5db';
+                    e.currentTarget.style.backgroundColor = 'white';
+                  } else {
+                    e.currentTarget.style.backgroundColor = '#6057C7';
+                  }
+                }}
+              >
+                <HiOutlineUpload className="h-5 w-5" />
+                <span>Upload Voice</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Content Section */}
+          <div className="space-y-6">
+            {/* Voice Preview Panel - Show for sample voices when selected */}
+            {formData.sampleVoice && selectedVoiceData && (
+              <div className="rounded-2xl p-6 md:p-8 border border-white/60 bg-white/70 backdrop-blur-sm shadow-md">
+                <div className="mb-6 pb-4 border-b border-gray-200">
+                  <h3 className="text-xl font-semibold mb-2" style={{ color: '#6A6A6A' }}>Preview Your Voice</h3>
+                  <p style={{ color: '#6A6A6A' }}>See details about your selected voice</p>
+                </div>
+                
+                <div>
+                  <div className="mb-4 flex items-center justify-center gap-4">
+                    <div 
+                      className="px-6 py-4 rounded-full flex items-center justify-center text-xl font-medium shadow-lg"
+                      style={{ backgroundColor: '#6057C7', color: '#F9F5EB' }}
+                    >
+                      {selectedVoiceData.name.charAt(0)}
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-semibold" style={{ color: '#6A6A6A' }}>{selectedVoiceData.name}</h3>
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        {selectedVoiceData.category.map((label, idx) => (
+                          <span 
+                            key={idx} 
+                            className="text-xs rounded-full px-3 py-1"
+                            style={{ backgroundColor: '#6057C7', color: '#F9F5EB' }}
+                          >
+                            {label}
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   </div>
+                  {selectedVoiceData.description && (
+                    <div className="mb-6">
+                      <h4 className="text-sm font-medium mb-2" style={{ color: '#6A6A6A' }}>Description</h4>
+                      <p style={{ color: '#6A6A6A' }}>{selectedVoiceData.description}</p>
+                    </div>
+                  )}
+                  <audio controls src={selectedVoiceData.audioSrc} className="w-full mt-2 rounded-lg" />
                 </div>
-                {selectedVoiceData.description && (
-                  <div className="mb-6">
-                    <h4 className="text-sm font-medium text-gray-700 mb-2">Description</h4>
-                    <p className="text-gray-600">{selectedVoiceData.description}</p>
-                  </div>
-                )}
-                <audio controls src={selectedVoiceData.audioSrc} className="w-full mt-2 rounded-lg" />
               </div>
+            )}
+
+            {/* Voice Content */}
+            <div className="rounded-2xl p-6 md:p-8 border border-white/60 bg-white/70 backdrop-blur-sm shadow-md">
+              {formData.sampleVoice && (
+                <SampleVoices onVoiceSelect={setSelectedVoiceData} />
+              )}
+          
+              {formData.customVoiceUpload && (
+                <VoiceUploadSystem 
+                  formData={formData}
+                  setFormData={setFormData}
+                  hamdleVoiceUpload={handleVoiceUpload}
+                />
+              )}
             </div>
-          )}
-
-          {/* Voice Content */}
-          <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-200">
-            {formData.sampleVoice && (
-              <SampleVoices onVoiceSelect={setSelectedVoiceData} />
-            )}
-        
-            {formData.customVoiceUpload && (
-              <VoiceUploadSystem 
-                formData={formData}
-                setFormData={setFormData}
-                hamdleVoiceUpload={handleVoiceUpload}
-              />
-            )}
           </div>
-        </div>
 
-        {/* Navigation Buttons */}
-        <div className="flex justify-between items-center mt-8 pt-6 border-t border-gray-200">
-          <button onClick={goBack} className="text-light-purple font-medium text-3xl hover:underline transition-all hover:scale-110">
-            <IoMdArrowRoundBack />
-          </button>
-          <button
-            onClick={goNext}
-            className="bg-gradient-to-r from-light-purple to-purple-600 text-white px-8 py-3 rounded-xl transition-all hover:from-purple-600 hover:to-indigo-600 hover:shadow-lg font-semibold transform hover:scale-105"
-          >
-            Next: Script Generation →
-          </button>
+          {/* Navigation Buttons */}
+          <div className="flex justify-between items-center mt-8">
+            <button 
+              onClick={goBack}
+              className="w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-md hover:shadow-lg"
+              style={{ backgroundColor: '#6057C7', color: '#F9F5EB' }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#4f46e5';
+                e.currentTarget.style.transform = 'translateX(-2px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = '#6057C7';
+                e.currentTarget.style.transform = 'translateX(0)';
+              }}
+            >
+              <ArrowLeft size={20} />
+            </button>
+            <button
+              onClick={goNext}
+              className="px-8 py-4 rounded-full font-semibold text-lg transition-all shadow-md hover:shadow-lg"
+              style={{ backgroundColor: '#6057C7', color: '#F9F5EB' }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#4f46e5';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = '#6057C7';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+            >
+              Next: Script Generation →
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -30,7 +30,7 @@ const BaseLayout = ({ children, homeScreen, autoCollapse = false }) => {
       {/* Left Sidebar */}
       {homeScreen ? null : <LeftSidebar open={open} setOpen={setOpen} />}
     
-      <div className="flex-1 flex flex-col overflow-auto">
+      <div className={`flex-1 flex flex-col overflow-auto ${homeScreen ? '' : open ? 'ml-72' : 'ml-16'} transition-all duration-300`}>
         <Topbar open={homeScreen} onMenuClick={() => setOpen(!open)} />
 
         {/* page content */}

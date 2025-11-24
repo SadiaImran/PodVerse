@@ -17,6 +17,21 @@ import { supabase , getSupabaseAuthorizedtoken } from '../../supabaseClient'
 
 const API_BASE_URL = "http://localhost:8000"; 
 
+const stripQueryString = (value = '') => value.split('?')[0];
+
+const extractFileName = (value = '') => {
+  const withoutQuery = stripQueryString(value);
+  const parts = withoutQuery.split('/');
+  return parts[parts.length - 1] || withoutQuery;
+};
+
+const getFriendlyTrackName = (value = '', fallback = 'Track') => {
+  const baseName = extractFileName(value) || fallback;
+  const underscoreIndex = baseName.indexOf('_');
+  const friendly = underscoreIndex > 0 ? baseName.slice(0, underscoreIndex) : baseName;
+  return friendly || fallback;
+};
+
 export const Sidebar = ({ onFileUpload, audioTracks, onAddStockAudio }) => {
   const fileInputRef = useRef(null);
   const [stockAudioData, setStockAudioData] = useState({
@@ -78,10 +93,14 @@ export const Sidebar = ({ onFileUpload, audioTracks, onAddStockAudio }) => {
         throw new Error('Invalid audio URL received');
       }
 
+      const friendlyName = getFriendlyTrackName(track.name || track.filename || track.path || track.id, 'Track');
+
       // Create a track object similar to uploaded files
       const trackToAdd = {
         id: `stock-${track.id}`,
-        name: track.name,
+        name: track.name || friendlyName,
+        displayName: friendlyName,
+        originalName: track.name || track.filename || track.path || friendlyName,
         url: result.url,
         duration: parseFloat(track.duration),
         startTime: 0,

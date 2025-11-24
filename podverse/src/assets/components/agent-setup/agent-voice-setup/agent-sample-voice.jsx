@@ -293,9 +293,11 @@ const SampleVoices = ({ onVoiceSelect }) => {
       if (onVoiceSelect) {
         onVoiceSelect(voice);
       }
-      // Save voice name to sessionStorage
-      if (voice.name) {
-        sessionStorage.setItem('selected_voice_name', voice.name);
+      // Save voice API name to sessionStorage (use apiName if available, otherwise name)
+      const voiceApiName = voice.apiName || voice.name;
+      if (voiceApiName) {
+        sessionStorage.setItem('selected_voice_name', voiceApiName);
+        console.log(`🎤 Saved voice API name to sessionStorage: ${voiceApiName} (display: ${voice.name})`);
       }
     }
   };
@@ -305,8 +307,8 @@ const SampleVoices = ({ onVoiceSelect }) => {
     return (
       <div className="w-full flex justify-center items-center py-12">
         <div className="text-center">
-          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading sample voices...</p>
+          <div className="w-12 h-12 border-4 rounded-full animate-spin mx-auto mb-4" style={{ borderColor: '#6057C7', borderTopColor: 'transparent' }}></div>
+          <p style={{ color: '#6A6A6A' }}>Loading sample voices...</p>
         </div>
       </div>
     );
@@ -315,7 +317,7 @@ const SampleVoices = ({ onVoiceSelect }) => {
   // Error state
   if (error) {
     return (
-      <div className="w-full p-6 bg-red-50 border border-red-200 rounded-lg">
+      <div className="w-full p-6 rounded-xl border border-red-200" style={{ backgroundColor: '#fef2f2' }}>
         <div className="text-center">
           <svg className="w-12 h-12 text-red-500 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -330,12 +332,12 @@ const SampleVoices = ({ onVoiceSelect }) => {
   // No voices state
   if (voices.length === 0) {
     return (
-      <div className="w-full p-6 bg-gray-50 border border-gray-200 rounded-lg">
+      <div className="w-full p-6 rounded-xl border border-gray-200" style={{ backgroundColor: '#f9fafb' }}>
         <div className="text-center">
-          <svg className="w-12 h-12 text-gray-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-12 h-12 mx-auto mb-3" style={{ color: '#9ca3af' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
           </svg>
-          <p className="text-gray-600">No sample voices available</p>
+          <p style={{ color: '#6A6A6A' }}>No sample voices available</p>
         </div>
       </div>
     );
@@ -369,46 +371,69 @@ const SampleVoices = ({ onVoiceSelect }) => {
       />
       
       {/* Voice List - Single Column with Scroll */}
-      <div className="max-h-[600px] overflow-y-auto pr-2 space-y-3">
+      <div className="max-h-[600px] overflow-y-auto pr-2 space-y-3" style={{ scrollbarWidth: 'thin', scrollbarColor: '#6057C7 #f3f4f6' }}>
+        <style>{`
+          div::-webkit-scrollbar {
+            width: 8px;
+          }
+          div::-webkit-scrollbar-track {
+            background: #f3f4f6;
+            border-radius: 10px;
+          }
+          div::-webkit-scrollbar-thumb {
+            background: linear-gradient(180deg, #6057C7 0%, #4f46e5 100%);
+            border-radius: 10px;
+          }
+          div::-webkit-scrollbar-thumb:hover {
+            background: #4f46e5;
+          }
+        `}</style>
         {voices.map((voice, idx) => (
           <div
             key={voice.id}
-            className={`flex items-center gap-4 p-4 rounded-lg border-2 transition-all cursor-pointer ${
+            className={`flex items-center gap-4 p-5 rounded-xl border-2 transition-all cursor-pointer shadow-sm hover:shadow-md ${
               selectedVoice === voice.id
-                ? 'border-[#6057C7] bg-[#6057C7]/10'
-                : 'border-gray-200 bg-white hover:border-[#A388E7] hover:bg-gray-50'
+                ? 'border-[#6057C7]'
+                : 'border-gray-200 hover:border-[#A388E7]'
             }`}
+            style={selectedVoice === voice.id 
+              ? { backgroundColor: '#f5f3ff', borderColor: '#6057C7' }
+              : { backgroundColor: 'white' }
+            }
             onClick={() => togglePlay(voice.id)}
           >
-            {/* Avatar - No click functionality */}
-            <div className={`flex-shrink-0 w-14 h-14 rounded-full ${voice.color} ${voice.textColor} flex items-center justify-center shadow-md relative overflow-hidden`}>
+            {/* Avatar */}
+            <div 
+              className="flex-shrink-0 w-16 h-16 rounded-full flex items-center justify-center shadow-lg relative overflow-hidden"
+              style={{ backgroundColor: '#6057C7', color: '#F9F5EB' }}
+            >
               <span className="font-bold text-xl relative z-10">{voice.name[0]}</span>
             </div>
 
             {/* Voice Info */}
             <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between mb-1">
-                <h3 className="text-base font-semibold text-gray-900 truncate">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-lg font-semibold truncate" style={{ color: '#6A6A6A' }}>
                   {voice.name}
                 </h3>
                 {selectedVoice === voice.id && (
-                  <FaCheckCircle className="text-[#6057C7] flex-shrink-0 ml-2" size={18} />
+                  <FaCheckCircle className="text-[#6057C7] flex-shrink-0 ml-2" size={20} />
                 )}
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-xs text-gray-500">
+                <span className="text-sm" style={{ color: '#6A6A6A' }}>
                   {formatTime(voice.duration)}
                 </span>
                 {/* Progress Bar (when playing this voice) */}
                 {isPlaying && selectedVoice === voice.id && (
                   <>
-                    <div className="flex-1 h-1 bg-gray-200 rounded-full overflow-hidden max-w-[200px]">
+                    <div className="flex-1 h-2 rounded-full overflow-hidden max-w-[200px]" style={{ backgroundColor: '#e5e7eb' }}>
                       <div
-                        className="h-full bg-[#6057C7] rounded-full transition-all duration-100"
-                        style={{ width: `${progress}%` }}
+                        className="h-full rounded-full transition-all duration-100"
+                        style={{ width: `${progress}%`, backgroundColor: '#6057C7' }}
                       ></div>
                     </div>
-                    <span className="text-xs text-gray-500">
+                    <span className="text-sm" style={{ color: '#6A6A6A' }}>
                       {formatTime(currentTime)} / {formatTime(duration)}
                     </span>
                   </>
@@ -422,11 +447,25 @@ const SampleVoices = ({ onVoiceSelect }) => {
                 e.stopPropagation();
                 handleUseVoice(voice.id);
               }}
-              className={`flex-shrink-0 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                selectedVoice === voice.id
-                  ? 'bg-[#6057C7] text-white hover:bg-[#2F2867]'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
+              className="flex-shrink-0 px-6 py-2.5 rounded-full text-sm font-semibold transition-all shadow-md hover:shadow-lg"
+              style={selectedVoice === voice.id
+                ? { backgroundColor: '#6057C7', color: '#F9F5EB' }
+                : { backgroundColor: '#f3f4f6', color: '#6A6A6A' }
+              }
+              onMouseEnter={(e) => {
+                if (selectedVoice !== voice.id) {
+                  e.currentTarget.style.backgroundColor = '#e5e7eb';
+                } else {
+                  e.currentTarget.style.backgroundColor = '#4f46e5';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (selectedVoice !== voice.id) {
+                  e.currentTarget.style.backgroundColor = '#f3f4f6';
+                } else {
+                  e.currentTarget.style.backgroundColor = '#6057C7';
+                }
+              }}
             >
               {selectedVoice === voice.id ? 'Selected' : 'Use'}
             </button>

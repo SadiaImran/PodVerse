@@ -160,19 +160,29 @@ async def get_sample_voices(auth_data: dict = Depends(get_authenticated_supabase
             if filename.endswith((".wav", ".mp3", ".m4a", ".ogg", ".flac")):
                 
                 # Extract voice name from filename
-                # Format: preview_Achernar.wav -> Achernar
+                # Format: preview_Achernar.wav -> Achernar (keep original case for Gemini API)
                 voice_name = filename
                 if filename.startswith("preview_"):
-                    voice_name = filename.replace("preview_", "").replace("_", " ")
+                    voice_name = filename.replace("preview_", "")
+                # Remove file extension
                 if filename.endswith(".wav"):
                     voice_name = voice_name.replace(".wav", "")
                 elif filename.endswith(".mp3"):
                     voice_name = voice_name.replace(".mp3", "")
                 elif filename.endswith(".m4a"):
                     voice_name = voice_name.replace(".m4a", "")
+                elif filename.endswith(".ogg"):
+                    voice_name = voice_name.replace(".ogg", "")
+                elif filename.endswith(".flac"):
+                    voice_name = voice_name.replace(".flac", "")
                 
-                # Capitalize first letter of each word
-                voice_name = " ".join(word.capitalize() for word in voice_name.split())
+                # Keep original case (Gemini voice names are case-sensitive)
+                # Remove underscores but keep original capitalization
+                voice_name = voice_name.replace("_", " ")
+                
+                # Store both display name (capitalized) and API name (original)
+                display_name = " ".join(word.capitalize() for word in voice_name.split())
+                api_voice_name = voice_name  # Keep original for API
                 
                 # Generate public URL for the file
                 file_path = f"{folder_path}/{filename}"
@@ -181,9 +191,10 @@ async def get_sample_voices(auth_data: dict = Depends(get_authenticated_supabase
                 # Create voice object
                 voice_data = {
                     "id": filename,  # Use filename as ID since we don't have database IDs
-                    "name": voice_name,
+                    "name": display_name,  # Display name (capitalized) for UI
+                    "apiName": api_voice_name,  # API name (original case) for Gemini Realtime
                     "category": ["Gemini", "AI Voice"],  # Default categories
-                    "description": f"Gemini AI voice: {voice_name}",
+                    "description": f"Gemini AI voice: {display_name}",
                     "audioSrc": public_url,
                     "filename": filename,
                     "created_at": file_metadata.get("created_at", ""),

@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, Form
 from fastapi.responses import JSONResponse, FileResponse
 from connection_supabase_client import get_authenticated_supabase_client, get_service_role_client
 import os
+import re
+import time
 import ffmpeg
 import subprocess
 
@@ -83,6 +85,18 @@ TEMP_DIR = os.path.join(BASE_DIR, "temp_audio")
 os.makedirs(TEMP_DIR, exist_ok=True)
 
 
+def sanitize_filename(filename: str, fallback: str = "audio_input.wav") -> str:
+    """
+    Remove query params, directories, and unsupported characters from filenames.
+    """
+    if not filename:
+        return fallback
+    base_name = filename.split("?")[0]
+    base_name = os.path.basename(base_name)
+    safe_name = re.sub(r'[^A-Za-z0-9._-]', '_', base_name)
+    return safe_name or fallback
+
+
 def split_audio(input_path: str, start_time: float, duration: float, output_name: str):
     output_path = os.path.join(TEMP_DIR, output_name)
     try:
@@ -125,37 +139,44 @@ def export_audio(input_path: str, format: str, output_name: str):
 
 @router.post("/split")
 async def split_audio_api(file: UploadFile, start_time: float = Form(...), duration: float = Form(...)):
-    input_path = os.path.join(TEMP_DIR, file.filename)
+    safe_name = sanitize_filename(file.filename, "uploaded_audio.wav")
+    input_path = os.path.join(TEMP_DIR, safe_name)
     with open(input_path, "wb") as f:
         f.write(await file.read())
-    output_path = split_audio(input_path, start_time, duration, f"split_{file.filename}")
+    output_filename = sanitize_filename(f"split_{safe_name}", f"split_{safe_name}")
+    output_path = split_audio(input_path, start_time, duration, output_filename)
     return FileResponse(output_path, filename=os.path.basename(output_path))
 
 
 @router.post("/speed")
 async def change_speed_api(file: UploadFile, speed: float = Form(...)):
-    input_path = os.path.join(TEMP_DIR, file.filename)
+    safe_name = sanitize_filename(file.filename, "uploaded_audio.wav")
+    input_path = os.path.join(TEMP_DIR, safe_name)
     with open(input_path, "wb") as f:
         f.write(await file.read())
-    output_path = change_speed(input_path, speed, f"speed_{file.filename}")
+    output_filename = sanitize_filename(f"speed_{safe_name}", f"speed_{safe_name}")
+    output_path = change_speed(input_path, speed, output_filename)
     return FileResponse(output_path, filename=os.path.basename(output_path))
 
 
 @router.post("/volume")
 async def change_volume_api(file: UploadFile, volume: float = Form(...)):
-    input_path = os.path.join(TEMP_DIR, file.filename)
+    safe_name = sanitize_filename(file.filename, "uploaded_audio.wav")
+    input_path = os.path.join(TEMP_DIR, safe_name)
     with open(input_path, "wb") as f:
         f.write(await file.read())
-    output_path = change_volume(input_path, volume, f"volume_{file.filename}")
+    output_filename = sanitize_filename(f"volume_{safe_name}", f"volume_{safe_name}")
+    output_path = change_volume(input_path, volume, output_filename)
     return FileResponse(output_path, filename=os.path.basename(output_path))
 
 
 @router.post("/export")
 async def export_audio_api(file: UploadFile, format: str = Form(...)):
-    input_path = os.path.join(TEMP_DIR, file.filename)
+    safe_name = sanitize_filename(file.filename, "uploaded_audio.wav")
+    input_path = os.path.join(TEMP_DIR, safe_name)
     with open(input_path, "wb") as f:
         f.write(await file.read())
-    output_name = os.path.splitext(file.filename)[0]
+    output_name = os.path.splitext(safe_name)[0]
     output_path = export_audio(input_path, format, f"exported_{output_name}")
     return FileResponse(output_path, filename=os.path.basename(output_path))
 
@@ -168,8 +189,10 @@ async def merge_audio(files: list[UploadFile]):
     try:
         # Save uploaded files temporarily
         temp_paths = []
-        for file in files:
-            file_path = os.path.join(TEMP_DIR, file.filename)
+        for index, file in enumerate(files):
+            base_name = sanitize_filename(file.filename, f"merge_{index}.wav")
+            unique_name = f"{int(time.time() * 1000)}_{base_name}"
+            file_path = os.path.join(TEMP_DIR, unique_name)
             with open(file_path, "wb") as f:
                 f.write(await file.read())
             temp_paths.append(file_path)

@@ -25,8 +25,6 @@ const PodcastSetupFlow = () => {
     // Project Details
     podcastName: "",
     description: "",
-    episodeNumber: "",
-    duration: "15", // minutes
     tags: [],
     
     // Knowledge Base (will be set by KnowledgeBaseSetup)
@@ -67,20 +65,25 @@ const PodcastSetupFlow = () => {
 
   return (
     <BaseLayout homeScreen={false} autoCollapse={true}>
-      <main className="p-6 bg-gray-50 min-h-screen flex flex-col">
-        {/* Header */}
-        <div className="text-3xl font-headingPoppins font-bold text-light-purple mb-6">
-          Podcast Setup
-        </div>
-        <p className="text-gray-600 mb-8 text-lg">
-          Let's create an amazing podcast episode with AI. We'll guide you through each step.
-        </p>
+      <main className="relative min-h-screen flex flex-col" style={{ background: '#f3f4f6' }}>
+        {/* Background Blobs - Contained */}
+        <div className="fixed -top-28 -left-10 w-72 h-72 rounded-full blur-[120px] opacity-60 pointer-events-none z-0" style={{ background: '#b9a5ff' }} />
+        <div className="fixed top-40 -right-10 w-96 h-96 rounded-full blur-[140px] opacity-40 pointer-events-none z-0" style={{ background: '#ffd5f6' }} />
+        
+        <div className="relative z-10 p-6 md:p-10">
+          {/* Header */}
+          <div className="text-3xl md:text-4xl font-headingPoppins font-bold mb-3" style={{ color: '#6057C7' }}>
+            Podcast Setup
+          </div>
+          <p className="text-base md:text-lg mb-8" style={{ color: '#6A6A6A' }}>
+            Let's create an amazing podcast episode with AI. We'll guide you through each step.
+          </p>
 
-        {/* Timeline Stepper */}
-        <PodcastSetupStepper steps={steps} currentStep={currentStep} />
+          {/* Timeline Stepper */}
+          <PodcastSetupStepper steps={steps} currentStep={currentStep} />
 
-        {/* Main Content */}
-        <div className="mt-6 flex-1">
+          {/* Main Content */}
+          <div className="mt-6 flex-1">
           {currentStep === 0 && (
             <ProjectDetails 
               formData={formData} 
@@ -122,6 +125,7 @@ const PodcastSetupFlow = () => {
               onCreatePodcast={handleCreatePodcast}
             />
           )}
+          </div>
         </div>
       </main>
     </BaseLayout>

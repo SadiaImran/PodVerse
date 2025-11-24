@@ -16,6 +16,41 @@ import {
 
 const API_BASE_URL = 'http://localhost:8000/audio-edit';
 
+const stripQueryString = (value = '') => value.split('?')[0];
+
+const extractFileName = (value = '') => {
+    const withoutQuery = stripQueryString(value);
+    const parts = withoutQuery.split('/');
+    return parts[parts.length - 1] || withoutQuery;
+};
+
+const sanitizeFileName = (value = '', fallbackPrefix = 'track') => {
+    const extracted = extractFileName(value) || `${fallbackPrefix}.wav`;
+    const sanitized = extracted.replace(/[^a-zA-Z0-9._-]/g, '_');
+    if (sanitized) {
+        return sanitized;
+    }
+    return `${fallbackPrefix}_${Date.now()}.wav`;
+};
+
+const buildSanitizedFileName = (value = '', fallbackPrefix = 'track') => {
+    const base = value && value.includes('.') ? value : `${value || fallbackPrefix}.wav`;
+    return sanitizeFileName(base, fallbackPrefix);
+};
+
+const getReadableTrackName = (value = '', fallback = 'Track') => {
+    const baseName = extractFileName(value) || fallback;
+    const underscoreIndex = baseName.indexOf('_');
+    const friendly = underscoreIndex > 0 ? baseName.slice(0, underscoreIndex) : baseName;
+    return friendly || fallback;
+};
+
+const getTrackDisplayName = (track) => {
+    if (!track) return 'Track';
+    if (track.displayName) return track.displayName;
+    return getReadableTrackName(track.name || track.originalName || track.url || 'Track');
+};
+
 const downloadAudioAsBlob = async (url) => {
     const response = await fetch(url);
     const blob = await response.blob();
@@ -23,7 +58,8 @@ const downloadAudioAsBlob = async (url) => {
 };
   
 const uploadAudioToBackend = async (blob, filename, endpoint, formData = {}) => {
-    const file = new File([blob], filename, { type: blob.type });
+    const safeName = buildSanitizedFileName(filename || 'track.wav');
+    const file = new File([blob], safeName, { type: blob.type || 'audio/wav' });
     const form = new FormData();
     form.append('file', file);
     
@@ -52,6 +88,8 @@ const TrackEditPanel = ({ track, isVisible, onClose, onUpdate, onDuplicate, onDe
     });
     const [pendingChanges, setPendingChanges] = useState({});
     const [isProcessing, setIsProcessing] = useState(false);
+    const friendlyName = track ? getTrackDisplayName(track) : 'Track';
+    const fallbackPrefix = friendlyName.replace(/\s+/g, '_').toLowerCase() || 'track';
 
     // Speed options
     const speedOptions = [0.25, 0.5, 1.0, 1.5, 1.75, 2.0];
@@ -92,7 +130,7 @@ const TrackEditPanel = ({ track, isVisible, onClose, onUpdate, onDuplicate, onDe
                     
                     processedBlob = await uploadAudioToBackend(
                         audioBlob,
-                        `${track.name}.wav`,
+                        buildSanitizedFileName(`${friendlyName}.wav`, fallbackPrefix),
                         '/volume',
                         { volume: volumeFactor }
                     );
@@ -101,7 +139,7 @@ const TrackEditPanel = ({ track, isVisible, onClose, onUpdate, onDuplicate, onDe
                     
                     processedBlob = await uploadAudioToBackend(
                         audioBlob,
-                        `${track.name}.wav`,
+                        buildSanitizedFileName(`${friendlyName}.wav`, fallbackPrefix),
                         '/speed',
                         { speed: value }
                     );
@@ -169,7 +207,7 @@ const TrackEditPanel = ({ track, isVisible, onClose, onUpdate, onDuplicate, onDe
                 const volumeFactor = pendingChanges.volume / 100;
                 processedBlob = await uploadAudioToBackend(
                     processedBlob,
-                    track.name,
+                    buildSanitizedFileName(`${friendlyName}.wav`, fallbackPrefix),
                     '/volume',
                     { volume: volumeFactor }
                 );
@@ -179,7 +217,7 @@ const TrackEditPanel = ({ track, isVisible, onClose, onUpdate, onDuplicate, onDe
             if (pendingChanges.speed !== undefined) {
                 processedBlob = await uploadAudioToBackend(
                     processedBlob,
-                    track.name,
+                    buildSanitizedFileName(`${friendlyName}.wav`, fallbackPrefix),
                     '/speed',
                     { speed: pendingChanges.speed }
                 );
@@ -225,14 +263,14 @@ const TrackEditPanel = ({ track, isVisible, onClose, onUpdate, onDuplicate, onDe
         
         try {
             const loadingNotif = document.createElement('div');
-            loadingNotif.textContent = 'Exporting track...';
+            loadingNotif.textContent = `Exporting: ${friendlyName}...`;
             loadingNotif.className = 'fixed top-4 right-4 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
             document.body.appendChild(loadingNotif);
         
             const audioBlob = await downloadAudioAsBlob(track.url);
             const exportedBlob = await uploadAudioToBackend(
                 audioBlob,
-                track.name,
+                buildSanitizedFileName(`${friendlyName}.wav`, fallbackPrefix),
                 '/export',
                 { format: 'wav' }
             );
@@ -240,7 +278,7 @@ const TrackEditPanel = ({ track, isVisible, onClose, onUpdate, onDuplicate, onDe
             const url = URL.createObjectURL(exportedBlob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `${track.name}_exported.wav`;
+            a.download = buildSanitizedFileName(`${friendlyName}_exported.wav`, fallbackPrefix);
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -272,7 +310,7 @@ const TrackEditPanel = ({ track, isVisible, onClose, onUpdate, onDuplicate, onDe
     };
 
     const handleDelete = () => {
-        if (window.confirm(`Are you sure you want to delete "${track.name}"?`)) {
+        if (window.confirm(`Are you sure you want to delete "${friendlyName}"?`)) {
             onDelete && onDelete(track.id);
             onClose();
         }
@@ -294,7 +332,7 @@ const TrackEditPanel = ({ track, isVisible, onClose, onUpdate, onDuplicate, onDe
                         </div>
                         <div>
                             <h3 className="font-semibold text-gray-900">Track Settings</h3>
-                            <p className="text-sm text-gray-600">{track.name}</p>
+                            <p className="text-sm text-gray-600">{friendlyName}</p>
                         </div>
                     </div>
                     <button

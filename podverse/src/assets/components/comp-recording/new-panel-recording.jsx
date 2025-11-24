@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { GrPowerCycle } from "react-icons/gr";
 import { PiMicrophoneBold, PiMicrophoneSlashBold, PiPauseBold, PiPlayFill } from "react-icons/pi";
+import { useNavigate } from "react-router-dom";
 import { supabase , getSupabaseAuthorizedtoken } from "../../supabaseClient";
 import { useAuth } from "../../context/AuthContext"; 
 
@@ -190,7 +191,25 @@ const RealAudioWaveform = ({ isActive = false, isMicOn = false }) => {
 };
 
 // Enhanced Status indicator with time display
-const StatusIndicator = ({ isRecording, isProcessing, isSpeaking, conversationStarted, isPaused, elapsedTime, recordingStatus, recordingUrl }) => {
+const getCleanRecordingPath = (value = '') => {
+  if (!value) return '';
+  return value.split('?')[0] || value;
+};
+
+const extractRecordingFileName = (value = '') => {
+  const clean = getCleanRecordingPath(value);
+  if (!clean) return '';
+  const lastSlash = clean.lastIndexOf('/');
+  return lastSlash >= 0 ? clean.slice(lastSlash + 1) : clean;
+};
+
+const getFriendlyRecordingLabel = (value = '', fallback = 'Recording') => {
+  const base = extractRecordingFileName(value) || fallback;
+  const underscoreIndex = base.indexOf('_');
+  return underscoreIndex > 0 ? base.slice(0, underscoreIndex) : base;
+};
+
+const StatusIndicator = ({ isRecording, isProcessing, isSpeaking, conversationStarted, isPaused, elapsedTime, recordingStatus, recordingUrl, recordingFilename, onCopyUrl }) => {
   const formatTime = (seconds) => {
     const totalSeconds = Math.floor(seconds);
     const mins = Math.floor(totalSeconds / 60);
@@ -198,19 +217,105 @@ const StatusIndicator = ({ isRecording, isProcessing, isSpeaking, conversationSt
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const friendlyRecordingName = getFriendlyRecordingLabel(recordingFilename || recordingUrl);
+
+  // Show stopping status
+  if (recordingStatus === 'stopping') {
+    return (
+      <div className="flex items-center justify-center p-4 text-white rounded-full shadow-md bg-orange-500 space-x-5">
+        <div className="w-3 h-3 bg-white rounded-full animate-pulse"></div>
+        <span className="font-semibold">Stopping Recording...</span>
+      </div>
+    );
+  }
+
+  // Show saving status
+  if (recordingStatus === 'saving') {
+    return (
+      <div className="flex items-center justify-center p-4 text-white rounded-full shadow-md bg-blue-500 space-x-5">
+        <div className="w-3 h-3 bg-white rounded-full animate-spin">
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+        </div>
+        <span className="font-semibold">Saving Recording...</span>
+      </div>
+    );
+  }
+
+  // Show saved status with URL
+  if (recordingStatus === 'saved') {
+    return (
+      <div className="flex flex-col items-center gap-3">
+        <div className="flex items-center justify-center p-4 text-white rounded-full shadow-md bg-green-500 space-x-5">
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+          <div className="flex flex-col items-start leading-tight">
+            <span className="font-semibold">Recording Saved!</span>
+            <span className="text-sm text-white/80 font-medium">{friendlyRecordingName}</span>
+          </div>
+        </div>
+        {recordingUrl && (
+          <div className="flex items-center gap-2 bg-white/90 backdrop-blur-sm px-4 py-2 rounded-lg border-2 border-green-200 shadow-md max-w-md">
+            <svg className="w-4 h-4 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+            </svg>
+            <a 
+              href={recordingUrl} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-sm text-green-700 hover:text-green-800 font-medium truncate underline"
+              title={recordingUrl}
+            >
+              View {friendlyRecordingName}
+            </a>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                navigator.clipboard.writeText(recordingUrl);
+                if (onCopyUrl) {
+                  onCopyUrl();
+                }
+              }}
+              className="ml-2 p-1 hover:bg-green-100 rounded transition-colors"
+              title="Copy URL"
+            >
+              <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Show error status
+  if (recordingStatus === 'error') {
+    return (
+      <div className="flex items-center justify-center p-4 text-white rounded-full shadow-md bg-red-500 space-x-5">
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+        <span className="font-semibold">Recording Error</span>
+      </div>
+    );
+  }
+
   // Show recording status
-  if (isRecording) {
+  if (isRecording && recordingStatus === 'recording') {
     return (
       <div className="flex items-center justify-center p-4 text-white rounded-full shadow-md bg-indigo-500 space-x-5">
         <div className="w-3 h-3 bg-white rounded-full animate-pulse"></div>
-        <span className=" font-semibold">Recording</span>
-        <span className=" font-bold ">{formatTime(elapsedTime)}</span>
+        <span className="font-semibold">Recording</span>
+        <span className="font-bold">{formatTime(elapsedTime)}</span>
       </div>
     );
   }
 
   // Show ready status
-  if (conversationStarted) {
+  if (conversationStarted && recordingStatus === 'idle') {
     return (
       <div className="flex items-center justify-center space-x-3 bg-gradient-to-r from-green-500 to-green-600 px-12 py-4 rounded-full shadow-lg">
         <div className="w-3 h-3 bg-white rounded-full"></div>
@@ -233,6 +338,7 @@ const NewPanelsRecording = ({ podcastConfig = {} }) => {
   const SELECTED_AGENT = 'guest'; // Change to 'guest' for different behavior
   
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   // LiveKit Configuration - Dynamic token fetching
   const [serverUrl, setServerUrl] = useState('');
@@ -269,9 +375,11 @@ const NewPanelsRecording = ({ podcastConfig = {} }) => {
   
   // Recording state
   const [isRecording, setIsRecording] = useState(false);
-  const [recordingStatus, setRecordingStatus] = useState('idle'); // 'idle', 'recording', 'saving', 'saved', 'error'
+  const [recordingStatus, setRecordingStatus] = useState('idle'); // 'idle', 'recording', 'stopping', 'saving', 'saved', 'error'
   const [recordingUrl, setRecordingUrl] = useState(null);
   const [sessionStarted, setSessionStarted] = useState(false);
+  const [postRecordingModalOpen, setPostRecordingModalOpen] = useState(false);
+  const [recordingFilename, setRecordingFilename] = useState(null);
   
   // Time recording state
   const [startTime, setStartTime] = useState(null);
@@ -390,6 +498,15 @@ const fetchLiveKitToken = async () => {
     formData.append("agent_type", agentType);
     console.log("🎯 Using agent type:", agentType);
     
+    // Get host persona data if AI Host is selected
+    if (agentType === "host") {
+      const hostPersona = sessionStorage.getItem('host_persona');
+      if (hostPersona) {
+        formData.append("host_persona", hostPersona);
+        console.log("🎙️ Sending host persona to backend:", JSON.parse(hostPersona));
+      }
+    }
+    
     // Get guest persona data if AI Guest is selected
     if (agentType === "guest") {
       const guestPersona = sessionStorage.getItem('guest_persona');
@@ -406,7 +523,33 @@ const fetchLiveKitToken = async () => {
       console.log("🎤 Using selected voice name:", selectedVoiceName);
     }
 
+    // Get podcast configuration from podcastConfig
+    if (podcastConfig?.podcastName) {
+      formData.append("podcast_title", podcastConfig.podcastName);
+      console.log("📝 Using podcast title:", podcastConfig.podcastName);
+    }
+    
+    // Pass podcast description for additional context
+    if (podcastConfig?.description) {
+      formData.append("podcast_description", podcastConfig.description);
+      console.log("📄 Using podcast description:", podcastConfig.description);
+    }
+    
+    // Pass podcast tags for categorization/context
+    if (podcastConfig?.tags && Array.isArray(podcastConfig.tags) && podcastConfig.tags.length > 0) {
+      formData.append("podcast_tags", JSON.stringify(podcastConfig.tags));
+      console.log("🏷️ Using podcast tags:", podcastConfig.tags);
+    }
+
     console.log("🎟️ Fetching LiveKit token for:", user);
+    console.log("📦 Full podcast config being sent:", {
+      title: podcastConfig?.podcastName,
+      description: podcastConfig?.description,
+      tags: podcastConfig?.tags,
+      speakerType: podcastConfig?.speakerType,
+      agentName: podcastConfig?.agentName,
+      guestPersona: podcastConfig?.guestPersona
+    });
 
     const response = await axios.post(
       "http://localhost:8000/livekit/get-token",
@@ -604,25 +747,23 @@ const fetchLiveKitToken = async () => {
       setRecordingStatus('recording');
       setConversationStarted(true);
       
-      // Start audio egress (recording) - COMMENTED OUT FOR TESTING
-      // const formData = new FormData();
-      // formData.append('room_name', roomName); // Use the actual room name
-      // formData.append('user_id', user?.id || '');
-      // formData.append('kb_id', podcastConfig?.selectedKnowledgeBase || '');
+      // Start audio egress (recording)
+      const formData = new FormData();
+      formData.append('room_name', roomName); // Use the actual room name
+      formData.append('user_id', user?.id || '');
+      formData.append('kb_id', podcastConfig?.selectedKnowledgeBase || '');
 
-      // const response = await fetch('http://localhost:8000/livekit/start-audio-egress', {
-      //   method: 'POST',
-      //   body: formData,
-      // });
+      const response = await fetch('http://localhost:8000/livekit/start-audio-egress', {
+        method: 'POST',
+        body: formData,
+      });
 
-      // if (response.ok) {
-      //   showToast('🎙️ Recording started!', 'success');
-      // } else {
-      //   console.error('Failed to start recording');
-      //   showToast('Failed to start recording', 'error');
-      // }
-      
-      showToast('🎙️ Recording started! (Egress disabled for testing)', 'success');
+      if (response.ok) {
+        showToast('🎙️ Recording started!', 'success');
+      } else {
+        console.error('Failed to start recording');
+        showToast('Failed to start recording', 'error');
+      }
     } catch (error) {
       console.error('❌ Failed to start recording session:', error);
       showToast('Failed to start recording session', 'error');
@@ -632,30 +773,84 @@ const fetchLiveKitToken = async () => {
   // Stop Recording Session
   const stopRecordingSession = async () => {
     try {
-      setSessionStarted(false);
+      // Step 1: Show stopping status
       setIsRecording(false);
-      setRecordingStatus('stopped');
+      setRecordingStatus('stopping');
+      showToast('⏹️ Stopping recording...', 'info');
       
-      // Stop audio egress (recording) - COMMENTED OUT FOR TESTING
-      // const response = await fetch('http://localhost:8000/livekit/stop-audio-egress', {
-      //   method: 'POST',
-      //   headers: {
-      //     'Content-Type': 'application/json',
-      //   },
-      //   body: JSON.stringify({ room_name: roomName }),
-      // });
+      // Step 2: Stop audio egress (recording) - Use FormData as endpoint expects Form
+      const formData = new FormData();
+      formData.append('room_name', roomName);
+      
+      // Get auth token for signed URL generation
+      const token = await getSupabaseAuthorizedtoken();
+      
+      const response = await fetch('http://localhost:8000/livekit/stop-audio-egress', {
+        method: 'POST',
+        headers: token ? {
+          'Authorization': `Bearer ${token}`
+        } : {},
+        body: formData,
+      });
 
-      // if (response.ok) {
-      //   showToast('⏹️ Recording stopped!', 'info');
-      // } else {
-      //   console.error('Failed to stop recording');
-      //   showToast('Failed to stop recording', 'error');
-      // }
-      
-      showToast('⏹️ Recording stopped! (Egress disabled for testing)', 'info');
+      if (response.ok) {
+        const responseData = await response.json();
+        const recordingUrlFromResponse =
+          responseData.recording_url ||
+          responseData.public_url ||
+          responseData.url ||
+          null;
+        const recordingFilenameFromResponse =
+          responseData.filename ||
+          extractRecordingFileName(recordingUrlFromResponse) ||
+          `recording_${Date.now()}.ogg`;
+        
+        setRecordingStatus('saving');
+        showToast('💾 Saving recording...', 'info');
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        setRecordingStatus('saved');
+        setSessionStarted(false);
+        
+        if (recordingUrlFromResponse) {
+          setRecordingUrl(recordingUrlFromResponse);
+          setRecordingFilename(recordingFilenameFromResponse);
+          setPostRecordingModalOpen(true);
+          showToast('✅ Recording saved successfully! Click to view.', 'success');
+          console.log('📁 Recording URL:', recordingUrlFromResponse);
+        } else {
+          setRecordingFilename(null);
+          setPostRecordingModalOpen(false);
+          showToast('✅ Recording saved successfully!', 'success');
+        }
+        
+        setTimeout(() => {
+          setRecordingStatus('idle');
+          setConversationStarted(false);
+        }, 3000);
+      } else {
+        console.error('Failed to stop recording');
+        setRecordingStatus('error');
+        setPostRecordingModalOpen(false);
+        setRecordingFilename(null);
+        showToast('❌ Failed to stop recording', 'error');
+        setTimeout(() => {
+          setRecordingStatus('idle');
+          setSessionStarted(false);
+          setConversationStarted(false);
+        }, 3000);
+      }
     } catch (error) {
       console.error('❌ Failed to stop recording session:', error);
-      showToast('Failed to stop recording session', 'error');
+      setRecordingStatus('error');
+      setPostRecordingModalOpen(false);
+      setRecordingFilename(null);
+      showToast('❌ Failed to stop recording session', 'error');
+      setTimeout(() => {
+        setRecordingStatus('idle');
+        setSessionStarted(false);
+        setConversationStarted(false);
+      }, 3000);
     }
   };
 
@@ -677,6 +872,7 @@ const fetchLiveKitToken = async () => {
     setIsRecording(false);
     setRecordingStatus('idle');
     setRecordingUrl(null);
+    setRecordingFilename(null);
     setIsPaused(false);
     setIsProcessing(false);
     setIsSpeaking(false);
@@ -692,7 +888,26 @@ const fetchLiveKitToken = async () => {
     setManualMessage('');
     setLiveKitConnected(false);
     setLiveKitConnecting(false);
+    setPostRecordingModalOpen(false);
+    sessionStorage.removeItem('recordingUrl');
+    sessionStorage.removeItem('recordingFilename');
     showToast('🔄 Session restarted. Fresh slate, as it were.', 'info');
+  };
+
+  const handleStayInSession = () => {
+    setPostRecordingModalOpen(false);
+  };
+
+  const handleGoToAudioEditor = () => {
+    if (!recordingUrl) {
+      showToast('Recording is still processing. Please wait a moment.', 'warning');
+      return;
+    }
+    const filenameToUse = recordingFilename || extractRecordingFileName(recordingUrl) || `recording_${Date.now()}.ogg`;
+    sessionStorage.setItem('recordingUrl', recordingUrl);
+    sessionStorage.setItem('recordingFilename', filenameToUse);
+    setPostRecordingModalOpen(false);
+    navigate('/audio-edit', { state: { recordingUrl, recordingFilename: filenameToUse } });
   };
 
   // Handle transcription segments from the agent (streaming style)
@@ -897,23 +1112,30 @@ const fetchLiveKitToken = async () => {
     return (
       <div className="p-6 space-y-6">
         {/* Script Metadata */}
-        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+        <div className="rounded-xl p-4 border" style={{ backgroundColor: '#f5f3ff', borderColor: '#c4b5fd' }}>
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="font-semibold text-gray-800">Generated Script</h3>
-              <p className="text-sm text-gray-600 mt-1">
+              <h3 className="font-semibold text-base mb-1" style={{ color: '#6A6A6A' }}>Generated Script</h3>
+              <p className="text-sm mt-1" style={{ color: '#6A6A6A' }}>
                 Role: {scriptData.metadata?.role?.toUpperCase() || 'GUEST'} • 
                 {scriptData.metadata?.word_count || 0} words • 
                 {scriptData.metadata?.estimated_duration || 'N/A'}
               </p>
             </div>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center gap-2">
               <button 
                 onClick={() => {
                   navigator.clipboard.writeText(scriptText);
                   showToast('Script copied to clipboard!', 'success');
                 }}
-                className="text-xs bg-purple-500 text-white px-3 py-1 rounded hover:bg-purple-600 transition-colors"
+                className="px-4 py-2 rounded-full text-xs font-semibold transition-all shadow-sm hover:shadow-md"
+                style={{ backgroundColor: '#6057C7', color: '#F9F5EB' }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#4f46e5';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#6057C7';
+                }}
               >
                 Copy
               </button>
@@ -930,7 +1152,14 @@ const fetchLiveKitToken = async () => {
                   URL.revokeObjectURL(url);
                   showToast('Script downloaded!', 'success');
                 }}
-                className="text-xs bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 transition-colors"
+                className="px-4 py-2 rounded-full text-xs font-semibold transition-all shadow-sm hover:shadow-md"
+                style={{ backgroundColor: '#22c55e', color: '#F9F5EB' }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#16a34a';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#22c55e';
+                }}
               >
                 Download
               </button>
@@ -945,35 +1174,37 @@ const fetchLiveKitToken = async () => {
             sections.map((section, idx) => (
               <div 
                 key={idx} 
-                className={`p-4 rounded-lg border-l-4 ${
-                  section.speaker === 'HOST' 
-                    ? 'bg-blue-50 border-blue-500' 
-                    : 'bg-purple-50 border-purple-500'
-                }`}
+                className="p-4 rounded-xl border-l-4"
+                style={section.speaker === 'HOST' 
+                  ? { backgroundColor: '#dbeafe', borderColor: '#3b82f6' }
+                  : { backgroundColor: '#f5f3ff', borderColor: '#6057C7' }
+                }
               >
-                <div className="flex items-center space-x-2 mb-2">
-                  <span className={`text-xs font-bold px-2 py-1 rounded ${
-                    section.speaker === 'HOST'
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-purple-500 text-white'
-                  }`}>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs font-bold px-3 py-1 rounded-full"
+                  style={section.speaker === 'HOST'
+                    ? { backgroundColor: '#3b82f6', color: '#F9F5EB' }
+                    : { backgroundColor: '#6057C7', color: '#F9F5EB' }
+                  }>
                     {section.speaker}
                   </span>
-                  <span className="text-xs text-gray-500">Segment {idx + 1}</span>
+                  <span className="text-xs" style={{ color: '#6A6A6A' }}>Segment {idx + 1}</span>
                 </div>
-                <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+                <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: '#1C1C1C' }}>
                   {section.content}
                 </p>
               </div>
             ))
           ) : (
             // If sections are empty, show raw script text
-            <div className="p-4 rounded-lg bg-gray-50 border border-gray-200">
-              <div className="flex items-center space-x-2 mb-3">
-                <Icon name="podcast" className="w-5 h-5 text-purple-500" />
-                <span className="text-sm font-semibold text-gray-800">Full Script</span>
+            <div className="p-4 rounded-xl border" style={{ backgroundColor: '#f9fafb', borderColor: '#e5e7eb' }}>
+              <div className="flex items-center gap-2 mb-3">
+                <svg className="w-5 h-5" style={{ color: '#6057C7' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span className="text-sm font-semibold" style={{ color: '#6A6A6A' }}>Full Script</span>
               </div>
-              <div className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap max-h-[600px] overflow-y-auto">
+              <div className="text-sm leading-relaxed whitespace-pre-wrap max-h-[600px] overflow-y-auto" style={{ color: '#1C1C1C' }}>
                 {scriptText}
               </div>
             </div>
@@ -997,9 +1228,9 @@ const fetchLiveKitToken = async () => {
         ))}
       </div>
 
-      <div className="h-full rounded-3xl border-2 border-purple-200/50 shadow-2xl overflow-hidden flex bg-white/90 backdrop-blur-sm">
+      <div className="h-full rounded-[28px] border overflow-hidden flex" style={{ borderColor: '#e5e7eb', backgroundColor: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(10px)' }}>
           {/* Left Panel - Participants (More Space) */}
-          <div className="w-3/5 bg-gradient-to-br from-purple-50 via-white to-purple-100/30 flex">
+          <div className="w-3/5 flex" style={{ background: 'linear-gradient(135deg, #f5f3ff 0%, #ffffff 50%, #f5f3ff 100%)' }}>
         
         {/* Left Section - Participants + Session Management */}
         <section className="flex flex-col justify-center items-center my-auto mx-8 font-headingPoppins">
@@ -1007,11 +1238,10 @@ const fetchLiveKitToken = async () => {
           <div className="p-8 bg-light-lightPurple backdrop-blur-md rounded-3xl border-2 border-purple-200/50 shadow-2xl hover:shadow-3xl transition-all duration-300 w-full max-w-md">
               <h3 className="text-2xl font-bold text-white mb-3">Participants</h3>
             <div className="space-y-6">
-              {/* LiveKit Participants */}
-              <LiveKitParticipants podcastConfig={podcastConfig} />
-              
-              {/* Show message if no participants */}
-              {!liveKitConnected && (
+              {/* LiveKit Participants - Only render when connected to avoid hooks order issues */}
+              {liveKitConnected && room ? (
+                <LiveKitParticipants podcastConfig={podcastConfig} />
+              ) : (
                 <div className="text-center text-white py-8">
                   <div className="w-16 h-16 bg-gradient-to-br from-purple-100 to-purple-200 rounded-full flex items-center justify-center mx-auto mb-4">
                     <Icon name="podcast" className="w-8 h-8 text-purple-400" />
@@ -1089,7 +1319,7 @@ const fetchLiveKitToken = async () => {
         </section>
 
         {/* Separator */}
-        <div className="w-px bg-gradient-to-b from-purple-200 to-purple-300"></div>
+        <div className="w-px" style={{ backgroundColor: '#e5e7eb' }}></div>
 
         {/* Right Section - Main Controls */}
         <section className="w-2/3 flex flex-col my-auto mx-8">
@@ -1127,8 +1357,10 @@ const fetchLiveKitToken = async () => {
                conversationStarted={sessionStarted}
                isPaused={false}
                elapsedTime={elapsedTime}
-               recordingStatus={sessionStarted ? 'recording' : 'idle'}
+               recordingStatus={recordingStatus}
                recordingUrl={recordingUrl}
+              recordingFilename={recordingFilename}
+               onCopyUrl={() => showToast('📋 Recording URL copied to clipboard!', 'success')}
              />
            </div>
 
@@ -1157,11 +1389,26 @@ const fetchLiveKitToken = async () => {
                  <div className="flex flex-col items-center gap-2">
                    <button 
                      onClick={stopRecordingSession}
-                     className="w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 shadow-lg hover:shadow-xl hover:-translate-y-1 bg-gradient-to-br from-red-500 to-red-600 text-white border-2 border-red-700 shadow-red-500/50"
+                     disabled={recordingStatus === 'stopping' || recordingStatus === 'saving'}
+                     className={`w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 shadow-lg ${
+                       recordingStatus === 'stopping' || recordingStatus === 'saving'
+                         ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                         : 'bg-gradient-to-br from-red-500 to-red-600 text-white border-2 border-red-700 shadow-red-500/50 hover:shadow-xl hover:-translate-y-1'
+                     }`}
                    >
-                     <PiPauseBold className="w-10 h-10" />
+                     {recordingStatus === 'stopping' || recordingStatus === 'saving' ? (
+                       <svg className="w-10 h-10 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                       </svg>
+                     ) : (
+                       <PiPauseBold className="w-10 h-10" />
+                     )}
                    </button>
-                   <span className="text-xs font-medium text-gray-600">Stop Recording</span>
+                   <span className="text-xs font-medium text-gray-600">
+                     {recordingStatus === 'stopping' ? 'Stopping...' : 
+                      recordingStatus === 'saving' ? 'Saving...' : 
+                      'Stop Recording'}
+                   </span>
                  </div>
                )}
 
@@ -1192,61 +1439,90 @@ const fetchLiveKitToken = async () => {
       </div>
 
       {/* Right Panel - Transcript (Original Size) */}
-      <div className="w-2/5 bg-gradient-to-br from-gray-50 to-purple-50/30 flex flex-col border-l-2 border-purple-200/50">
+      <div className="w-2/5 flex flex-col border-l-2" style={{ backgroundColor: '#f9fafb', borderColor: '#e5e7eb' }}>
         {/* Header */}
-        <div className="bg-gradient-to-r from-purple-50 to-white border-b-2 border-purple-200/50 px-6 py-4">
+        <div className="px-6 py-4 border-b-2" style={{ backgroundColor: 'rgba(255, 255, 255, 0.9)', borderColor: '#e5e7eb' }}>
           <div className="flex items-center justify-between">
             {/* Tab Buttons */}
-            <div className="flex space-x-6">
+            <div className="flex gap-4">
               <button 
                 onClick={() => setActiveTab('transcript')}
-                className={`pb-3 text-lg font-semibold transition-all duration-300 relative ${
+                className={`px-6 py-3 rounded-full font-semibold text-base transition-all duration-300 flex items-center gap-2 ${
                   activeTab === 'transcript'
-                    ? 'text-purple-600'
-                    : 'text-gray-500 hover:text-purple-600'
+                    ? 'text-white shadow-md'
+                    : 'text-gray-600 border-2 border-gray-300 bg-white hover:border-[#6057C7]'
                 }`}
+                style={activeTab === 'transcript'
+                  ? { backgroundColor: '#6057C7', color: '#F9F5EB' }
+                  : {}
+                }
+                onMouseEnter={(e) => {
+                  if (activeTab !== 'transcript') {
+                    e.currentTarget.style.borderColor = '#6057C7';
+                    e.currentTarget.style.backgroundColor = '#f5f3ff';
+                  } else {
+                    e.currentTarget.style.backgroundColor = '#4f46e5';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (activeTab !== 'transcript') {
+                    e.currentTarget.style.borderColor = '#d1d5db';
+                    e.currentTarget.style.backgroundColor = 'white';
+                  } else {
+                    e.currentTarget.style.backgroundColor = '#6057C7';
+                  }
+                }}
               >
-                <span className="flex items-center gap-2">
-                  <div className={`w-4 h-4 rounded-full ${
-                    activeTab === 'transcript' ? 'bg-purple-500' : 'bg-gray-300'
-                  }`}></div>
-                  Transcript
-                </span>
-                {activeTab === 'transcript' && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-purple-500 to-purple-600 rounded-full"></div>
-                )}
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Transcript
               </button>
               <button 
                 onClick={() => setActiveTab('script')}
-                className={`pb-3 text-lg font-semibold transition-all duration-300 relative ${
+                className={`px-6 py-3 rounded-full font-semibold text-base transition-all duration-300 flex items-center gap-2 ${
                   activeTab === 'script'
-                    ? 'text-light-lightPurple'
-                    : 'text-gray-500 hover:text-light-lightPurple'
+                    ? 'text-white shadow-md'
+                    : 'text-gray-600 border-2 border-gray-300 bg-white hover:border-[#6057C7]'
                 }`}
+                style={activeTab === 'script'
+                  ? { backgroundColor: '#6057C7', color: '#F9F5EB' }
+                  : {}
+                }
+                onMouseEnter={(e) => {
+                  if (activeTab !== 'script') {
+                    e.currentTarget.style.borderColor = '#6057C7';
+                    e.currentTarget.style.backgroundColor = '#f5f3ff';
+                  } else {
+                    e.currentTarget.style.backgroundColor = '#4f46e5';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (activeTab !== 'script') {
+                    e.currentTarget.style.borderColor = '#d1d5db';
+                    e.currentTarget.style.backgroundColor = 'white';
+                  } else {
+                    e.currentTarget.style.backgroundColor = '#6057C7';
+                  }
+                }}
               >
-                <span className="flex items-center gap-2">
-                  <div className={`w-4 h-4 rounded-full ${
-                    activeTab === 'script' ? 'bg-light-lightPurple' : 'bg-gray-300'
-                  }`}></div>
-                  Script
-                  {podcastScript && (
-                    <span className="w-2 h-2 bg-light-lightPurple rounded-full animate-pulse"></span>
-                  )}
-                </span>
-                {activeTab === 'script' && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-light-lightPurple rounded-full"></div>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Script
+                {podcastScript && (
+                  <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: '#F9F5EB' }}></span>
                 )}
               </button>
             </div>
           </div>
           
-          
           {/* Script Info Banner - Only show on script tab */}
           {activeTab === 'script' && podcastScript && (
-            <div className="mt-3 p-3 bg-gradient-to-r from-green-50 to-green-100 border border-green-200 rounded-xl shadow-sm">
-              <div className="flex items-center space-x-3">
-                <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-                <span className="text-sm text-green-700 font-semibold">
+            <div className="mt-4 p-4 rounded-xl border" style={{ backgroundColor: '#f0fdf4', borderColor: '#22c55e' }}>
+              <div className="flex items-center gap-3">
+                <div className="w-3 h-3 rounded-full animate-pulse" style={{ backgroundColor: '#22c55e' }}></div>
+                <span className="text-sm font-semibold" style={{ color: '#166534' }}>
                   Script loaded: {podcastScript.metadata?.segment_count || 0} segments • 
                   {podcastScript.metadata?.word_count || 0} words
                 </span>
@@ -1256,13 +1532,13 @@ const fetchLiveKitToken = async () => {
         </div>
 
         {/* Transcript Area - Streaming Style */}
-        <div className="flex-1 overflow-y-auto p-6 bg-gradient-to-br from-white via-gray-50/50 to-purple-50/20">
+        <div className="flex-1 overflow-y-auto p-6 pb-4" style={{ backgroundColor: '#fafafa' }}>
           {activeTab === 'transcript' ? (
             // Enhanced Transcript View
             <>
               {transcript.length === 0 && !streamingText ? (
                 <div className="text-center text-gray-500 mt-20">
-                  <div className="w-96 h-96 mx-auto mb-6 flex items-center justify-center">
+                  <div className="w-64 h-64 mx-auto mb-6 flex items-center justify-center">
                     <img 
                       src={aiImage} 
                       alt="AI Assistant" 
@@ -1273,9 +1549,8 @@ const fetchLiveKitToken = async () => {
                   <p className="text-sm text-gray-400">Your transcript will appear here in real-time</p>
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-4 pb-4">
                   {transcript.map((entry, idx) => {
-                    const { user } = useAuth();
                     const isUser = entry.speaker === "You" || entry.speaker === user?.full_name;
                     const isAI = entry.speaker === "AI Assistant" || entry.speaker === "AI Agent";
                     
@@ -1295,11 +1570,15 @@ const fetchLiveKitToken = async () => {
                     >
                       <div className={`flex items-start gap-3 max-w-[80%] ${isUser ? 'flex-row-reverse' : ''}`}>
                         <div className="flex-shrink-0">
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-lg overflow-hidden ${
-                            isUser ? "bg-light-lightPurple" : 
-                            entry.speaker === "System" ? "bg-gradient-to-br from-yellow-500 to-yellow-600" :
-                            isAI ? "bg-gradient-to-br from-blue-500 to-blue-600" : "bg-gradient-to-br from-gray-500 to-gray-600"
-                          }`}>
+                          <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-lg overflow-hidden"
+                          style={isUser 
+                            ? { backgroundColor: '#6057C7' }
+                            : entry.speaker === "System"
+                            ? { background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)' }
+                            : isAI
+                            ? { background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)' }
+                            : { background: 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)' }
+                          }>
                             {isUser ? (
                               <span className="text-sm font-bold">{userName.charAt(0).toUpperCase()}</span>
                             ) : entry.speaker === "System" ? (
@@ -1320,15 +1599,23 @@ const fetchLiveKitToken = async () => {
                           </div>
                         </div>
                         <div className="flex flex-col gap-1">
-                          <div className={`rounded-2xl px-5 py-3.5 ${
+                          <div className={`rounded-2xl px-5 py-3.5 shadow-md hover:shadow-lg transition-shadow ${
                             isUser
-                              ? 'bg-light-lightPurple text-white shadow-lg'
+                              ? 'text-white'
                               : entry.isSystem
-                              ? 'bg-gradient-to-r from-yellow-50 to-yellow-100 border-2 border-yellow-200 shadow-md'
+                              ? 'border-2'
                               : entry.isWelcomeBack
-                              ? 'bg-gradient-to-r from-blue-50 to-blue-100 border-2 border-blue-200 shadow-md'
-                              : 'bg-white border-2 border-purple-100 shadow-md hover:shadow-lg transition-shadow'
-                          }`}>
+                              ? 'border-2'
+                              : 'border-2'
+                          }`}
+                          style={isUser
+                            ? { backgroundColor: '#6057C7' }
+                            : entry.isSystem
+                            ? { backgroundColor: '#fef3c7', borderColor: '#fbbf24' }
+                            : entry.isWelcomeBack
+                            ? { backgroundColor: '#dbeafe', borderColor: '#3b82f6' }
+                            : { backgroundColor: 'white', borderColor: '#e5e7eb' }
+                          }>
                             {/* Speaker name */}
                             <div className={`text-sm font-semibold mb-1 ${
                               isUser ? 'text-purple-100' : 
@@ -1357,15 +1644,15 @@ const fetchLiveKitToken = async () => {
                     <div className="flex justify-end" style={{ animation: 'fadeIn 0.3s ease-in' }}>
                       <div className="flex items-start gap-3 max-w-[80%] flex-row-reverse">
                         <div className="flex-shrink-0">
-                          <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold bg-gradient-to-br from-purple-500 to-purple-600 shadow-lg animate-pulse">
+                          <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-lg animate-pulse" style={{ backgroundColor: '#6057C7' }}>
                             U
                           </div>
                         </div>
                         <div className="flex flex-col gap-1">
-                          <div className="bg-light-lightPurple text-white rounded-2xl px-5 py-3.5 shadow-lg">
+                          <div className="rounded-2xl px-5 py-3.5 shadow-lg" style={{ backgroundColor: '#6057C7', color: '#F9F5EB' }}>
                             <p className="text-sm leading-relaxed">
                               {streamingText}
-                              <span className="animate-pulse ml-1 text-white text-lg">●</span>
+                              <span className="animate-pulse ml-1 text-lg">●</span>
                             </p>
                           </div>
                           <span className="text-xs text-gray-400 px-2 text-right">Now</span>
@@ -1387,6 +1674,41 @@ const fetchLiveKitToken = async () => {
         </div>
       </div>
       
+      {/* Post-Recording Modal */}
+      {postRecordingModalOpen && recordingUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
+          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl p-8 space-y-6 animate-slide-in-right">
+            <div className="flex items-center gap-3 text-indigo-600 font-semibold">
+              <Icon name="podcast" className="w-8 h-8" />
+              <span>Recording Ready</span>
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-2xl font-bold text-gray-900">
+                Amazing conversation! Ready to polish it?
+              </h2>
+              <p className="text-gray-600 leading-relaxed">
+                {getFriendlyRecordingLabel(recordingFilename || recordingUrl || 'Your Recording')} is saved.{` `}
+                Jump into the Audio Edit studio to trim, split, and enhance it—or stay here to keep chatting.
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={handleStayInSession}
+                className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-200 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+              >
+                Stay Here
+              </button>
+              <button
+                onClick={handleGoToAudioEditor}
+                className="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold shadow-md hover:shadow-lg transition-all"
+              >
+                Open Audio Editor
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* LiveKit Audio Renderer */}
       <RoomAudioRenderer />
       
