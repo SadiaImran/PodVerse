@@ -54,6 +54,7 @@ app.include_router(audio_edit_router, prefix="/audio-edit", tags=["audio-edit"])
 # Video router handles both HeyGen video generation and Supabase video storage
 # Registered with both prefixes for backward compatibility
 app.include_router(video_router, prefix="/video", tags=["video"])  # HeyGen endpoints: /video/api/...
+app.include_router(podcast_router, prefix="/video", tags=["video"])  # Podcast processing endpoints
 app.include_router(video_router, prefix="/videos", tags=["video"])  # Supabase endpoints: /videos/upload, /videos/list
 
 app.mount("/output", StaticFiles(directory="module_voice_clone/output"), name="output")

@@ -26,6 +26,7 @@ import FAQs from './assets/screens/admin/screen-admin-faqs';
 import MediaLibrary from './assets/screens/admin/screen-admin-media';
 import AdminAIAvatars from './assets/screens/admin/screen-admin-ai-avatars';
 import AdminAIVoices from './assets/screens/admin/screen-admin-ai-voices';
+import ScreenPodcastFeedback from './assets/screens/screen-podcast-feedback';
 
 function App() {
   return (
@@ -222,6 +223,14 @@ function App() {
               <AdminLayout>
                 <AdminAIVoices />
               </AdminLayout>
+            }
+          />
+          <Route 
+            path="/feedback"
+            element={
+              <PrivateRoute>
+                <ScreenPodcastFeedback />
+              </PrivateRoute>
             }
           />
         </Routes>
