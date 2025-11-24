@@ -5,7 +5,7 @@ from typing import Dict, List, Tuple, Optional
 from dotenv import load_dotenv
 from pydub import AudioSegment
 import assemblyai as aai
-from fastapi import APIRouter, HTTPException, BackgroundTasks, File, UploadFile, Form, Depends
+from fastapi import APIRouter, HTTPException, BackgroundTasks, File, UploadFile, Form, Depends, Header
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import requests
@@ -862,12 +862,13 @@ async def list_jobs():
     }
 
 @router.get("/api/avatar-templates/{speaker}")
-async def get_avatar_templates(speaker: str):
-    """Get avatar template images for a specific speaker (A or B)."""
+async def get_avatar_templates(speaker: str, authorization: Optional[str] = Header(None)):
+    """Get avatar template images for a specific speaker (A or B) based on user's subscription plan."""
     if speaker not in ["A", "B"]:
         raise HTTPException(status_code=400, detail="Speaker must be 'A' or 'B'")
     
     from supabase import create_client
+    from connection_supabase_client import get_authenticated_supabase_client
     import os
     
     supabase_url = os.environ.get("SUPABASE_URL")
@@ -878,6 +879,23 @@ async def get_avatar_templates(speaker: str):
     
     try:
         files = supabase.storage.from_('avatar-templates').list(folder_path)
+        
+        # Get user's subscription status if authenticated
+        subscription_status = "free"  # Default to free
+        if authorization and authorization.startswith("Bearer "):
+            try:
+                from connection_supabase_client import supabase as auth_supabase
+                jwt_token = authorization.split(" ")[1]
+                user_response = auth_supabase.auth.get_user(jwt_token)
+                if user_response.user:
+                    user_id = user_response.user.id
+                    # Get subscription status from profiles
+                    profile_res = supabase.table("profiles").select("subscription_status").eq("id", user_id).execute()
+                    if profile_res.data and profile_res.data[0].get("subscription_status"):
+                        subscription_status = profile_res.data[0]["subscription_status"]
+            except Exception as e:
+                print(f"Error getting subscription status: {e}")
+                subscription_status = "free"
         
         templates = []
         for file in files:
@@ -891,7 +909,13 @@ async def get_avatar_templates(speaker: str):
                 "speaker": speaker
             })
         
-        return {"templates": templates}
+        # Filter templates based on subscription plan
+        # Free: Only first 2 templates per speaker (2 for A, 2 for B)
+        # Pro/Enterprise: All templates
+        if subscription_status == "free":
+            templates = templates[:2]  # Limit to first 2 templates
+        
+        return {"templates": templates, "subscription_status": subscription_status}
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch templates: {str(e)}")

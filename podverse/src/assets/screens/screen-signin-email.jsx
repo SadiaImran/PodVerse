@@ -8,7 +8,7 @@ import RememberMeForgotPass from "../components/comp-signin/Remember&ForgotPass.
 import AccountPrompt from "../components/shared/AccountPrompt.jsx";
 import AuthFields from "../components/shared/AuthFields.jsx";
 import { FaRegEnvelope, FaGoogle, FaPodcast, FaHeadphones } from "react-icons/fa";
-import { MdOutlineLock, MdWaves} from "react-icons/md";
+import { MdOutlineLock, MdWaves } from "react-icons/md";
 import ImageCarousel from "../components/comp-signin/ImageCarousel.jsx";
 import { supabase } from "../supabaseClient.js";
 
@@ -42,12 +42,16 @@ function SignInScreenEmail() {
 
           const { data: profile, error: profileError } = await supabase
             .from("profiles")
-            .select("onboarding_complete")
+            .select("onboarding_complete, role")
             .eq("id", userId)
             .maybeSingle(); // ⭐ Use maybeSingle() (does NOT throw error if no row)
 
           console.log("PROFILE RESULT:", profile);
 
+          // Check if user is admin and redirect to admin dashboard
+          if (profile?.role === 'admin') {
+            return navigate("/admin/dashboard");
+          }
           // CASE 1: No profile row → new user → onboard
           if (!profile) {
             return navigate("/onboarding");
@@ -59,7 +63,7 @@ function SignInScreenEmail() {
           }
           // CASE 3: Profile exists + onboarding complete → go home / create podcast
           return navigate("/home");
-        
+
         } else {
           navigate("/home");
         }
@@ -87,7 +91,7 @@ function SignInScreenEmail() {
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse"></div>
         <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-indigo-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse animation-delay-2000"></div>
         <div className="absolute top-40 left-40 w-60 h-60 bg-pink-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse animation-delay-4000"></div>
-        
+
         {/* Floating Icons */}
         <div className="absolute top-20 left-20 text-purple-400 opacity-20 animate-float">
           <FaPodcast size={24} />
@@ -109,7 +113,7 @@ function SignInScreenEmail() {
           <div className="relative z-10 w-full h-full rounded-3xl overflow-hidden shadow-2xl border border-purple-500/20">
             <ImageCarousel />
           </div>
-          
+
           {/* Brand Badge */}
           <div className="absolute -top-4 -left-4 bg-gradient-to-r from-purple-600 to-indigo-600 p-3 rounded-2xl shadow-lg">
             <FaPodcast className="text-white text-2xl" />
@@ -123,7 +127,7 @@ function SignInScreenEmail() {
             <div className="relative bg-white/95 backdrop-blur-xl p-8 rounded-3xl shadow-2xl border border-white/20 space-y-6">
               {/* Gradient Border Effect */}
               <div className="absolute inset-0 bg-gradient-to-r from-purple-600 via-indigo-600 to-pink-600 rounded-3xl blur opacity-20"></div>
-              
+
               <div className="relative z-10">
                 {isLoading ? (
                   <div className="flex flex-col h-full space-y-6">
@@ -133,7 +137,7 @@ function SignInScreenEmail() {
                       </div>
                       <AuthWelcome title="Welcome Back 👋" subtitle="Signing you in..." />
                     </div>
-                    
+
                     <div className="flex flex-1 items-center justify-center flex-col space-y-6 pt-20">
                       <div className="relative">
                         <div className="animate-spin rounded-full h-12 w-12 border-4 border-purple-200 border-t-purple-600"></div>

@@ -13,6 +13,8 @@ from module_faq.module_faq_route import router as faq_router
 from module_video_generation.module_video import router as video_router
 from module_video_generation.module_podcast_processing import router as podcast_router
 from module_social_media.routes import router as social_media_router
+from module_admin.module_admin_route import router as admin_router
+from module_subscription.subscription_route import router as subscription_router
 from fastapi.staticfiles import StaticFiles
 
 import tempfile
@@ -53,10 +55,13 @@ app.include_router(audio_edit_router, prefix="/audio-edit", tags=["audio-edit"])
 # Video router handles both HeyGen video generation and Supabase video storage
 # Registered with both prefixes for backward compatibility
 app.include_router(video_router, prefix="/video", tags=["video"])  # HeyGen endpoints: /video/api/...
+app.include_router(podcast_router, prefix="/video", tags=["video"])  # Podcast processing endpoints
 app.include_router(video_router, prefix="/videos", tags=["video"])  # Supabase endpoints: /videos/upload, /videos/list
+app.include_router(subscription_router)
 
 app.mount("/output", StaticFiles(directory="module_voice_clone/output"), name="output")
 app.include_router(voices_router)
 app.include_router(faq_router)
 app.include_router(social_media_router)
+app.include_router(admin_router)
 

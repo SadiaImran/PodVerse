@@ -1,5 +1,5 @@
 import Logo from "../../images/logo.png";
-import { Home, Mic, Users, BookOpen, Settings, TrendingUp, Calendar, Bell, Search, Plus, ChevronLeft, ChevronRight, MessageCircle, Music2, Clapperboard, User } from 'lucide-react';
+import { Home, Mic, Users, BookOpen, Settings, TrendingUp, Calendar, Bell, Search, Plus, ChevronLeft, ChevronRight, MessageCircle, Music2, Clapperboard, User, Crown } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import ProfileMarry from "../../images/icon-profile-marry.png";
@@ -48,14 +48,18 @@ const LeftSidebar = ({ open, setOpen }) => {
   
   const menuItems = [
   { icon: Home, label: "Home" , navigateTo: "/home"},
-  { icon: Search, label: "Search" , navigateTo: "/search"},
   { icon: User, label: "My Profile" , navigateTo: user ? `/profile/${user.id}` : "/profile"},
-  { icon: Mic, label: "My Podcasts" , navigateTo: "/create-podcast" },
+  { icon: Mic, label: "My Podcasts" , count: 12 , navigateTo: "/create-podcast" },
   { icon: Music2, label: "Audio Editor", navigateTo: "/audio-edit" },
   { icon: Clapperboard, label: "Video Editor", navigateTo: "/video-editor" },
   { icon: BookOpen, label: "My Library" , navigateTo: "/library" },
-  { icon: MessageCircle, label: 'FAQ & Support', navigateTo: "/faq-chatbot" }
+  { icon: Users, label: 'Following', count: 28 , navigateTo: "/following"},
+  { icon: IoAnalyticsOutline, label: "Analytics" , navigateTo:"/analytics"},
+  { icon: TrendingUp, label: 'Trending' , navigateTo: "/trending"},
+  { icon: MessageCircle, label: 'FAQ & Support', navigateTo: "/faq-chatbot" },
+  { icon: Settings, label: 'Settings', navigateTo: "/settings" },
   ];
+
   const quickAccess = [
     { name: 'Tech Talks', color: 'bg-blue-500' },
     { name: 'Business Daily', color: 'bg-green-500' },
@@ -278,4 +282,5 @@ const LeftSidebar = ({ open, setOpen }) => {
     </>
   );
 };
+
 export default LeftSidebar;

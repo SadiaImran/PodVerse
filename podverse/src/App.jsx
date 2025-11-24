@@ -9,7 +9,7 @@ import ScreenRecording from './assets/screens/screen-recording';
 import ForgotPassword from './assets/components/comp-signin/ForgotPassword';
 import ResetPassword from './assets/components/comp-signin/ResetPassword';
 import { AuthProvider } from './assets/context/AuthContext';
-import PrivateRoute from './assets/components/PrivateRoute'; 
+import PrivateRoute from './assets/components/PrivateRoute';
 import AudioEditor from './assets/screens/screen-audio-edit';
 import ScreenFAQ from './assets/screens/screen-faq-chatbot';
 import VideoGeneratorPage from './assets/screens/screen-video-generation';
@@ -17,6 +17,17 @@ import VideoEditorV7Screen from './assets/screens/screen-video-editor-v7';
 import ProfilePage from './assets/screens/screen-profile';
 import OnboardingScreen from './assets/screens/screen-onboarding';
 import SearchPage from './assets/screens/screen-search';
+import AdminLayout from './assets/components/layouts/AdminLayout';
+import AdminDashboard from './assets/screens/admin/screen-admin-dashboard';
+import AdminUsers from './assets/screens/admin/screen-admin-users';
+import AdminPosts from './assets/screens/admin/screen-admin-posts';
+import AdminAnalytics from './assets/screens/admin/screen-admin-analytics';
+import FAQs from './assets/screens/admin/screen-admin-faqs';
+import AdminAIAvatars from './assets/screens/admin/screen-admin-ai-avatars';
+import AdminSubscriptions from './assets/screens/admin/screen-admin-subscriptions';
+import ScreenPodcastFeedback from './assets/screens/screen-podcast-feedback';
+import SubscriptionPage from './assets/screens/screen-subscription';
+import SubscriptionSuccessPage from './assets/screens/screen-subscription-success';
 
 function App() {
   return (
@@ -139,6 +150,95 @@ function App() {
             element={
               <PrivateRoute>
                 <SearchPage />
+              </PrivateRoute>
+            }
+          />
+          {/* Admin Routes - Protected */}
+          <Route
+            path="/admin"
+            element={
+              <AdminLayout>
+                <AdminDashboard />
+              </AdminLayout>
+            }
+          />
+          <Route
+            path="/admin/dashboard"
+            element={
+              <AdminLayout>
+                <AdminDashboard />
+              </AdminLayout>
+            }
+          />
+          <Route
+            path="/admin/analytics"
+            element={
+              <AdminLayout>
+                <AdminAnalytics />
+              </AdminLayout>
+            }
+          />
+          <Route
+            path="/admin/users"
+            element={
+              <AdminLayout>
+                <AdminUsers />
+              </AdminLayout>
+            }
+          />
+          <Route
+            path="/admin/posts"
+            element={
+              <AdminLayout>
+                <AdminPosts />
+              </AdminLayout>
+            }
+          />
+          <Route
+            path="/admin/faqs"
+            element={
+              <AdminLayout>
+                <FAQs />
+              </AdminLayout>
+            }
+          />
+          <Route
+            path="/admin/ai/avatars"
+            element={
+              <AdminLayout>
+                <AdminAIAvatars />
+              </AdminLayout>
+            }
+          />
+          <Route
+            path="/admin/subscriptions"
+            element={
+              <AdminLayout>
+                <AdminSubscriptions />
+              </AdminLayout>
+            }
+          />
+          <Route
+            path="/feedback"
+            element={
+              <PrivateRoute>
+                <ScreenPodcastFeedback />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/subscription"
+            element={
+              <PrivateRoute>
+                <SubscriptionPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/subscription-success"
+            element={
+              <PrivateRoute>
+                <SubscriptionSuccessPage />
               </PrivateRoute>
             }
           />
