@@ -3,8 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient.js';
 import { useAuth } from '../context/AuthContext';
 import BaseLayout from '../components/layouts/BaseLayout';
+import PostCard from '../components/shared/PostCard';
+import PostModal from '../components/shared/PostModal';
 import { 
-  Settings, 
   UserPlus, 
   UserMinus, 
   Edit3, 
@@ -19,7 +20,13 @@ import {
   Lock,
   Globe,
   Camera,
-  Tag
+  Tag,
+  Play,
+  Video,
+  Heart as HeartSolid,
+  Users as UsersIcon,
+  UserCheck,
+  Sparkles
 } from 'lucide-react';
 import ProfileMarry from '../images/icon-profile-marry.png';
 
@@ -40,6 +47,8 @@ const ProfilePage = () => {
   const [showCoverModal, setShowCoverModal] = useState(false);
   const [showFollowersModal, setShowFollowersModal] = useState(false);
   const [showFollowingModal, setShowFollowingModal] = useState(false);
+  const [selectedPost, setSelectedPost] = useState(null);
+  const [showPostModal, setShowPostModal] = useState(false);
   const [followers, setFollowers] = useState([]);
   const [following, setFollowing] = useState([]);
   const [loadingConnections, setLoadingConnections] = useState(false);
@@ -161,7 +170,7 @@ const ProfilePage = () => {
         }
 
         // User ke posts fetch karo with proper likes/comments counts from backend API
-        const postsResponse = await fetch(`${API_BASE_URL}/posts/user/${userId}?limit=50`, {
+        const postsResponse = await fetch(`${API_BASE_URL}/posts/user/${userId}?limit=50&status=published`, {
           method: 'GET',
           headers: session ? {
             'Authorization': `Bearer ${session.access_token}`,
@@ -171,9 +180,12 @@ const ProfilePage = () => {
         if (postsResponse.ok) {
           const postsResult = await postsResponse.json();
           if (postsResult.success) {
+            // Filter to only published posts (extra safety check)
+            const publishedPosts = (postsResult.posts || []).filter(post => post.status === 'published' || !post.status);
+            
             // Fetch tags for each post
             const postsWithTags = await Promise.all(
-              (postsResult.posts || []).map(async (post) => {
+              publishedPosts.map(async (post) => {
                 if (post.tags && Array.isArray(post.tags) && post.tags.length > 0) {
                   return post;
                 }
@@ -214,9 +226,9 @@ const ProfilePage = () => {
           }
         } else {
           // Fallback to Supabase if API fails
-          const { data: postsData, error: postsError } = await supabase
-            .from('posts')
-            .select(`
+        const { data: postsData, error: postsError } = await supabase
+          .from('posts')
+          .select(`
               *,
               profiles:user_id (
                 id,
@@ -225,7 +237,8 @@ const ProfilePage = () => {
                 profile_url
               )
             `)
-            .eq('user_id', userId)
+          .eq('user_id', userId)
+          .eq('status', 'published')
             .order('created_at', { ascending: false });
 
           if (!postsError && postsData) {
@@ -1369,6 +1382,19 @@ const ProfilePage = () => {
       })
     : '';
 
+  const totalViews = posts.reduce(
+    (sum, post) => sum + (post.views_count || post.views || 0),
+    0
+  );
+  const totalLikes = posts.reduce(
+    (sum, post) => sum + (post.likes_count || post.likes || 0),
+    0
+  );
+  const totalComments = posts.reduce(
+    (sum, post) => sum + (post.comments_count || 0),
+    0
+  );
+
   if (loading) {
     return (
       <BaseLayout>
@@ -1400,46 +1426,100 @@ const ProfilePage = () => {
     );
   }
 
+  const statsCards = [
+    {
+      label: 'Posts',
+      value: posts.length,
+      sub: 'Published drops',
+      icon: Video,
+      accent: '#7B5DFF',
+      bg: '#ede7ff'
+    },
+    {
+      label: 'Followers',
+      value: profile.followers_count || 0,
+      sub: 'Creative circle',
+      icon: UsersIcon,
+      accent: '#FF7AB3',
+      bg: '#ffe7f1'
+    },
+    {
+      label: 'Following',
+      value: profile.following_count || 0,
+      sub: 'Inspiration feed',
+      icon: UserCheck,
+      accent: '#57A3FF',
+      bg: '#e6f1ff'
+    },
+    {
+      label: 'Love',
+      value: totalLikes + totalComments,
+      sub: 'Likes + comments',
+      icon: HeartSolid,
+      accent: '#FF9B7B',
+      bg: '#ffece8'
+    }
+  ];
+
   return (
     <BaseLayout>
-      <div className="min-h-screen bg-gradient-to-b from-white via-white to-gray-100">
+      <div
+        className="min-h-screen relative overflow-hidden"
+        style={{
+          background: 'linear-gradient(180deg, #f0ecff 0%, #f6f3ff 55%, #f2eefb 100%)'
+        }}
+      >
+        <div
+          className="absolute -top-28 -left-10 w-72 h-72 rounded-full blur-[120px] opacity-60 pointer-events-none"
+          style={{ background: '#b9a5ff' }}
+        />
+        <div
+          className="absolute top-40 -right-10 w-96 h-96 rounded-full blur-[140px] opacity-40 pointer-events-none"
+          style={{ background: '#ffd5f6' }}
+        />
+
         <div className="relative">
-          <div className="relative h-72 md:h-[380px] overflow-hidden bg-gradient-to-r from-[#6D3EFF] via-[#A54EFF] to-[#FF6FB5]">
+          <div className="relative h-64 md:h-80 overflow-hidden">
             {profile.cover_image_url ? (
-              <img
-                src={profile.cover_image_url}
-                alt="Cover"
-                className="absolute inset-0 w-full h-full object-cover"
-                onError={(e) => {
-                  console.error('Cover image failed to load:', profile.cover_image_url);
-                  e.target.style.display = 'none';
-                }}
-              />
+              <>
+                <img
+                  src={profile.cover_image_url}
+                  alt="Cover"
+                  className="absolute inset-0 w-full h-full object-cover"
+                  onError={(e) => {
+                    console.error('Cover image failed to load:', profile.cover_image_url);
+                    e.target.style.display = 'none';
+                  }}
+                />
+                <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/15 to-black/35" />
+              </>
             ) : (
-              <div className="absolute inset-0 bg-gradient-to-r from-purple-400 via-light-purple to-pink-400" />
+              <div className="absolute inset-0" style={{ background: 'linear-gradient(120deg, #5f4bd6 0%, #8f7bff 50%, #f6a9ff 100%)' }} />
             )}
-            <div className="absolute inset-0 bg-gradient-to-t from-gray-900/80 via-gray-900/25 to-transparent" />
             {isOwnProfile && (
               <button
                 onClick={() => setShowCoverModal(true)}
-                className="absolute top-5 right-5 bg-white/90 hover:bg-white text-gray-800 px-4 py-2 rounded-full flex items-center gap-2 transition-all shadow-lg"
+                className="absolute top-5 right-5 bg-white/90 backdrop-blur px-4 py-2.5 rounded-full flex items-center gap-2 text-sm font-semibold text-[#2F2867] shadow-lg hover:shadow-xl transition-all"
               >
                 <Camera size={18} />
-                Edit Cover
+                Edit cover
               </button>
             )}
           </div>
         </div>
 
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 -mt-12 md:-mt-16 lg:-mt-12 pb-16 relative z-10">
-          <div className="bg-gradient-to-br from-[#E0C2FF] via-[#F9D7FF] to-[#FFD4EF] backdrop-blur-md rounded-[40px] shadow-[0_30px_90px_rgba(109,62,255,0.2)] border border-[#D3ABFF] p-6 md:p-8">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 -mt-16 md:-mt-20 pb-16 relative z-10">
+          <div
+            className="rounded-[32px] border border-white/60 bg-white/80 backdrop-blur-2xl shadow-[0_25px_80px_rgba(96,87,199,0.18)] p-6 md:p-10"
+          >
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-8">
               <div className="flex flex-col md:flex-row md:items-center gap-6">
                 <div className="relative">
+                  <div className="absolute inset-0 rounded-full blur-2xl bg-gradient-to-br from-[#7d6ce3] to-[#c8b8ff] opacity-70"></div>
                   <img
                     src={profile.profile_url || ProfileMarry}
                     alt={profile.full_name || 'User'}
-                    className="w-36 h-36 rounded-full border-4 border-white/80 shadow-2xl object-cover bg-gray-50"
+                    className="relative w-32 h-32 md:w-36 md:h-36 rounded-full border-4 border-white shadow-[0_20px_45px_rgba(96,87,199,0.25)] object-cover bg-gray-100"
                     onError={(e) => {
                       console.error('Profile image failed to load:', profile.profile_url);
                       if (e.target.src !== ProfileMarry) {
@@ -1450,7 +1530,10 @@ const ProfilePage = () => {
                   {isOwnProfile && (
                     <button
                       onClick={() => setShowAvatarModal(true)}
-                      className="absolute -bottom-1 -right-1 bg-light-purple text-white p-3 rounded-full hover:bg-purple-700 transition-all shadow-lg"
+                      className="absolute -bottom-1 -right-1 text-white p-2.5 rounded-full transition-all shadow-lg hover:scale-110"
+                      style={{ backgroundColor: '#6057C7' }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2F2867'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#6057C7'}
                     >
                       <Camera size={16} />
                     </button>
@@ -1459,30 +1542,23 @@ const ProfilePage = () => {
 
                 <div>
                   <div className="flex flex-wrap items-center gap-3">
-                    <h1 className="text-3xl md:text-4xl font-extrabold text-gray-900">
+                    <h1 className="text-3xl font-bold" style={{ color: '#1C1C1C' }}>
                       {profile.full_name || 'User'}
                     </h1>
-                    {profile.is_private ? (
-                      <span className="inline-flex items-center gap-1 text-sm font-semibold text-gray-600 bg-gray-100 px-3 py-1 rounded-full">
-                        <Lock size={14} />
-                        Private
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-sm font-semibold text-light-purple bg-purple-50 px-3 py-1 rounded-full">
-                        <Globe size={14} />
-                        Public
-                      </span>
-                    )}
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border border-white/60 bg-white/80 text-[#6057C7] shadow-sm">
+                      {profile.is_private ? <Lock size={12} /> : <Globe size={12} />}
+                      {profile.is_private ? 'Private account' : 'Public profile'}
+                    </span>
                   </div>
-                  <p className="text-gray-500 text-lg">@{profile.username || 'username'}</p>
+                  <p className="text-base mt-1 font-medium" style={{ color: '#6A6A6A' }}>@{profile.username || 'username'}</p>
                   {profile.bio && (
-                    <p className="mt-3 text-gray-700 max-w-2xl leading-relaxed">{profile.bio}</p>
+                    <p className="mt-3 max-w-2xl leading-relaxed text-sm md:text-base" style={{ color: '#3E3F5B' }}>{profile.bio}</p>
                   )}
 
-                  <div className="flex flex-wrap gap-4 mt-4 text-sm text-gray-600">
+                  <div className="flex flex-wrap gap-4 mt-5 text-sm" style={{ color: '#6A6A6A' }}>
                     {locationLabel && (
-                      <span className="inline-flex items-center gap-1">
-                        <MapPin size={15} />
+                      <span className="inline-flex items-center gap-1.5">
+                        <MapPin size={14} />
                         {locationLabel}
                       </span>
                     )}
@@ -1491,21 +1567,22 @@ const ProfilePage = () => {
                         href={websiteUrl.startsWith('http') ? websiteUrl : `https://${websiteUrl}`}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-1 text-light-purple hover:underline"
+                        className="inline-flex items-center gap-1.5 font-semibold"
+                        style={{ color: '#6057C7' }}
                       >
-                        <LinkIcon size={15} />
+                        <LinkIcon size={14} />
                         Website
                       </a>
                     )}
                     {profile.email && (
-                      <span className="inline-flex items-center gap-1">
-                        <Mail size={15} />
+                      <span className="inline-flex items-center gap-1.5">
+                        <Mail size={14} />
                         {profile.email}
                       </span>
                     )}
                     {joinedDateLabel && (
-                      <span className="inline-flex items-center gap-1">
-                        <Calendar size={15} />
+                      <span className="inline-flex items-center gap-1.5">
+                        <Calendar size={14} />
                         Joined {joinedDateLabel}
                       </span>
                     )}
@@ -1515,33 +1592,30 @@ const ProfilePage = () => {
 
               <div className="flex flex-wrap gap-3">
                 {isOwnProfile ? (
-                  <>
-                    <button
-                      onClick={() => setShowInfoModal(true)}
-                      className="px-6 py-2.5 bg-light-purple text-white rounded-full hover:bg-purple-700 transition-all flex items-center gap-2 shadow-lg"
-                    >
-                      <Edit3 size={18} />
-                      Edit Profile
-                    </button>
-                    <button
-                      onClick={() => navigate('/settings')}
-                      className="px-6 py-2.5 bg-white text-gray-800 rounded-full border border-gray-200 hover:border-gray-300 transition-all flex items-center gap-2"
-                    >
-                      <Settings size={18} />
-                      Settings
-                    </button>
-                  </>
+                  <button
+                    onClick={() => setShowInfoModal(true)}
+                    className="px-6 py-2.5 rounded-full transition-all flex items-center gap-2 font-semibold shadow-md"
+                    style={{ backgroundColor: '#6057C7', color: '#F9F5EB' }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2F2867'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#6057C7'}
+                  >
+                    <Edit3 size={18} />
+                    Edit profile
+                  </button>
                 ) : (
                   <>
                     <button
                       onClick={handleFollow}
-                      className={`px-6 py-2.5 rounded-full transition-all flex items-center gap-2 shadow-md ${
-                        isFollowingApproved
-                          ? 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-                          : isFollowPending
-                            ? 'bg-gray-100 text-gray-600 cursor-not-allowed'
-                            : 'bg-light-purple text-white hover:bg-purple-700'
+                      className={`px-6 py-2.5 rounded-full transition-all flex items-center gap-2 font-semibold shadow-md ${
+                        isFollowPending ? 'cursor-not-allowed' : ''
                       }`}
+                      style={
+                        isFollowingApproved
+                          ? { backgroundColor: '#f3f4f6', color: '#1C1C1C' }
+                          : isFollowPending
+                            ? { backgroundColor: '#f3f4f6', color: '#6A6A6A' }
+                            : { backgroundColor: '#6057C7', color: '#F9F5EB' }
+                      }
                       disabled={isFollowPending}
                     >
                       {isFollowPending ? (
@@ -1561,7 +1635,10 @@ const ProfilePage = () => {
                         </>
                       )}
                     </button>
-                    <button className="px-6 py-2.5 bg-white text-gray-800 rounded-full border border-gray-200 hover:border-gray-300 transition-all">
+                    <button 
+                      className="px-6 py-2.5 rounded-full border transition-all font-semibold"
+                      style={{ backgroundColor: '#ffffff', color: '#1C1C1C', borderColor: '#e5e7eb' }}
+                    >
                       Message
                     </button>
                   </>
@@ -1569,59 +1646,66 @@ const ProfilePage = () => {
               </div>
             </div>
 
-            <div className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="rounded-2xl border border-[#E9DCFF] bg-gradient-to-br from-[#E9DCFF] via-white to-white p-5 shadow-sm">
-                <p className="text-sm text-gray-500">Posts</p>
-                <p className="text-3xl font-bold text-gray-900 mt-1">{posts.length}</p>
-                <span className="text-xs text-light-purple font-semibold">This month</span>
-              </div>
-              <div 
-                onClick={handleShowFollowers}
-                className="rounded-2xl border border-[#FDE4FF] bg-gradient-to-br from-[#FDE4FF] via-white to-white p-5 shadow-sm cursor-pointer hover:shadow-md hover:scale-[1.02] transition-all"
-              >
-                <p className="text-sm text-gray-500">Followers</p>
-                <p className="text-3xl font-bold text-gray-900 mt-1">{profile.followers_count || 0}</p>
-                <span className="text-xs text-gray-400">Community love</span>
-              </div>
-              <div 
-                onClick={handleShowFollowing}
-                className="rounded-2xl border border-[#DFF0FF] bg-gradient-to-br from-[#DFF0FF] via-white to-white p-5 shadow-sm cursor-pointer hover:shadow-md hover:scale-[1.02] transition-all"
-              >
-                <p className="text-sm text-gray-500">Following</p>
-                <p className="text-3xl font-bold text-gray-900 mt-1">{profile.following_count || 0}</p>
-                <span className="text-xs text-gray-400">Collabs</span>
-              </div>
+            <div className="mt-10 grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {statsCards.map((card) => {
+                const Icon = card.icon;
+                const isFollowers = card.label === 'Followers';
+                const isFollowing = card.label === 'Following';
+                const clickHandler = isFollowers
+                  ? handleShowFollowers
+                  : isFollowing
+                    ? handleShowFollowing
+                    : undefined;
+                return (
+                  <div
+                    key={card.label}
+                    onClick={clickHandler}
+                    className={`rounded-2xl border border-white/70 p-5 shadow-inner transition-transform ${clickHandler ? 'cursor-pointer hover:-translate-y-0.5' : ''}`}
+                    style={{ background: card.bg }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.3em]" style={{ color: '#6A6A6A' }}>
+                          {card.label}
+                        </p>
+                        <p className="text-3xl font-bold mt-2" style={{ color: '#1C1C1C' }}>
+                          {card.value.toLocaleString()}
+                        </p>
+                        <p className="text-xs mt-1" style={{ color: '#9ca3af' }}>
+                          {card.sub}
+                        </p>
+                      </div>
+                      <div
+                        className="w-12 h-12 rounded-full flex items-center justify-center shadow-md bg-white"
+                        style={{ border: `2px solid ${card.accent}` }}
+                      >
+                        <Icon size={24} style={{ color: card.accent }} />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
-          <div className="mt-10 bg-white rounded-3xl shadow-xl border border-gray-100">
-            <div className="flex border-b border-gray-200">
-              <button
-                onClick={() => setActiveTab('posts')}
-                className={`flex-1 px-6 py-4 text-center font-semibold transition-all ${
-                  activeTab === 'posts'
-                    ? 'text-light-purple border-b-2 border-light-purple'
-                    : 'text-gray-500 hover:text-gray-900'
-                }`}
-              >
-                Posts
-              </button>
-              <button
-                onClick={() => setActiveTab('about')}
-                className={`flex-1 px-6 py-4 text-center font-semibold transition-all ${
-                  activeTab === 'about'
-                    ? 'text-light-purple border-b-2 border-light-purple'
-                    : 'text-gray-500 hover:text-gray-900'
-                }`}
-              >
-                About
-              </button>
-            </div>
+          <div
+            className="mt-10 rounded-[28px] border border-white/60 bg-white/85 backdrop-blur-xl shadow-[0_20px_60px_rgba(96,87,199,0.1)]"
+          >
+            <div className="p-6 md:p-10">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+                <div>
+                  <p className="text-sm uppercase tracking-[0.2em]" style={{ color: '#A388E7' }}>Showcase</p>
+                  <h2 className="text-2xl font-bold" style={{ color: '#1C1C1C' }}>Latest drops from {profile.full_name?.split(' ')[0] || 'creator'}</h2>
+                  <p className="text-sm mt-1" style={{ color: '#6A6A6A' }}>{posts.length} piece{posts.length === 1 ? '' : 's'} crafted with love • {totalViews.toLocaleString()} total views</p>
+                </div>
+                <div className="flex items-center gap-2 bg-[#f5f3ff] rounded-full p-1 text-sm font-semibold">
+                  <button className="px-4 py-1.5 rounded-full text-white" style={{ backgroundColor: '#6057C7' }}>All</button>
+                  <button className="px-4 py-1.5 rounded-full" style={{ color: '#6057C7' }}>Video</button>
+                  <button className="px-4 py-1.5 rounded-full" style={{ color: '#6057C7' }}>Audio</button>
+                </div>
+              </div>
 
-            <div className="p-6 md:p-8">
-              {activeTab === 'posts' && (
-                <div className="space-y-6">
-                  {shouldShowPrivateLock && (
+              {shouldShowPrivateLock && (
                     <div className="text-center py-16 bg-gray-50 rounded-3xl border border-dashed border-gray-300">
                       <Lock size={56} className="mx-auto text-gray-400 mb-5" />
                       <p className="text-gray-800 text-2xl font-bold mb-3">This account is private</p>
@@ -1646,153 +1730,126 @@ const ProfilePage = () => {
                         )}
                       </div>
                     ) : (
-                      <div className="space-y-6">
-                        {posts.map((post) => (
-                          <div
-                            key={post.id}
-                            className="border border-gray-100 rounded-3xl p-5 shadow-md hover:shadow-lg transition-all"
-                          >
-                            <div className="flex items-center justify-between mb-3">
-                              <div>
-                                <h3 className="text-xl font-bold text-gray-900">{post.podcastTitle}</h3>
-                                <p className="text-sm text-gray-500">
-                                  {new Date(post.created_at).toLocaleDateString('en-US', {
-                                    month: 'short',
-                                    day: 'numeric',
-                                    year: 'numeric'
-                                  })}
-                                </p>
-                              </div>
-                              <span className="text-xs font-semibold text-light-purple bg-purple-50 px-3 py-1 rounded-full">
-                                Podcast drop
-                              </span>
-                            </div>
-                            <p className="text-gray-700 mb-4">{post.description}</p>
-                            
-                            {/* Tags Section */}
-                            {post.tags && post.tags.length > 0 && (
-                              <div className="mb-4 flex flex-wrap gap-2">
-                                {post.tags.map((tag) => (
-                                  <button
-                                    key={tag.id || tag.tag_id}
-                                    onClick={() => navigate(`/search?tag=${encodeURIComponent(tag.name || tag.tag?.name)}`)}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-light-lightPurple/20 to-light-lavender/20 hover:from-light-lightPurple/30 hover:to-light-lavender/30 border border-light-lightPurple/40 rounded-full text-xs font-medium text-light-primary hover:text-light-deepPurple transition-all cursor-pointer group/tag"
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {posts.map((post) => {
+                          const videoUrl = post.video_url || post.media_url;
+                          const thumbnailUrl = post.thumbnail_url || videoUrl;
+                          const title = post.podcastTitle || post.title || 'Untitled';
+                          const views = post.views_count || 0;
+                          const likes = post.likes_count || 0;
+                          const comments = post.comments_count || 0;
+                          
+                          const formatViews = (count) => {
+                            if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
+                            if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
+                            return count.toString();
+                          };
+
+                          const formatTime = (timestamp) => {
+                            if (!timestamp) return '';
+                            const now = new Date();
+                            const postTime = new Date(timestamp);
+                            const diffInDays = Math.floor((now - postTime) / (1000 * 60 * 60 * 24));
+                            if (diffInDays < 1) return 'Today';
+                            if (diffInDays < 7) return `${diffInDays}d ago`;
+                            if (diffInDays < 30) return `${Math.floor(diffInDays / 7)}w ago`;
+                            if (diffInDays < 365) return `${Math.floor(diffInDays / 30)}mo ago`;
+                            return `${Math.floor(diffInDays / 365)}y ago`;
+                          };
+
+                          return (
+                            <div
+                              key={post.id}
+                              className="group cursor-pointer"
+                              onClick={() => {
+                                // Format post for modal
+                                const formattedPost = {
+                                  ...post,
+                                  title: post.podcastTitle || post.title,
+                                  likes: post.likes_count || 0,
+                                  comments: post.comments || [],
+                                  comments_count: post.comments_count || 0,
+                                  views: post.views_count || 0,
+                                  profiles: {
+                                    id: profile.id,
+                                    full_name: profile.full_name,
+                                    username: profile.username,
+                                    profile_url: profile.profile_url
+                                  }
+                                };
+                                setSelectedPost(formattedPost);
+                                setShowPostModal(true);
+                              }}
+                            >
+                              {/* Thumbnail - Bigger for profile grid */}
+                              <div className="relative aspect-video rounded-xl overflow-hidden bg-gray-100 mb-3 transition-all group-hover:rounded-2xl shadow-md"
+                                style={{ backgroundColor: '#f3f4f6' }}
+                              >
+                                {thumbnailUrl ? (
+                                  <img
+                                    src={thumbnailUrl}
+                                    alt={title}
+                                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                                    onError={(e) => {
+                                      e.target.style.display = 'none';
+                                    }}
+                                  />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center">
+                                    <Play size={32} style={{ color: '#9ca3af' }} />
+                                  </div>
+                                )}
+                                
+                                {/* Play overlay on hover */}
+                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all duration-300 flex items-center justify-center">
+                                  <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                                    <div className="w-14 h-14 rounded-full flex items-center justify-center"
+                                      style={{ backgroundColor: 'rgba(255, 255, 255, 0.9)' }}
+                                    >
+                                      <Play size={24} fill="#6057C7" style={{ color: '#6057C7', marginLeft: '2px' }} />
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Duration badge (if available) */}
+                                {post.duration && (
+                                  <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded text-xs font-semibold"
+                                    style={{ backgroundColor: 'rgba(0, 0, 0, 0.8)', color: '#ffffff' }}
                                   >
-                                    <Tag size={12} className="group-hover/tag:scale-110 transition-transform" />
-                                    <span>#{tag.name || tag.tag?.name}</span>
-                                  </button>
-                                ))}
+                                    {post.duration}
+                                  </div>
+                                )}
                               </div>
-                            )}
-                            
-                            {post.video_url && (
-                              <div className="overflow-hidden rounded-2xl border border-gray-100 mb-4">
-                                <video
-                                  src={post.video_url}
-                                  poster={post.thumbnail_url}
-                                  className="w-full"
-                                  controls
-                                  onPlay={async () => {
-                                    // Track view when video starts playing (one view per user)
-                                    try {
-                                      const { data: { session } } = await supabase.auth.getSession();
-                                      const response = await fetch(`${API_BASE_URL}/posts/${post.id}/view`, {
-                                        method: 'POST',
-                                        headers: session ? {
-                                          'Authorization': `Bearer ${session.access_token}`,
-                                        } : {},
-                                      });
-                                      
-                                      const result = await response.json();
-                                      if (result.success && result.viewed) {
-                                        // Update local state with new view count
-                                        setPosts(prev => prev.map(p => {
-                                          if (p.id === post.id) {
-                                            return {
-                                              ...p,
-                                              views_count: result.views || (p.views_count || 0)
-                                            };
-                                          }
-                                          return p;
-                                        }));
-                                      }
-                                    } catch (error) {
-                                      console.error('Error tracking view:', error);
-                                    }
-                                  }}
-                                />
+
+                              {/* Info - Bigger text for profile grid */}
+                              <div>
+                                <h3 className="font-semibold text-base mb-2 line-clamp-2 group-hover:underline transition-all"
+                                  style={{ color: '#1C1C1C' }}
+                                >
+                                  {title}
+                                </h3>
+                                <div className="flex items-center gap-3 text-sm mb-2" style={{ color: '#6A6A6A' }}>
+                                  <span>{formatViews(views)} views</span>
+                                  <span>•</span>
+                                  <span>{formatTime(post.created_at)}</span>
+                                </div>
+                                <div className="flex items-center gap-4 text-sm" style={{ color: '#6A6A6A' }}>
+                                  <div className="flex items-center gap-1.5">
+                                    <Heart size={14} />
+                                    <span>{formatViews(likes)}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <MessageCircle size={14} />
+                                    <span>{formatViews(comments)}</span>
+                                  </div>
+                                </div>
                               </div>
-                            )}
-                            <div className="flex flex-wrap gap-6 text-sm text-gray-500">
-                              <span className="inline-flex items-center gap-1">
-                                <Heart size={16} />
-                                {post.likes_count || 0} Likes
-                              </span>
-                              <span className="inline-flex items-center gap-1">
-                                <MessageCircle size={16} />
-                                {post.comments_count || 0} Comments
-                              </span>
-                              <span className="inline-flex items-center gap-1">
-                                <Eye size={16} />
-                                {post.views_count || 0} Plays
-                              </span>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )
                   ) : null}
-                </div>
-              )}
-
-              {activeTab === 'about' && (
-                <div className="grid gap-6 md:grid-cols-2">
-                  <div className="rounded-3xl border border-gray-100 p-6 bg-gradient-to-br from-purple-50 to-white">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-3">Story</h3>
-                    <p className="text-gray-700 leading-relaxed">
-                      {profile.bio || 'No bio yet. Share your vibe, mission, and what makes your pod unique!'}
-                    </p>
-                  </div>
-                  <div className="rounded-3xl border border-gray-100 p-6 bg-white">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-3">Account information</h3>
-                    <div className="space-y-3 text-gray-700">
-                      <div className="flex items-center gap-3">
-                        <Calendar size={18} className="text-light-purple" />
-                        <span>{joinedDateLabel ? `Joined ${joinedDateLabel}` : 'Joining soon'}</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <Lock size={18} className="text-light-purple" />
-                        <span>{profile.is_private ? 'Private profile' : 'Public profile'}</span>
-                      </div>
-                      {locationLabel && (
-                        <div className="flex items-center gap-3">
-                          <MapPin size={18} className="text-light-purple" />
-                          <span>{locationLabel}</span>
-                        </div>
-                      )}
-                      {websiteUrl && (
-                        <div className="flex items-center gap-3">
-                          <LinkIcon size={18} className="text-light-purple" />
-                          <a
-                            href={websiteUrl.startsWith('http') ? websiteUrl : `https://${websiteUrl}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-light-purple hover:underline"
-                          >
-                            {websiteUrl}
-                          </a>
-                        </div>
-                      )}
-                      {profile.email && (
-                        <div className="flex items-center gap-3">
-                          <Mail size={18} className="text-light-purple" />
-                          <span>{profile.email}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -2293,6 +2350,119 @@ const ProfilePage = () => {
           </div>
         </div>
       )}
+
+      {/* Post Modal */}
+      <PostModal
+        post={selectedPost}
+        isOpen={showPostModal}
+        onClose={() => {
+          setShowPostModal(false);
+          setSelectedPost(null);
+        }}
+        onLike={async (postId, liked) => {
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) return;
+            
+            const response = await fetch(`${API_BASE_URL}/posts/${postId}/like`, {
+              method: liked ? 'POST' : 'DELETE',
+              headers: {
+                'Authorization': `Bearer ${session.access_token}`,
+              },
+            });
+            
+            if (response.ok) {
+              const result = await response.json();
+              setPosts(prev => prev.map(p => {
+                if (p.id === postId) {
+                  return {
+                    ...p,
+                    likes_count: result.likes_count || (liked ? (p.likes_count || 0) + 1 : Math.max(0, (p.likes_count || 0) - 1))
+                  };
+                }
+                return p;
+              }));
+              // Update selected post
+              if (selectedPost && selectedPost.id === postId) {
+                setSelectedPost(prev => ({
+                  ...prev,
+                  likes_count: result.likes_count || (liked ? (prev.likes_count || 0) + 1 : Math.max(0, (prev.likes_count || 0) - 1))
+                }));
+              }
+            }
+          } catch (error) {
+            console.error('Error toggling like:', error);
+          }
+        }}
+        onComment={async (postId, content) => {
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) return null;
+            
+            const response = await fetch(`${API_BASE_URL}/posts/${postId}/comment`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session.access_token}`,
+              },
+              body: JSON.stringify({ content }),
+            });
+            
+            if (response.ok) {
+              const result = await response.json();
+              setPosts(prev => prev.map(p => {
+                if (p.id === postId) {
+                  return {
+                    ...p,
+                    comments_count: (p.comments_count || 0) + 1
+                  };
+                }
+                return p;
+              }));
+              // Update selected post
+              if (selectedPost && selectedPost.id === postId) {
+                setSelectedPost(prev => ({
+                  ...prev,
+                  comments_count: (prev.comments_count || 0) + 1
+                }));
+              }
+              return result.comment;
+            }
+          } catch (error) {
+            console.error('Error adding comment:', error);
+          }
+          return null;
+        }}
+        onView={async (postId) => {
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const response = await fetch(`${API_BASE_URL}/posts/${postId}/view`, {
+              method: 'POST',
+              headers: session ? {
+                'Authorization': `Bearer ${session.access_token}`,
+              } : {},
+            });
+            
+            const result = await response.json();
+            if (result.success && result.viewed) {
+              setPosts(prev => prev.map(p => {
+                if (p.id === postId) {
+                  return {
+                    ...p,
+                    views_count: result.views || (p.views_count || 0)
+                  };
+                }
+                return p;
+              }));
+            }
+          } catch (error) {
+            console.error('Error tracking view:', error);
+          }
+        }}
+        onTagClick={(tagName) => {
+          navigate(`/search?tag=${encodeURIComponent(tagName)}`);
+        }}
+      />
     </BaseLayout>
   );
 };

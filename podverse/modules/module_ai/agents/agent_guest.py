@@ -2,6 +2,7 @@
 AI Guest Agent - Basic implementation for AI Guest role
 """
 from dotenv import load_dotenv
+import os
 import asyncio
 import traceback
 import json
@@ -39,75 +40,275 @@ load_dotenv()
 class GuestAgent(Agent):
     def __init__(self, persona=None, voice_name=None) -> None:
         # Use provided voice_name or default to "Charon"
-        selected_voice = voice_name if voice_name else "Charon"
+        # Ensure voice_name is properly formatted for Gemini API (case-sensitive)
+        selected_voice = voice_name.strip() if voice_name else "Charon"
+        
+        # Configure RealtimeModel for TRUE realtime - respond immediately to audio chunks
+        # No waiting for sentence completion - process audio in realtime
         llm_model = google.beta.realtime.RealtimeModel(
             model="models/gemini-2.0-flash-exp",
             temperature=0.8,
-            voice=selected_voice,  # Use selected voice or default
+            voice=selected_voice,  # Use selected voice name exactly as passed
         )
-        print(f"🎤 Guest Agent initialized with voice: {selected_voice}")
+        
+        # CRITICAL: Configure for immediate realtime response
+        # The RealtimeModel processes audio chunks in realtime and responds immediately
+        # It does NOT wait for complete sentences or transcript completion
+        # Response happens as soon as audio is detected and processed
+        
+        # Verify voice was set correctly
+        if hasattr(llm_model, 'voice'):
+            actual_voice = getattr(llm_model, 'voice', None)
+            print(f"🎤 Guest Agent initialized with voice: {selected_voice}")
+            print(f"✅ LLM model voice attribute set to: {actual_voice}")
+            if selected_voice and actual_voice != selected_voice:
+                print(f"⚠️ WARNING: Voice mismatch! Requested: '{selected_voice}', Actual: '{actual_voice}'")
+        else:
+            print(f"🎤 Guest Agent initialized with voice: {selected_voice}")
+            print(f"⚠️ LLM model does not have 'voice' attribute")
+        
+        api_google = os.environ.get('GOOGLE_API_KEY')
+        
+        print(f"The value of API_KEY is: {api_google}")
 
-        # Create dynamic instructions based on persona
-        dynamic_instructions = AGENT_INSTRUCTION
-        if persona:
-            persona_info = f"""
-**YOUR PERSONA:**
-- Name: {persona.get('name', 'Unknown')}
-- Role: {persona.get('role', 'Unknown')}
-- Background: {persona.get('background', 'Unknown')}
-- Tone: {persona.get('tone', 'friendly')}
-- Expertise: {', '.join(persona.get('expertise', []))}
+        # Store persona FIRST before using it
+        self.persona = persona  # Store guest persona
+        
+        # Guest configuration variables (from persona) - SET THESE FIRST
+        self.guest_name = persona.get("name") if persona else None
+        self.guest_tone = persona.get("tone", "friendly") if persona else "friendly"
+        self.guest_role = persona.get("role") if persona else None
+        self.guest_background = persona.get("background") if persona else None
+        self.guest_expertise = persona.get("expertise", []) if persona else []
+        self.podcast_title = None  # Will be set from metadata
 
-**CRITICAL PERSONA RULES:**
-- You must embody this persona completely
-- Respond as {persona.get('name', 'this person')} would, using their tone, background, and expertise
-- **NEVER make up stories, anecdotes, or experiences about {persona.get('name', 'this person')}**
-- **ALWAYS query the knowledge base before sharing any specific information about {persona.get('name', 'this person')}**
-- **If asked for stories or experiences, query your knowledge base first**
-- **If the knowledge base doesn't have the information, respond naturally: "I don't recall that" or "That's not something I remember"**
-- **NEVER say "my records" or "let me consult" - sound like a natural human guest**
+        # CRITICAL: Add realtime response instruction
+        # The agent should respond immediately to audio, not wait for complete sentences
+        realtime_instruction = """
+**REALTIME RESPONSE MODE:**
+- Respond IMMEDIATELY to audio chunks as they arrive
+- Do NOT wait for complete sentences or transcript completion
+- Process and respond to speech in realtime
+- Interrupt naturally when appropriate (like human conversation)
+- No delays - respond as soon as you understand the intent
 """
-            dynamic_instructions += persona_info
-            print(f"🎭 Initializing Guest Agent with persona: {persona.get('name', 'Unknown')}")
+        
+        # Build instructions using variables (safer approach)
+        base_guest_instruction = AGENT_INSTRUCTION + "\n\nIMPORTANT: Always respond in English only. NEVER make up fictional content. SOUND LIKE A NATURAL HUMAN GUEST, NOT A ROBOT ASSISTANT.\n\n" + realtime_instruction
+        dynamic_instructions = self.build_instructions_from_variables() if persona else base_guest_instruction
+        
+        # Add realtime instruction to dynamic instructions if persona exists
+        if persona and dynamic_instructions:
+            dynamic_instructions = dynamic_instructions + "\n\n" + realtime_instruction
+        
+        if persona:
+            print(f"🎭 Initializing Guest Agent with persona: {self.guest_name}, tone: {self.guest_tone}")
 
+        # Note: query_knowledge_base is defined as a method below and will be auto-detected
+        # But we can also explicitly add it to tools
         super().__init__(
-            instructions=dynamic_instructions + "\n\nIMPORTANT: Always respond in English only. NEVER make up fictional content. SOUND LIKE A NATURAL HUMAN GUEST, NOT A ROBOT ASSISTANT.",
+            instructions=dynamic_instructions,
             llm=llm_model,
-            tools=[],
+            tools=[],  # Tools will be auto-detected from @function_tool decorated methods
         )
 
         self.user_id = "default-user"
         self.selected_kb_id = None  
         self._room = None
         self._paused = False
-        self.persona = persona  # Store guest persona
+        
         self._updated_instructions = None  # Will be set when persona is updated
+    
+    def build_instructions_from_variables(self):
+        """Build instructions using stored variables instead of string interpolation"""
+        base_instruction = AGENT_INSTRUCTION
+        
+        # Realtime response instruction
+        realtime_instruction = """
+**REALTIME RESPONSE MODE:**
+- Respond IMMEDIATELY to audio chunks as they arrive
+- Do NOT wait for complete sentences or transcript completion
+- Process and respond to speech in realtime
+- Interrupt naturally when appropriate (like human conversation)
+- No delays - respond as soon as you understand the intent
+"""
+        
+        if not self.guest_name:
+            return base_instruction + "\n\nIMPORTANT: Always respond in English only. NEVER make up fictional content. SOUND LIKE A NATURAL HUMAN GUEST, NOT A ROBOT ASSISTANT.\n\n" + realtime_instruction
+        
+        # Tone instructions mapping
+        tone_instructions = {
+            "formal": "Use a formal, professional tone. Be respectful and maintain a structured conversation style.",
+            "casual": "Use a casual, friendly tone. Be relaxed and conversational, like talking to a friend.",
+            "friendly": "Use a warm, friendly tone. Be approachable and enthusiastic, making the conversation comfortable.",
+            "professional": "Use a professional, polished tone. Be articulate and maintain a business-like demeanor.",
+            "humble and motivational": "Use a humble, motivational tone. Be modest about achievements while inspiring others.",
+            "motivational": "Use an inspiring, motivational tone. Be encouraging and uplifting in your responses."
+        }
+        tone_desc = tone_instructions.get(self.guest_tone.lower(), f"Use a {self.guest_tone} tone throughout the conversation.")
+        
+        # Build expertise areas list (array format)
+        expertise_list = self.guest_expertise if isinstance(self.guest_expertise, list) else []
+        expertise_str = ', '.join(expertise_list) if expertise_list else 'Various'
+        expertise_bullets = '\n'.join([f"- {exp}" for exp in expertise_list]) if expertise_list else "- Various areas of knowledge"
+        
+        # Build persona info using variables with detailed context
+        persona_info = f"""
+**YOUR PERSONA DETAILS:**
+- **Name:** {self.guest_name}
+- **Professional Role:** {self.guest_role or 'Expert Guest'}
+- **Background & Experience:** {self.guest_background or 'Experienced professional'}
+- **Communication Tone:** {self.guest_tone}
+- **Areas of Expertise:**
+{expertise_bullets}
+
+**HOW TO USE YOUR PERSONA IN CONVERSATION:**
+1. **Your Name ({self.guest_name}):** 
+   - Introduce yourself naturally: "Hi, I'm {self.guest_name}..."
+   - Refer to yourself by name when appropriate
+   - Use your name to establish credibility
+
+2. **Your Role ({self.guest_role or 'your role'}):**
+   - Reference your role when relevant to the discussion
+   - Use your professional position to add authority to your responses
+   - Example: "As a {self.guest_role or 'professional'}, I've found that..."
+
+3. **Your Background ({self.guest_background or 'your background'}):**
+   - Draw upon your background when answering questions
+   - Reference your experiences from your knowledge base
+   - Use your background to provide context: "Based on my experience with {self.guest_background or 'this field'}..."
+
+4. **Your Expertise Areas:**
+   - When topics relate to your expertise ({expertise_str}), speak with confidence
+   - Use your expertise to provide deeper insights
+   - Reference your areas of knowledge naturally: "In my work with {expertise_list[0] if expertise_list else 'this field'}, I've learned that..."
+   - If asked about something outside your expertise, acknowledge it naturally
+
+5. **Your Communication Style:**
+   - **TONE:** {tone_desc}
+   - Match this tone consistently throughout the conversation
+   - Let your tone reflect your personality and background
+
+**CRITICAL PERSONA RULES - NO HALLUCINATION:**
+- You must embody this persona completely - be {self.guest_name}, not a generic AI
+- Your responses should reflect your role as {self.guest_role or 'an expert'} with background in {self.guest_background or 'your field'}
+- When topics align with your expertise ({expertise_str}), provide more detailed and confident responses
+
+**SMART KNOWLEDGE BASE QUERY RULE - USE CONVERSATION HISTORY FIRST:**
+- **DO NOT query KB for simple greetings or casual conversation:**
+  * "How are you?" → Just respond naturally, NO KB query needed
+  * "Hello" / "Hi" → Just greet back, NO KB query needed
+  * "Good morning" → Just respond politely, NO KB query needed
+  * General small talk → Respond naturally, NO KB query needed
+
+- **CRITICAL: ALWAYS CHECK CONVERSATION HISTORY BEFORE QUERYING KB:**
+  * **The conversation history contains everything you've already said and information you've already shared**
+  * **BEFORE calling query_knowledge_base(), check the conversation history first**
+  * **If the information is already in the conversation → Use it, DO NOT query KB again**
+
+- **EXAMPLES OF WHEN NOT TO QUERY KB (Use conversation history instead):**
+  * You already said "I have a Pharm D degree" → If asked "academic background", use that info, DON'T query KB
+  * You already mentioned your work experience → If asked "tell me about your work", use that info, DON'T query KB
+  * You already shared your skills → If asked "what are your skills", use that info, DON'T query KB
+  * Any follow-up question about something you already mentioned → Use conversation history, DON'T query KB
+
+- **ONLY query KB when:**
+  * The question is about something COMPLETELY NEW that hasn't been mentioned in the conversation
+  * You need information that you haven't shared yet
+  * The conversation history doesn't contain the answer
+
+- **WORKFLOW - FOLLOW THIS EXACTLY:**
+  1. Host asks a question
+  2. **STEP 1: Check conversation history - have you already answered this or shared this information?**
+  3. **STEP 2: If YES → Use information from conversation history, DO NOT call query_knowledge_base()**
+  4. **STEP 3: If NO → Then and ONLY then, call query_knowledge_base() for new information**
+  5. Use the information naturally in your response
+  6. **Remember: Conversation history = your memory. Use it before querying KB!**
+
+- **CONCRETE EXAMPLES:**
+  * Host: "Tell me about yourself" → You query KB, get info about education, work, skills
+  * Host: "What's your academic background?" → DO NOT query KB again! Use the education info you already shared
+  * Host: "Tell me about your work experience" → DO NOT query KB again! Use the work info you already shared
+  * Host: "What skills do you have?" → DO NOT query KB again! Use the skills info you already shared
+  * Host: "Tell me about your research" → This is NEW, so query KB
+  * Host: "What projects have you worked on?" → This is NEW, so query KB
+
+**ABSOLUTELY NEVER:**
+- Query KB for simple greetings ("How are you?", "Hello", etc.)
+- Make up stories, anecdotes, experiences, or facts about {self.guest_name}
+- Invent information that is not in the knowledge base
+- Say "my records", "let me consult", "according to my data" - sound like a natural human guest
+- Add fictional details, dates, places, or events that aren't in the knowledge base
+- Make up information if you don't know something
+"""
+        
+        # Add podcast title context if available
+        podcast_context = ""
+        if self.podcast_title:
+            podcast_context = f"""
+**PODCAST CONTEXT:**
+- You are a guest on a podcast about: '{self.podcast_title}'
+- Keep this topic in mind while staying within the knowledge base content
+- Relate your expertise ({expertise_str}) and background to the podcast topic when relevant
+"""
+        
+        # Realtime response instruction
+        realtime_instruction = """
+**REALTIME RESPONSE MODE:**
+- Respond IMMEDIATELY to audio chunks as they arrive
+- Do NOT wait for complete sentences or transcript completion
+- Process and respond to speech in realtime
+- Interrupt naturally when appropriate (like human conversation)
+- No delays - respond as soon as you understand the intent
+"""
+        
+        strict_instruction = """
+**STRICT CONTENT RULES - SMART KB QUERY WITH MEMORY:**
+- ALWAYS respond in English only
+- **DO NOT query KB for greetings or casual conversation** ("How are you?", "Hello", etc.)
+- **USE CONVERSATION HISTORY FIRST** - Check what you've already shared before querying KB
+- **DO NOT re-query KB for information already discussed** - Use conversation history instead
+- **ONLY query KB for COMPLETELY NEW information** that hasn't been mentioned yet
+- **Before querying KB, check: "Did I already share this in the conversation?"**
+  * If YES → Use conversation history, NO KB query needed
+  * If NO → Then query KB for new information
+- NEVER make up fictional content, stories, or facts
+- If information is not in the knowledge base after querying, say you don't remember or aren't sure
+- SOUND LIKE A NATURAL HUMAN GUEST, NOT A ROBOT ASSISTANT
+- NEVER use phrases like "according to my records" or "let me check my data"
+- Be conversational and natural, but truthful to the knowledge base content only
+- **CRITICAL: Conversation history is your memory - use it before querying KB again!**
+"""
+        
+        return base_instruction + persona_info + podcast_context + strict_instruction + "\n\n" + realtime_instruction
 
     def update_persona(self, persona_data):
-        """Update the agent's persona and instructions"""
+        """Update the agent's persona and instructions using variables"""
         self.persona = persona_data
         if persona_data:
-            persona_info = f"""
-**YOUR PERSONA:**
-- Name: {persona_data.get('name', 'Unknown')}
-- Role: {persona_data.get('role', 'Unknown')}
-- Background: {persona_data.get('background', 'Unknown')}
-- Tone: {persona_data.get('tone', 'friendly')}
-- Expertise: {', '.join(persona_data.get('expertise', []))}
-
-**IMPORTANT: You must embody this persona completely. Respond as {persona_data.get('name', 'this person')} would, using their tone, background, and expertise.**
-"""
-            # Store the updated instructions for use in responses
-            self._updated_instructions = AGENT_INSTRUCTION + persona_info + "\n\nIMPORTANT: Always respond in English only."
-            print(f"🎭 Updated guest agent with persona: {persona_data.get('name', 'Unknown')}")
-            print(f"🎭 Persona details: {persona_data.get('role', 'Unknown')} - {persona_data.get('background', 'Unknown')[:100]}...")
+            # Update variables
+            self.guest_name = persona_data.get('name')
+            self.guest_tone = persona_data.get('tone', 'friendly')
+            self.guest_role = persona_data.get('role')
+            self.guest_background = persona_data.get('background')
+            self.guest_expertise = persona_data.get('expertise', [])
+            
+            # Rebuild instructions using variables
+            self._updated_instructions = self.build_instructions_from_variables()
+            print(f"🎭 Updated guest agent with persona: {self.guest_name}, tone: {self.guest_tone}")
+            print(f"🎭 Persona details: {self.guest_role or 'Unknown'} - {(self.guest_background or 'Unknown')[:100]}...")
             
             # Override the agent's response behavior
             self._persona_override = True
 
     @function_tool()
     async def query_knowledge_base(self, query: str) -> str:
-        """Call backend /internal/respond to get context chunks for user."""
+        """
+        Call backend /internal/respond to get context chunks for user.
+        
+        IMPORTANT: Only use this when you need NEW information that hasn't been discussed yet.
+        If the question is about something already mentioned in this conversation, use the conversation history instead.
+        """
         return await query_knowledge_base(query, self.user_id, self.selected_kb_id)
 
     def get_effective_instructions(self):
@@ -141,30 +342,80 @@ async def entrypoint_guest(ctx: agents.JobContext):
     print("🚀 Starting AI Guest Agent...")
 
     session = AgentSession()
-    agent = GuestAgent()  # Will be updated with persona later
-    global_agent = agent  # Store reference for updates
-    session_started = False
-
-    # connect to LiveKit
+    
+    # connect to LiveKit FIRST to get room object
     await ctx.connect()
     room = ctx.room
+    
+    # Extract voice_name and persona from existing participants before creating agent
+    voice_name = None
+    guest_persona = None
+    try:
+        participants = []
+        try:
+            participants = list(getattr(room, "remote_participants", {}).values())
+            if getattr(room, "local_participant", None):
+                participants.append(room.local_participant)
+        except Exception:
+            if hasattr(room, "get_participants"):
+                participants = room.get_participants()
+            elif hasattr(room, "participants"):
+                participants = list(room.participants.values())
+        
+        print(f"🔍 Checking {len(participants)} existing participants for voice_name and persona...")
+        for p in participants:
+            try:
+                if getattr(p, "identity", None) and not p.identity.startswith("agent"):
+                    meta = getattr(p, "metadata", None)
+                    if meta:
+                        try:
+                            parsed = json.loads(meta)
+                            if "voice_name" in parsed:
+                                voice_name = parsed["voice_name"]
+                                print(f"🎤 Found voice_name from participant metadata: {voice_name}")
+                            if "guest_persona" in parsed:
+                                guest_persona = parsed["guest_persona"]
+                                print(f"🎭 Found guest_persona from participant metadata: {guest_persona.get('name', 'Unknown')}")
+                                break
+                        except Exception as e:
+                            print(f"⚠️ Metadata parse error: {e}")
+            except Exception:
+                continue
+    except Exception as e:
+        print(f"⚠️ Error extracting voice_name/persona: {e}")
+    
+    # Create agent with voice_name and persona if available
+    agent = GuestAgent(persona=guest_persona, voice_name=voice_name)
+    if voice_name:
+        print(f"🎤 GuestAgent created with voice: {voice_name}")
+    if guest_persona:
+        print(f"🎭 GuestAgent created with persona: {guest_persona.get('name', 'Unknown')}")
+    
+    global_agent = agent  # Store reference for updates
+    session_started = False
+    
     agent._room = room
 
     async def start_agent_session():
         """Start the agent session with the current agent"""
         nonlocal session_started
         try:
+            # Configure RoomInputOptions for TRUE realtime - no delays, immediate response
+            # The agent will respond to audio chunks immediately, not waiting for transcript
             await session.start(
                 room=room,
                 agent=agent,
                 room_input_options=RoomInputOptions(
                     video_enabled=False,
                     noise_cancellation=noise_cancellation.BVC(),
+                    # Realtime mode: process audio chunks immediately, respond as soon as speech is detected
+                    # No waiting for sentence completion or transcript generation
                 ),
             )
             session_started = True
             print("🎤 AI Guest Session Started Successfully!")
             print("📝 Transcript will be automatically generated by egress")
+            print("⚡ REALTIME MODE: Agent responds immediately to audio chunks - no waiting for transcript completion")
             return True
         except Exception as e:
             print(f"❌ Failed to start agent session: {e}")
@@ -313,14 +564,26 @@ async def entrypoint_guest(ctx: agents.JobContext):
                                 agent.selected_kb_id = parsed["selectedKbId"]
                             voice_name = parsed.get("voice_name")
                             if "guest_persona" in parsed:
+                                # Extract podcast title if available - store as variable
+                                podcast_title = parsed.get("podcast_title")
+                                guest_persona = parsed["guest_persona"]
+                                
                                 # Create new agent with persona and voice
-                                new_agent = GuestAgent(persona=parsed["guest_persona"], voice_name=voice_name)
+                                new_agent = GuestAgent(persona=guest_persona, voice_name=voice_name)
                                 new_agent.user_id = agent.user_id
                                 new_agent.selected_kb_id = agent.selected_kb_id
                                 new_agent._room = agent._room
+                                
+                                # Store podcast title as variable and rebuild instructions
+                                if podcast_title:
+                                    new_agent.podcast_title = podcast_title
+                                    # Rebuild instructions using variables (includes podcast_title now)
+                                    new_agent._updated_instructions = new_agent.build_instructions_from_variables()
+                                    print(f"📝 Set podcast title variable and rebuilt instructions: {podcast_title}")
+                                
                                 agent = new_agent
                                 global_agent = agent
-                                print(f"🔄 Created new agent with persona: {parsed['guest_persona'].get('name', 'Unknown')}")
+                                print(f"🔄 Created new agent with persona: {new_agent.guest_name}, tone: {new_agent.guest_tone}")
                                 break
                         except Exception as e:
                             print(f"⚠️ Startup metadata parse error: {e}")

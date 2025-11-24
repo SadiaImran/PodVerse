@@ -1,13 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, FileText, Check, XCircle, Link, Loader2 } from 'lucide-react';
-import { IoMdArrowRoundBack } from "react-icons/io";
+import { Upload, FileText, Check, XCircle, Link, Loader2, ArrowLeft, Database } from 'lucide-react';
 
 import axios from 'axios';
 import { supabase, getSupabaseAuthorizedtoken } from '../../supabaseClient'
 
 const FileUpload = ({ title, accept, onFileSelect, selectedFile, icon: Icon, disabled, onCancel }) => {
   return (
-    <div className={`relative border-2 border-dashed border-gray-200 rounded-xl p-8 text-center hover:border-blue-300 transition-colors ${disabled ? 'opacity-50' : ''}`}>
+    <div 
+      className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-all flex flex-col ${disabled ? 'opacity-50' : 'hover:shadow-lg cursor-pointer'}`}
+      style={{ 
+        borderColor: selectedFile ? '#6057C7' : '#e5e7eb',
+        backgroundColor: selectedFile ? '#f5f3ff' : 'white',
+        minHeight: '400px',
+        maxHeight: '400px'
+      }}
+    >
       <input
         type="file"
         accept={accept}
@@ -16,20 +23,48 @@ const FileUpload = ({ title, accept, onFileSelect, selectedFile, icon: Icon, dis
         id="file-upload"
         disabled={disabled}
       />
-      <label htmlFor="file-upload" className={`block ${selectedFile || disabled ? 'pointer-events-none' : 'cursor-pointer'}`}>
-        <Icon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-        <h3 className="text-lg font-medium text-gray-700 mb-2">{title}</h3>
+      <label htmlFor="file-upload" className={`flex flex-col items-center justify-center h-full ${selectedFile || disabled ? 'pointer-events-none' : 'cursor-pointer'}`}>
+        <div className="mb-6">
+          <div className="w-24 h-24 mx-auto mb-4 rounded-2xl flex items-center justify-center" 
+            style={{ backgroundColor: selectedFile ? '#6057C7' : '#f5f3ff' }}
+          >
+            <Icon className="w-16 h-16" style={{ color: selectedFile ? '#F9F5EB' : '#6057C7' }} />
+          </div>
+          <h3 className="text-xl font-semibold mb-3" style={{ color: '#1C1C1C' }}>{title}</h3>
+        </div>
+        
         {selectedFile ? (
-          <div className="flex items-center justify-center text-green-600 gap-2">
-            <Check className="w-4 h-4" />
-            <span className="text-sm">{selectedFile.name}</span>
+          <div className="flex flex-col items-center gap-3" style={{ color: '#6057C7' }}>
+            <div className="w-16 h-16 rounded-full flex items-center justify-center shadow-lg" style={{ backgroundColor: '#6057C7' }}>
+              <Check className="w-8 h-8 text-white" />
+            </div>
+            <div className="text-center">
+              <p className="text-base font-semibold mb-1">{selectedFile.name}</p>
+              <p className="text-xs" style={{ color: '#6A6A6A' }}>
+                {(selectedFile.size / 1024).toFixed(1)} KB
+              </p>
+            </div>
           </div>
         ) : (
-          <p className="text-gray-500 text-sm">Click to upload or drag and drop</p>
+          <div className="space-y-3">
+            <p className="text-sm font-medium" style={{ color: '#6A6A6A' }}>Click to upload or drag and drop</p>
+            <div className="flex flex-wrap gap-2 justify-center">
+              <span className="px-3 py-1 rounded-full text-xs font-medium" style={{ backgroundColor: '#e9e5ff', color: '#6057C7' }}>PDF</span>
+              <span className="px-3 py-1 rounded-full text-xs font-medium" style={{ backgroundColor: '#e9e5ff', color: '#6057C7' }}>TXT</span>
+              <span className="px-3 py-1 rounded-full text-xs font-medium" style={{ backgroundColor: '#e9e5ff', color: '#6057C7' }}>CSV</span>
+              <span className="px-3 py-1 rounded-full text-xs font-medium" style={{ backgroundColor: '#e9e5ff', color: '#6057C7' }}>JSON</span>
+            </div>
+          </div>
         )}
       </label>
       {selectedFile && (
-        <button type="button" className="absolute top-2 right-2 text-red-400 hover:text-red-600" onClick={onCancel} aria-label="Remove file">
+        <button 
+          type="button" 
+          className="absolute top-3 right-3 p-2 rounded-full hover:bg-red-50 transition-colors shadow-md" 
+          onClick={onCancel} 
+          aria-label="Remove file"
+          style={{ backgroundColor: 'white', color: '#ef4444' }}
+        >
           <XCircle className="w-5 h-5" />
         </button>
       )}
@@ -39,27 +74,70 @@ const FileUpload = ({ title, accept, onFileSelect, selectedFile, icon: Icon, dis
 
 const URLInput = ({ disabled, url, setUrl, onCancel }) => {
   return (
-    <div className={`border-2 border-dashed border-gray-200 rounded-xl p-8 text-center ${disabled ? 'opacity-50' : ''}`}>
-      <Link className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-      <h3 className="text-lg font-medium text-gray-700 mb-4">Add URL to Knowledge Base</h3>
-      <div className="space-y-3">
-        <input
-          type="url"
-          placeholder="https://example.com/article"
-          value={url}
-          onChange={e => setUrl(e.target.value)}
-          disabled={disabled}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-        />
-        {url && (
-          <div className="flex items-center justify-center text-green-600 gap-2">
-            <Check className="w-4 h-4" />
-            <span className="text-sm">URL ready to submit</span>
-            <button type="button" onClick={onCancel} className="ml-2 text-red-400 hover:text-red-600">
-              <XCircle className="w-4 h-4" />
-            </button>
+    <div 
+      className={`border-2 border-dashed rounded-xl p-8 text-center transition-all flex flex-col ${disabled ? 'opacity-50' : 'hover:shadow-lg'}`}
+      style={{ 
+        borderColor: url ? '#6057C7' : '#e5e7eb',
+        backgroundColor: url ? '#f5f3ff' : 'white',
+        minHeight: '400px',
+        maxHeight: '400px'
+      }}
+    >
+      <div className="flex flex-col items-center justify-center h-full">
+        <div className="mb-6">
+          <div className="w-24 h-24 mx-auto mb-4 rounded-2xl flex items-center justify-center" 
+            style={{ backgroundColor: url ? '#6057C7' : '#f5f3ff' }}
+          >
+            <Link className="w-16 h-16" style={{ color: url ? '#F9F5EB' : '#6057C7' }} />
           </div>
-        )}
+          <h3 className="text-xl font-semibold mb-4" style={{ color: '#1C1C1C' }}>Add URL to Knowledge Base</h3>
+        </div>
+        
+        <div className="space-y-4 w-full">
+          <input
+            type="url"
+            placeholder="https://example.com/article"
+            value={url}
+            onChange={e => setUrl(e.target.value)}
+            disabled={disabled}
+            className="w-full px-4 py-3 border-2 rounded-xl text-lg focus:outline-none focus:ring-2 transition-all"
+            style={{
+              borderColor: url ? '#6057C7' : '#e5e7eb',
+              focusRingColor: '#6057C7'
+            }}
+            onFocus={(e) => {
+              if (!url) {
+                e.target.style.borderColor = '#6057C7';
+                e.target.style.boxShadow = '0 0 0 3px rgba(96, 87, 199, 0.1)';
+              }
+            }}
+            onBlur={(e) => {
+              if (!url) {
+                e.target.style.borderColor = '#e5e7eb';
+                e.target.style.boxShadow = 'none';
+              }
+            }}
+          />
+          {url && (
+            <div className="flex flex-col items-center gap-3" style={{ color: '#6057C7' }}>
+              <div className="w-16 h-16 rounded-full flex items-center justify-center shadow-lg" style={{ backgroundColor: '#6057C7' }}>
+                <Check className="w-8 h-8 text-white" />
+              </div>
+              <div className="text-center">
+                <p className="text-sm font-semibold mb-1">URL ready to submit</p>
+                <p className="text-xs break-all px-4" style={{ color: '#6A6A6A' }}>{url}</p>
+              </div>
+              <button 
+                type="button" 
+                onClick={onCancel} 
+                className="mt-2 p-2 rounded-full hover:bg-red-50 transition-colors shadow-md"
+                style={{ backgroundColor: 'white', color: '#ef4444' }}
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -72,35 +150,80 @@ const ExistingFilesSelector = ({ files, selectedFile, onFileSelect, disabled, on
 
   return (
     <div className={`space-y-3 ${disabled ? 'opacity-50 pointer-events-none' : ''}`}>
-      <h3 className="text-lg font-medium text-gray-700 mb-4">Or select from existing knowledge bases:</h3>
-      <div className="grid gap-3">
+      <style>{`
+        .kb-scrollbar::-webkit-scrollbar {
+          width: 8px;
+        }
+        .kb-scrollbar::-webkit-scrollbar-track {
+          background: #f5f3ff;
+          border-radius: 10px;
+        }
+        .kb-scrollbar::-webkit-scrollbar-thumb {
+          background: linear-gradient(180deg, #6057C7 0%, #A388E7 100%);
+          border-radius: 10px;
+        }
+        .kb-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: linear-gradient(180deg, #4f46e5 0%, #8f7bff 100%);
+        }
+      `}</style>
+      <h3 className="text-lg font-semibold mb-4 flex items-center gap-2" style={{ color: '#1C1C1C' }}>
+        <Database className="w-5 h-5" style={{ color: '#6057C7' }} />
+        Or select from existing knowledge bases:
+      </h3>
+      <div 
+        className="space-y-3 overflow-y-auto pr-2 kb-scrollbar"
+        style={{ 
+          maxHeight: '400px',
+          scrollbarWidth: 'thin',
+          scrollbarColor: '#6057C7 #f5f3ff'
+        }}
+      >
         {files.map((file) => {
           const isSelected = selectedFile?.id === file.id;
           return (
             <div
               key={file.id}
               onClick={() => !disabled && onFileSelect(file)}
-              className={`group p-4 border rounded-lg cursor-pointer transition-all flex items-center justify-between
-                ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}
+              className={`group p-4 border-2 rounded-xl cursor-pointer transition-all flex items-center justify-between
+                ${isSelected 
+                  ? 'border-[#6057C7] bg-[#f5f3ff] shadow-md' 
+                  : 'border-gray-200 hover:border-[#A388E7] hover:shadow-sm bg-white'
+                }
                 relative`}
-              style={{ minHeight: 56 }}
+              style={{ minHeight: 64 }}
             >
-              <div className="flex items-center">
-                <FileText className="w-5 h-5 text-gray-400 mr-3" />
+              <div className="flex items-center gap-3">
+                <div 
+                  className={`p-2 rounded-lg ${isSelected ? 'bg-[#6057C7]' : 'bg-gray-100'}`}
+                >
+                  <FileText className={`w-5 h-5 ${isSelected ? 'text-white' : 'text-gray-400'}`} />
+                </div>
                 <div>
-                  <p className="font-medium text-gray-700">{file.file_name}</p>
-                  <p className="text-sm text-gray-500">
+                  <p className="font-semibold" style={{ color: isSelected ? '#1C1C1C' : '#1C1C1C' }}>
+                    {file.file_name}
+                  </p>
+                  <p className="text-sm" style={{ color: '#6A6A6A' }}>
                     Uploaded {new Date(file.created_at).toLocaleDateString()}
                   </p>
                 </div>
               </div>
-              <div className="flex items-center ml-auto">
+              <div className="flex items-center ml-auto gap-2">
                 {isSelected && (
-                  <button type="button" className="text-red-400 hover:text-red-600 mr-2" onClick={e => { e.stopPropagation(); onCancel(); }} aria-label="Deselect file">
+                  <button 
+                    type="button" 
+                    className="p-1.5 rounded-full hover:bg-red-50 transition-colors" 
+                    onClick={e => { e.stopPropagation(); onCancel(); }} 
+                    aria-label="Deselect file"
+                    style={{ color: '#ef4444' }}
+                  >
                     <XCircle className="w-5 h-5" />
                   </button>
                 )}
-                {isSelected && <Check className="w-5 h-5 text-blue-500" />}
+                {isSelected && (
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: '#6057C7' }}>
+                    <Check className="w-5 h-5 text-white" />
+                  </div>
+                )}
               </div>
             </div>
           );
@@ -313,25 +436,63 @@ const KnowledgeBaseSetup = ({ goNext, goBack }) => {
   const canProceed = uploadedFile || selectedExistingFile || urlInput;
 
   return (
-    <div className="p-8 bg-white rounded-xl shadow-md space-y-6">
-      <h2 className="text-2xl font-bold text-gray-800">Knowledge Base Setup</h2>
-      <p className="text-gray-600">Create a knowledge base for your AI assistant by uploading a document, adding a URL, or selecting a previously uploaded one.</p>
+    <div className="rounded-[28px] border border-white/60 bg-white/85 backdrop-blur-xl shadow-[0_20px_60px_rgba(96,87,199,0.1)] p-8 md:p-10 space-y-6">
+      <div className="mb-6">
+        <h2 className="text-3xl font-bold mb-2" style={{ color: '#6A6A6A' }}>Knowledge Base Setup</h2>
+        <p style={{ color: '#6A6A6A' }}>Create a knowledge base for your AI assistant by uploading a document, adding a URL, or selecting a previously uploaded one.</p>
+      </div>
       
-      <div className="flex gap-2 border-b border-gray-200 mb-4">
+      <div className="flex gap-2 bg-[#f5f3ff] rounded-full p-1 mb-6">
         <button
           onClick={() => setUploadType('file')}
-          className={`px-4 py-2 font-medium transition-colors ${
-            uploadType === 'file' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'
+          className={`px-5 py-2.5 font-semibold text-sm rounded-full transition-all flex items-center gap-2 ${
+            uploadType === 'file' 
+              ? 'shadow-md' 
+              : ''
           }`}
+          style={
+            uploadType === 'file'
+              ? { backgroundColor: '#6057C7', color: '#F9F5EB' }
+              : { color: '#6057C7' }
+          }
+          onMouseEnter={(e) => {
+            if (uploadType !== 'file') {
+              e.currentTarget.style.backgroundColor = '#e9e5ff';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (uploadType !== 'file') {
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }
+          }}
         >
+          <Upload size={18} />
           Upload File
         </button>
         <button
           onClick={() => setUploadType('url')}
-          className={`px-4 py-2 font-medium transition-colors ${
-            uploadType === 'url' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'
+          className={`px-5 py-2.5 font-semibold text-sm rounded-full transition-all flex items-center gap-2 ${
+            uploadType === 'url' 
+              ? 'shadow-md' 
+              : ''
           }`}
+          style={
+            uploadType === 'url'
+              ? { backgroundColor: '#6057C7', color: '#F9F5EB' }
+              : { color: '#6057C7' }
+          }
+          onMouseEnter={(e) => {
+            if (uploadType !== 'url') {
+              e.currentTarget.style.backgroundColor = '#e9e5ff';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (uploadType !== 'url') {
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }
+          }}
         >
+          <Link size={18} />
           Add URL
         </button>
       </div>
@@ -363,9 +524,9 @@ const KnowledgeBaseSetup = ({ goNext, goBack }) => {
         </div>
 
         {isLoadingFiles ? (
-          <div className="flex items-center justify-center p-8 bg-gray-50 rounded-xl">
-            <Loader2 className="animate-spin w-6 h-6 text-gray-400" />
-            <span className="ml-2 text-gray-500">Loading your files...</span>
+          <div className="flex items-center justify-center p-8 rounded-xl" style={{ backgroundColor: '#f5f3ff' }}>
+            <Loader2 className="animate-spin w-6 h-6" style={{ color: '#6057C7' }} />
+            <span className="ml-2 font-medium" style={{ color: '#6A6A6A' }}>Loading your files...</span>
           </div>
         ) : (
           <ExistingFilesSelector
@@ -378,32 +539,51 @@ const KnowledgeBaseSetup = ({ goNext, goBack }) => {
         )}
       </div>
 
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-        <p className="text-sm text-blue-800">
-          <strong>Supported formats:</strong> PDF, TXT, CSV, JSON files and web URLs
-        </p>
-      </div>
-
-      <div className="flex justify-between pt-4">
-        <button onClick={goBack} className="text-purple-600 font-medium text-3xl hover:underline">
-          <IoMdArrowRoundBack />
+      <div className="flex justify-between items-center pt-4">
+        <button 
+          onClick={goBack} 
+          className="w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-md hover:shadow-lg"
+          style={{ backgroundColor: '#6057C7', color: '#F9F5EB' }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = '#4f46e5';
+            e.currentTarget.style.transform = 'translateX(-2px)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = '#6057C7';
+            e.currentTarget.style.transform = 'translateX(0)';
+          }}
+        >
+          <ArrowLeft size={20} />
         </button>
         <button
           onClick={handleUploadAndNext}
           disabled={!canProceed || isUploading}
-          className={`px-8 py-2 rounded-xl font-semibold transition-all ${
+          className="px-8 py-4 rounded-full font-semibold text-lg transition-all shadow-md hover:shadow-lg flex items-center gap-2"
+          style={
             canProceed && !isUploading
-              ? 'bg-purple-600 text-white hover:text-gray-800 hover:border-2 hover:border-purple-600 hover:bg-white'
-              : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-          }`}
+              ? { backgroundColor: '#6057C7', color: '#F9F5EB' }
+              : { backgroundColor: '#e5e7eb', color: '#9ca3af', cursor: 'not-allowed' }
+          }
+          onMouseEnter={(e) => {
+            if (canProceed && !isUploading) {
+              e.currentTarget.style.backgroundColor = '#4f46e5';
+              e.currentTarget.style.transform = 'translateY(-1px)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (canProceed && !isUploading) {
+              e.currentTarget.style.backgroundColor = '#6057C7';
+              e.currentTarget.style.transform = 'translateY(0)';
+            }
+          }}
         >
           {isUploading ? (
             <>
-              <Loader2 className="animate-spin w-5 h-5 mr-2 inline" />
+              <Loader2 className="animate-spin w-5 h-5" />
               Uploading...
             </>
           ) : (
-            'Next'
+            'Next: AI Speaker Setup →'
           )}
         </button>
       </div>

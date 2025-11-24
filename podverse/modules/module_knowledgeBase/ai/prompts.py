@@ -282,7 +282,11 @@ class PodcastManager:
 
     def generate_host_opening(self, context: str, show_name: str, guest_name: str) -> str:
         """Generate an engaging opening for the host - with only ONE question"""
+        # Use show_name (which may contain podcast_title) for opening
         if not context:
+            # If show_name looks like a topic (not a show name), use it in opening
+            if show_name and len(show_name) < 50 and not show_name.lower().startswith(('ai ', 'the ', 'podcast')):
+                return f"Welcome! Today we're exploring '{show_name}'. I'm excited to dive into this topic with you. What should we start with?"
             return f"Welcome to {show_name}! I'm excited to dive into some fascinating topics with you today. What should we start exploring?"
         
         # Extract interesting concepts from context (not file names)
@@ -301,15 +305,28 @@ class PodcastManager:
             best_topic = max(interesting_topics, key=len)
             
             # Create natural opening variations with SINGLE questions
-            opening_templates = [
-                f"Welcome to {show_name}! I'm here with {guest_name}, and we're diving into some really compelling material today. I'm particularly curious about {best_topic.lower()}. What's your perspective on this?",
-                f"Hey everyone, welcome to {show_name}! {guest_name} is here with me, and we've got some fascinating territory to explore. One thing that caught my attention was {best_topic.lower()}. Can you walk us through your thoughts?",
-                f"Welcome to the show! I'm excited to have {guest_name} here today because we're going to unpack some really interesting ideas. I keep thinking about {best_topic.lower()}. How do you see this?"
-            ]
+            # Use show_name (which may contain podcast_title) in opening
+            if show_name and len(show_name) < 50 and not show_name.lower().startswith(('ai ', 'the ', 'podcast')):
+                # show_name is actually a topic/title
+                opening_templates = [
+                    f"Welcome! Today we're exploring '{show_name}'. I'm here with {guest_name}, and we're diving into some really compelling material. I'm particularly curious about {best_topic.lower()}. What's your perspective on this?",
+                    f"Hey everyone! We're talking about '{show_name}' today. {guest_name} is here with me, and we've got some fascinating territory to explore. One thing that caught my attention was {best_topic.lower()}. Can you walk us through your thoughts?",
+                    f"Welcome! I'm excited to have {guest_name} here today to discuss '{show_name}'. We're going to unpack some really interesting ideas. I keep thinking about {best_topic.lower()}. How do you see this?"
+                ]
+            else:
+                # show_name is a traditional show name
+                opening_templates = [
+                    f"Welcome to {show_name}! I'm here with {guest_name}, and we're diving into some really compelling material today. I'm particularly curious about {best_topic.lower()}. What's your perspective on this?",
+                    f"Hey everyone, welcome to {show_name}! {guest_name} is here with me, and we've got some fascinating territory to explore. One thing that caught my attention was {best_topic.lower()}. Can you walk us through your thoughts?",
+                    f"Welcome to the show! I'm excited to have {guest_name} here today because we're going to unpack some really interesting ideas. I keep thinking about {best_topic.lower()}. How do you see this?"
+                ]
             
             return random.choice(opening_templates)
         
         # Fallback if no good topics found - single question
+        if show_name and len(show_name) < 50 and not show_name.lower().startswith(('ai ', 'the ', 'podcast')):
+            # show_name is actually a topic/title
+            return f"Welcome! Today we're exploring '{show_name}'. I'm really excited to discuss this with {guest_name}. Where should we start?"
         return f"Welcome to {show_name}, {guest_name}! I'm really excited to explore these fascinating topics with you today. Where should we start?"
 
     def handle_turn(self, supabase_client, user_id: str, message: str, persona: str, 

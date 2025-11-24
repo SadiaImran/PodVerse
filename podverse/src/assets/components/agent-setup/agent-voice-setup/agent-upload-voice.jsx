@@ -127,19 +127,26 @@ const VoiceRecorder = ({ onRecordingComplete }) => {
   };
 
   return (
-    <div className="border border-gray-200 rounded-lg p-6 bg-gradient-to-br from-blue-50 to-indigo-50">
+    <div className="rounded-xl p-6 border border-white/60" style={{ backgroundColor: 'rgba(255, 255, 255, 0.7)', backdropFilter: 'blur(10px)' }}>
       <div className="flex items-center gap-2 mb-4">
-        <Mic className="text-blue-600" size={20} />
-        <h3 className="text-lg font-semibold text-gray-800">Voice Recorder</h3>
+        <Mic className="w-5 h-5" style={{ color: '#6057C7' }} />
+        <h3 className="text-lg font-semibold" style={{ color: '#6A6A6A' }}>Voice Recorder</h3>
       </div>
 
       {/* Text to Read */}
       <div className="mb-4">
         <div className="flex justify-between items-center mb-2">
-          <label className="text-sm font-medium text-gray-700">Text to Read:</label>
+          <label className="text-sm font-medium" style={{ color: '#6A6A6A' }}>Text to Read:</label>
           <button
             onClick={selectRandomText}
-            className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 transition-colors"
+            className="text-xs px-3 py-1.5 rounded-full transition-all font-medium"
+            style={{ backgroundColor: '#f5f3ff', color: '#6057C7' }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#e9e5ff';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = '#f5f3ff';
+            }}
           >
             Random Text
           </button>
@@ -147,7 +154,8 @@ const VoiceRecorder = ({ onRecordingComplete }) => {
         <textarea
           value={recordingText}
           onChange={(e) => setRecordingText(e.target.value)}
-          className="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="w-full p-4 border-2 border-gray-300 rounded-xl resize-none focus:outline-none focus:ring-2 transition-all"
+          style={{ focusRingColor: '#6057C7' }}
           rows={3}
           placeholder="Enter text to read for recording..."
         />
@@ -158,7 +166,14 @@ const VoiceRecorder = ({ onRecordingComplete }) => {
         {!isRecording ? (
           <button
             onClick={startRecording}
-            className="flex items-center gap-2 bg-red-500 text-white px-6 py-3 rounded-full hover:bg-red-600 transition-colors shadow-lg hover:shadow-xl"
+            className="flex items-center gap-2 px-6 py-3 rounded-full transition-all shadow-md hover:shadow-lg font-semibold"
+            style={{ backgroundColor: '#ef4444', color: '#F9F5EB' }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#dc2626';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = '#ef4444';
+            }}
           >
             <Mic size={20} />
             Start Recording
@@ -166,7 +181,14 @@ const VoiceRecorder = ({ onRecordingComplete }) => {
         ) : (
           <button
             onClick={stopRecording}
-            className="flex items-center gap-2 bg-gray-600 text-white px-6 py-3 rounded-full hover:bg-gray-700 transition-colors shadow-lg"
+            className="flex items-center gap-2 px-6 py-3 rounded-full transition-all shadow-md hover:shadow-lg font-semibold"
+            style={{ backgroundColor: '#6b7280', color: '#F9F5EB' }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#4b5563';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = '#6b7280';
+            }}
           >
             <Square size={20} />
             Stop Recording
@@ -327,10 +349,10 @@ const FileUploader = ({ uploadedFiles = [], setUploadedFiles, maxFiles = 10 }) =
   };
 
   return (
-    <div className="border border-gray-200 rounded-lg p-6 bg-gradient-to-br from-green-50 to-emerald-50">
+    <div className="rounded-xl p-6 border border-white/60" style={{ backgroundColor: 'rgba(255, 255, 255, 0.7)', backdropFilter: 'blur(10px)' }}>
       <div className="flex items-center gap-2 mb-4">
-        <Upload className="text-green-600" size={20} />
-        <h3 className="text-lg font-semibold text-gray-800">Upload Audio Files</h3>
+        <Upload className="w-5 h-5" style={{ color: '#6057C7' }} />
+        <h3 className="text-lg font-semibold" style={{ color: '#6A6A6A' }}>Upload Audio Files</h3>
       </div>
 
       <div 
@@ -565,19 +587,26 @@ const VoiceCloneControls = ({ uploadedFiles, onClone, canClone, onSaveVoice }) =
 // };
 
   return (
-    <div className="border border-gray-200 rounded-lg p-6 bg-gradient-to-br from-purple-50 to-pink-50">
+    <div className="rounded-xl p-6 border border-white/60" style={{ backgroundColor: 'rgba(255, 255, 255, 0.7)', backdropFilter: 'blur(10px)' }}>
       <div className="flex items-center gap-2 mb-4">
-        <FileAudio className="text-purple-600" size={20} />
-        <h3 className="text-lg font-semibold text-gray-800">Voice Cloning</h3>
+        <FileAudio className="w-5 h-5" style={{ color: '#6057C7' }} />
+        <h3 className="text-lg font-semibold" style={{ color: '#6A6A6A' }}>Voice Cloning</h3>
       </div>
 
       {/* Clone Text Input */}
       <div className="mb-4">
         <div className="flex justify-between items-center mb-2">
-          <label className="text-sm font-medium text-gray-700">Text to Clone:</label>
+          <label className="text-sm font-medium" style={{ color: '#6A6A6A' }}>Text to Clone:</label>
           <button
             onClick={selectRandomText}
-            className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded hover:bg-purple-200 transition-colors"
+            className="text-xs px-3 py-1.5 rounded-full transition-all font-medium"
+            style={{ backgroundColor: '#f5f3ff', color: '#6057C7' }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#e9e5ff';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = '#f5f3ff';
+            }}
           >
             Random Text
           </button>
@@ -585,7 +614,8 @@ const VoiceCloneControls = ({ uploadedFiles, onClone, canClone, onSaveVoice }) =
         <textarea
           value={cloneText}
           onChange={(e) => setCloneText(e.target.value)}
-          className="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          className="w-full p-4 border-2 border-gray-300 rounded-xl resize-none focus:outline-none focus:ring-2 transition-all"
+          style={{ focusRingColor: '#6057C7' }}
           rows={3}
           placeholder="Enter text to clone with your voice..."
         />
@@ -596,11 +626,21 @@ const VoiceCloneControls = ({ uploadedFiles, onClone, canClone, onSaveVoice }) =
         <button
           onClick={handleClone}
           disabled={uploadedFiles.length === 0 || isCloning}
-          className={`flex items-center gap-2 px-6 py-3 rounded-lg transition-colors ${
-            uploadedFiles.length > 0 && !isCloning
-              ? "bg-purple-600 text-white hover:bg-purple-700"
-              : "bg-gray-300 text-gray-500 cursor-not-allowed"
-          }`}
+          className="flex items-center gap-2 px-6 py-3 rounded-full transition-all shadow-md hover:shadow-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+          style={uploadedFiles.length > 0 && !isCloning
+            ? { backgroundColor: '#6057C7', color: '#F9F5EB' }
+            : { backgroundColor: '#e5e7eb', color: '#9ca3af' }
+          }
+          onMouseEnter={(e) => {
+            if (uploadedFiles.length > 0 && !isCloning) {
+              e.currentTarget.style.backgroundColor = '#4f46e5';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (uploadedFiles.length > 0 && !isCloning) {
+              e.currentTarget.style.backgroundColor = '#6057C7';
+            }
+          }}
         >
           {isCloning ? (
             <>
@@ -732,50 +772,76 @@ const VoiceUploadSystem = ({ formData, setFormData, handleVoiceUpload }) => {
     <div className="w-full max-w-6xl space-y-6">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-light-purple font-subheadingDMSans mb-2">Voice Cloning Studio</h1>
-        <p className="text-light-grey font-bodyRoboto">Record your voice or upload audio files to create a custom voice model</p>
+        <h1 className="text-3xl font-bold mb-2" style={{ color: '#6A6A6A' }}>Voice Cloning Studio</h1>
+        <p style={{ color: '#6A6A6A' }}>Record your voice or upload audio files to create a custom voice model</p>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-4 justify-center">
-        {/* Use Sample Voice */}
-        <div
+      <div className="flex gap-4 justify-center mb-6">
+        {/* Record Voice Tab */}
+        <button
           onClick={() => setActiveTab('record')}
-          className={`px-6 py-2 rounded-md transition-colors ${
+          className={`px-8 py-4 rounded-full font-semibold text-lg transition-all shadow-md hover:shadow-lg flex items-center gap-3 ${
             activeTab === 'record'
-              ? 'border-2 border-blue-300 shadow-sm font-medium'
-              : 'text-gray-600 hover:text-gray-800'
+              ? 'text-white'
+              : 'text-gray-600 border-2 border-gray-300 bg-white hover:border-[#6057C7]'
           }`}
+          style={activeTab === 'record'
+            ? { backgroundColor: '#6057C7', color: '#F9F5EB' }
+            : {}
+          }
+          onMouseEnter={(e) => {
+            if (activeTab !== 'record') {
+              e.currentTarget.style.borderColor = '#6057C7';
+              e.currentTarget.style.backgroundColor = '#f5f3ff';
+            } else {
+              e.currentTarget.style.backgroundColor = '#4f46e5';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (activeTab !== 'record') {
+              e.currentTarget.style.borderColor = '#d1d5db';
+              e.currentTarget.style.backgroundColor = 'white';
+            } else {
+              e.currentTarget.style.backgroundColor = '#6057C7';
+            }
+          }}
         >
-          <div className="flex items-start gap-3">
-            <div className="bg-blue-100 text-blue-600 p-2 rounded-full">
-              <Mic className="h-6 w-6" />
-            </div>
-            <div>
-              <h4 className="font-medium text-lg">Record Voice</h4>
-              <p className="text-gray-600 text-sm">Record just here.</p>
-            </div>
-          </div>
-        </div>
+          <Mic className="h-5 w-5" />
+          <span>Record Voice</span>
+        </button>
 
-        {/* Custom Upload */}
-        <div
+        {/* Upload Voice Tab */}
+        <button
           onClick={() => setActiveTab('upload')}
-          className={`px-6 py-2 rounded-md transition-colors ${
+          className={`px-8 py-4 rounded-full font-semibold text-lg transition-all shadow-md hover:shadow-lg flex items-center gap-3 ${
             activeTab === 'upload'
-              ? 'border-2 border-green-200 shadow-sm font-medium'
-              : 'text-gray-600 hover:text-gray-800'
+              ? 'text-white'
+              : 'text-gray-600 border-2 border-gray-300 bg-white hover:border-[#6057C7]'
           }`}
+          style={activeTab === 'upload'
+            ? { backgroundColor: '#6057C7', color: '#F9F5EB' }
+            : {}
+          }
+          onMouseEnter={(e) => {
+            if (activeTab !== 'upload') {
+              e.currentTarget.style.borderColor = '#6057C7';
+              e.currentTarget.style.backgroundColor = '#f5f3ff';
+            } else {
+              e.currentTarget.style.backgroundColor = '#4f46e5';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (activeTab !== 'upload') {
+              e.currentTarget.style.borderColor = '#d1d5db';
+              e.currentTarget.style.backgroundColor = 'white';
+            } else {
+              e.currentTarget.style.backgroundColor = '#6057C7';
+            }
+          }}
         >
-          <div className="flex items-start gap-3">
-            <div className="flex-shrink-0 bg-green-100 text-green-600 p-2 rounded-full">
-              <Upload className="h-6 w-6" />
-            </div>
-            <div>
-              <h4 className="font-medium text-lg">Upload Your Voice</h4>
-              <p className="text-sm text-gray-500">Choose your own voice.</p>
-            </div>
-          </div>
-        </div>
+          <Upload className="h-5 w-5" />
+          <span>Upload Voice</span>
+        </button>
       </div>
 
       {/* Content based on active tab */}

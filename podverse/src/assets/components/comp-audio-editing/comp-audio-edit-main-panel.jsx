@@ -19,6 +19,47 @@ import TrackEditPanel from './comp-audio-track-edit-panel';
 
 const API_BASE_URL = 'http://localhost:8000/audio-edit'; 
 
+const stripQueryString = (value = '') => value.split('?')[0];
+
+const extractFileName = (value = '') => {
+  const withoutQuery = stripQueryString(value);
+  const parts = withoutQuery.split('/');
+  return parts[parts.length - 1] || withoutQuery;
+};
+
+const sanitizeFileName = (value = '', fallbackPrefix = 'audio') => {
+  const extracted = extractFileName(value);
+  if (!extracted) {
+    return `${fallbackPrefix}_${Date.now()}.wav`;
+  }
+  const sanitized = extracted.replace(/[^a-zA-Z0-9._-]/g, '_');
+  if (sanitized) {
+    return sanitized;
+  }
+  const extensionIndex = extracted.lastIndexOf('.');
+  const extension = extensionIndex !== -1 ? extracted.substring(extensionIndex) : '.wav';
+  return `${fallbackPrefix}_${Date.now()}${extension}`;
+};
+
+const buildSanitizedFileName = (value = '', fallbackPrefix = 'audio') => {
+  const base = value && value.includes('.') ? value : `${value || fallbackPrefix}.wav`;
+  return sanitizeFileName(base, fallbackPrefix);
+};
+
+const getReadableTrackName = (value = '') => {
+  const baseName = extractFileName(value);
+  if (!baseName) return 'Untitled Track';
+  const underscoreIndex = baseName.indexOf('_');
+  const friendly = underscoreIndex > 0 ? baseName.slice(0, underscoreIndex) : baseName;
+  return friendly || baseName;
+};
+
+const getTrackDisplayName = (track) => {
+  if (!track) return 'Untitled Track';
+  if (track.displayName) return track.displayName;
+  return getReadableTrackName(track.name || track.originalName || '');
+};
+
 // Enhanced scrollbar styles with modern look
 const scrollbarStyles = `
   .timeline-scrollbar::-webkit-scrollbar {
@@ -80,6 +121,7 @@ const DraggableTrackWaveform = ({
   const [isLoading, setIsLoading] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, startTime: 0 });
+  const trackLabel = getTrackDisplayName(track);
 
   // Initialize WaveSurfer with modern styling
   useEffect(() => {
@@ -299,7 +341,7 @@ useEffect(() => {
             )}
           </button>
           <div className="text-sm text-gray-800 font-semibold truncate">
-            {track.name}
+            {trackLabel}
           </div>
           {isTrackPlaying && (
             <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse flex-shrink-0 shadow-sm" />
@@ -474,7 +516,8 @@ const downloadAudioAsBlob = async (url) => {
 };
 
 const uploadAudioToBackend = async (blob, filename, endpoint, formData = {}) => {
-  const file = new File([blob], filename, { type: blob.type });
+  const safeFilename = sanitizeFileName(filename);
+  const file = new File([blob], safeFilename, { type: blob.type || 'audio/wav' });
   const form = new FormData();
   form.append('file', file);
   
@@ -549,6 +592,7 @@ const generateSampleTracks = () => [
 export const MainPanel = ({
   audioTracks = generateSampleTracks(),
   onRemoveTrack,
+  onTracksChange,
   isPlaying: externalIsPlaying,
   setIsPlaying: externalSetIsPlaying,
   currentTime: externalCurrentTime,
@@ -570,6 +614,16 @@ export const MainPanel = ({
   const [isEditPanelOpen, setIsEditPanelOpen] = useState(false);
   const containerRef = useRef(null);
 
+  const updateTracks = useCallback((updater) => {
+    setTracks(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      if (onTracksChange) {
+        onTracksChange(next);
+      }
+      return next;
+    });
+  }, [onTracksChange]);
+
   const isPlaying = externalIsPlaying !== undefined ? externalIsPlaying : internalIsPlaying;
   const setIsPlaying = externalSetIsPlaying || setInternalIsPlaying;
   const currentTime = externalCurrentTime !== undefined ? externalCurrentTime : internalCurrentTime;
@@ -580,12 +634,20 @@ export const MainPanel = ({
   const setZoom = externalSetZoom || setInternalZoom;
 
   useEffect(() => {
-    const newTracks = audioTracks.map((track, index) => ({
+    const newTracks = audioTracks.map((track, index) => {
+      const inferredNameSource = track.displayName || track.name || track.originalName || track.file?.name || track.url || `Track ${index + 1}`;
+      const displayName = track.displayName || getReadableTrackName(inferredNameSource);
+      const originalName = track.originalName || track.name || extractFileName(track.url || inferredNameSource);
+      return {
       ...track,
+        name: track.name || originalName || displayName,
+        displayName,
+        originalName,
       startTime: track.startTime !== undefined ? track.startTime : index * 5,
       volume: track.volume !== undefined ? track.volume : 100,
       speed: track.speed !== undefined ? track.speed : 1.0
-    }));
+      };
+    });
     setTracks(newTracks);
   }, [audioTracks]);
 
@@ -608,12 +670,12 @@ export const MainPanel = ({
   }, [setIsPlaying, setCurrentTime]);
 
   const updateTrackPosition = useCallback((trackId, newStartTime) => {
-    setTracks(prev => prev.map(track =>
+    updateTracks(prev => prev.map(track =>
       track.id === trackId
         ? { ...track, startTime: Math.max(0, newStartTime) }
         : track
     ));
-  }, []);
+  }, [updateTracks]);
 
   // Enhanced splitting function
   const splitTrackAtPlayhead = useCallback(async () => {
@@ -638,6 +700,9 @@ export const MainPanel = ({
     }
   
     try {
+      const friendlyBaseName = getTrackDisplayName(selectedTrack);
+      const fallbackPrefix = friendlyBaseName.replace(/\s+/g, '_').toLowerCase() || 'track';
+
       // Show loading notification
       const loadingNotif = document.createElement('div');
       loadingNotif.textContent = 'Splitting track...';
@@ -650,14 +715,14 @@ export const MainPanel = ({
       // Split into two parts using backend
       const firstPartBlob = await uploadAudioToBackend(
         audioBlob,
-        `${selectedTrack.name}_part1.wav`,
+        buildSanitizedFileName(`${friendlyBaseName}_part1.wav`, fallbackPrefix),
         '/split',
         { start_time: 0, duration: splitPoint }
       );
       
       const secondPartBlob = await uploadAudioToBackend(
         audioBlob,
-        `${selectedTrack.name}_part2.wav`,
+        buildSanitizedFileName(`${friendlyBaseName}_part2.wav`, fallbackPrefix),
         '/split',
         { start_time: splitPoint, duration: selectedTrack.duration - splitPoint }
       );
@@ -669,7 +734,9 @@ export const MainPanel = ({
       // Create new track segments
       const firstTrack = {
         id: `${selectedTrackId}_${Date.now()}_1`,
-        name: `${selectedTrack.name} (Part 1)`,
+        name: `${friendlyBaseName} (Part 1)`,
+        displayName: `${friendlyBaseName} (Part 1)`,
+        originalName: `${friendlyBaseName} (Part 1)`,
         duration: splitPoint,
         startTime: selectedTrack.startTime,
         volume: selectedTrack.volume,
@@ -679,7 +746,9 @@ export const MainPanel = ({
 
       const secondTrack = {
         id: `${selectedTrackId}_${Date.now()}_2`,
-        name: `${selectedTrack.name} (Part 2)`,
+        name: `${friendlyBaseName} (Part 2)`,
+        displayName: `${friendlyBaseName} (Part 2)`,
+        originalName: `${friendlyBaseName} (Part 2)`,
         startTime: currentTime,
         duration: selectedTrack.duration - splitPoint,
         volume: selectedTrack.volume,
@@ -687,7 +756,7 @@ export const MainPanel = ({
         url: secondPartUrl  // New URL for second part
       };
     
-      setTracks(prev => {
+      updateTracks(prev => {
         const trackIndex = prev.findIndex(t => t.id === selectedTrackId);
         const newTracks = [...prev];
         newTracks.splice(trackIndex, 1, firstTrack, secondTrack);
@@ -700,7 +769,7 @@ export const MainPanel = ({
       // Remove loading and show success
       document.body.removeChild(loadingNotif);
       const notification = document.createElement('div');
-      notification.textContent = `Track "${selectedTrack.name}" split successfully at ${currentTime.toFixed(1)}s`;
+      notification.textContent = `Track "${friendlyBaseName}" split successfully at ${currentTime.toFixed(1)}s`;
       notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
       document.body.appendChild(notification);
       setTimeout(() => document.body.removeChild(notification), 3000);
@@ -709,16 +778,16 @@ export const MainPanel = ({
       console.error('Split error:', error);
       alert('Failed to split track. Please try again.');
     }
-  }, [selectedTrackId, tracks, currentTime]);
+  }, [selectedTrackId, tracks, currentTime, updateTracks]);
 
   const removeTrack = useCallback((trackId) => {
-    setTracks(prev => prev.filter(track => track.id !== trackId));
+    updateTracks(prev => prev.filter(track => track.id !== trackId));
     if (selectedTrackId === trackId) {
       setSelectedTrackId(null);
       setIsEditPanelOpen(false);
     }
     onRemoveTrack && onRemoveTrack(trackId);
-  }, [onRemoveTrack, selectedTrackId]);
+  }, [onRemoveTrack, selectedTrackId, updateTracks]);
 
   const handleTrackSelect = useCallback((trackId) => {
     setSelectedTrackId(trackId);
@@ -731,26 +800,30 @@ export const MainPanel = ({
   }, []);
 
   const handleTrackUpdate = useCallback((trackId, settings) => {
-    setTracks(prev => prev.map(track =>
+    updateTracks(prev => prev.map(track =>
       track.id === trackId
         ? { ...track, ...settings }
         : track
     ));
-  }, []);
+  }, [updateTracks]);
 
   // Track action handlers
   const handleDuplicateTrack = useCallback((trackId) => {
     const trackToDuplicate = tracks.find(t => t.id === trackId);
     if (!trackToDuplicate) return;
 
+    const baseLabel = getTrackDisplayName(trackToDuplicate);
+    const duplicateLabel = `${baseLabel} (Copy)`;
     const duplicatedTrack = {
       ...trackToDuplicate,
       id: `${trackId}_duplicate_${Date.now()}`,
-      name: `${trackToDuplicate.name} (Copy)`,
+      name: duplicateLabel,
+      displayName: duplicateLabel,
+      originalName: trackToDuplicate.originalName || baseLabel,
       startTime: (trackToDuplicate.startTime || 0) + trackToDuplicate.duration + 1
     };
 
-    setTracks(prev => [...prev, duplicatedTrack]);
+    updateTracks(prev => [...prev, duplicatedTrack]);
 
     // Show notification
     const notification = document.createElement('div');
@@ -758,15 +831,18 @@ export const MainPanel = ({
     notification.className = 'fixed top-4 right-4 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
     document.body.appendChild(notification);
     setTimeout(() => document.body.removeChild(notification), 3000);
-  }, [tracks]);
+  }, [tracks, updateTracks]);
 
   const handleExportTrack = useCallback(async (trackId) => {
     const trackToExport = tracks.find(t => t.id === trackId);
     if (!trackToExport) return;
   
     try {
+      const friendlyName = getTrackDisplayName(trackToExport);
+      const fallbackPrefix = friendlyName.replace(/\s+/g, '_').toLowerCase() || 'track';
+
       const loadingNotif = document.createElement('div');
-      loadingNotif.textContent = `Exporting: ${trackToExport.name}...`;
+      loadingNotif.textContent = `Exporting: ${friendlyName}...`;
       loadingNotif.className = 'fixed top-4 right-4 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
       document.body.appendChild(loadingNotif);
   
@@ -776,7 +852,7 @@ export const MainPanel = ({
       // Export using backend
       const exportedBlob = await uploadAudioToBackend(
         audioBlob,
-        trackToExport.name,
+        buildSanitizedFileName(`${friendlyName}.wav`, fallbackPrefix),
         '/export',
         { format: 'wav' }
       );
@@ -785,7 +861,7 @@ export const MainPanel = ({
       const url = URL.createObjectURL(exportedBlob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${trackToExport.name}_exported.wav`;
+      a.download = buildSanitizedFileName(`${friendlyName}_exported.wav`, fallbackPrefix);
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -793,7 +869,7 @@ export const MainPanel = ({
   
       document.body.removeChild(loadingNotif);
       const notification = document.createElement('div');
-      notification.textContent = `Exported: ${trackToExport.name}`;
+      notification.textContent = `Exported: ${friendlyName}`;
       notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
       document.body.appendChild(notification);
       setTimeout(() => document.body.removeChild(notification), 3000);
@@ -830,7 +906,11 @@ export const MainPanel = ({
         sortedTracks.map(track => downloadAudioAsBlob(track.url))
       );
   
-      const filenames = sortedTracks.map(track => `${track.name}.wav`);
+      const filenames = sortedTracks.map((track, index) => {
+        const label = getTrackDisplayName(track) || `track_${index + 1}`;
+        const fallback = label.replace(/\s+/g, '_').toLowerCase() || `track_${index + 1}`;
+        return buildSanitizedFileName(`${label}.wav`, fallback);
+      });
   
       // Merge using backend
       const mergedBlob = await mergeAudioTracks(audioBlobs, filenames);
@@ -841,6 +921,8 @@ export const MainPanel = ({
       const mergedTrack = {
         id: `merged_${Date.now()}`,
         name: `Merged (${sortedTracks.length} tracks)`,
+        displayName: `Merged (${sortedTracks.length} tracks)`,
+        originalName: `Merged (${sortedTracks.length} tracks)`,
         duration: totalDuration,
         startTime: sortedTracks[0].startTime || 0,
         volume: 100,
@@ -849,7 +931,7 @@ export const MainPanel = ({
       };
   
       // Replace all tracks with merged track
-      setTracks([mergedTrack]);
+      updateTracks([mergedTrack]);
       setSelectedTrackId(null);
       setIsEditPanelOpen(false);
   
@@ -864,10 +946,10 @@ export const MainPanel = ({
       console.error('Merge failed:', error);
       alert('Merge failed. Please try again.');
     }
-  }, [tracks, selectedTrackId]);
+  }, [tracks, selectedTrackId, updateTracks]);
 
   const handleResetTrack = useCallback((trackId, resetSettings) => {
-    setTracks(prev => prev.map(track =>
+    updateTracks(prev => prev.map(track =>
       track.id === trackId
         ? { ...track, ...resetSettings }
         : track
@@ -879,7 +961,7 @@ export const MainPanel = ({
     notification.className = 'fixed top-4 right-4 bg-yellow-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
     document.body.appendChild(notification);
     setTimeout(() => document.body.removeChild(notification), 3000);
-  }, []);
+  }, [updateTracks]);
 
   const handleMasterPlayPause = () => {
     const anyTrackPlaying = Object.values(trackStates).some(isPlaying => isPlaying);
@@ -916,6 +998,8 @@ export const MainPanel = ({
       // Export each track individually
       for (let i = 0; i < tracks.length; i++) {
         const track = tracks[i];
+        const trackLabel = getTrackDisplayName(track);
+        const fallbackPrefix = trackLabel.replace(/\s+/g, '_').toLowerCase() || `track_${i + 1}`;
         
         // Download audio blob
         const audioBlob = await downloadAudioAsBlob(track.url);
@@ -923,7 +1007,7 @@ export const MainPanel = ({
         // Export using backend
         const exportedBlob = await uploadAudioToBackend(
           audioBlob,
-          track.name,
+          buildSanitizedFileName(`${trackLabel}.wav`, fallbackPrefix),
           '/export',
           { format: 'wav' }
         );
@@ -932,7 +1016,7 @@ export const MainPanel = ({
         const url = URL.createObjectURL(exportedBlob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${track.name}_exported.wav`;
+        a.download = buildSanitizedFileName(`${trackLabel}_exported.wav`, fallbackPrefix);
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -963,6 +1047,7 @@ export const MainPanel = ({
   };
 
   const selectedTrack = tracks.find(t => t.id === selectedTrackId);
+  const selectedTrackDisplayName = selectedTrack ? getTrackDisplayName(selectedTrack) : '';
 
   return (
     <div className="flex h-screen w-full bg-gray-50 overflow-hidden min-h-0">
@@ -1137,7 +1222,7 @@ export const MainPanel = ({
             {selectedTrackId && (
               <div className="flex items-center gap-2 text-sm text-indigo-700 bg-indigo-100 px-3 py-1 rounded-lg">
                 <Sliders className="w-4 h-4" />
-                <span>Selected: {selectedTrack?.name}</span>
+                <span>Selected: {selectedTrackDisplayName}</span>
               </div>
             )}
           </div>
@@ -1269,7 +1354,7 @@ export const MainPanel = ({
             {selectedTrackId && (
               <div className="flex items-center gap-2 text-indigo-600">
                 <Sliders className="w-4 h-4" />
-                <span className="font-medium">Editing: {selectedTrack?.name}</span>
+                <span className="font-medium">Editing: {selectedTrackDisplayName}</span>
               </div>
             )}
             <div className="flex items-center gap-2">

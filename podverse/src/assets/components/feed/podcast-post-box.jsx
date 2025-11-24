@@ -130,47 +130,55 @@ function PodcastPostBox() {
 
   return (
     <>
-      <div className="bg-gradient-to-br from-purple-50 via-pink-50/50 to-white p-6 rounded-2xl shadow-lg border-2 border-purple-100 mb-6 hover:shadow-xl transition-all">
-        <div className="flex items-start gap-4">
-          <img
-            src={profileUrl}
-            alt={profileName}
-            className="w-12 h-12 rounded-full object-cover border-2 border-purple-300 ring-2 ring-purple-100 flex-shrink-0"
-            onError={(e) => {
-              e.target.src = ProfileMarry;
-            }}
-          />
-          <div className="flex-1">
-            <div className="mb-4">
-              <h3 className="font-bold text-gray-900 mb-1 text-lg">Create a new post</h3>
-              <p className="text-sm text-gray-600">Share your podcast video with your followers</p>
+      <div className="relative bg-white dark:bg-gray-900 p-8 rounded-3xl shadow-lg border border-gray-100 dark:border-gray-800 mb-6 hover:shadow-2xl transition-all duration-500 overflow-hidden group">
+        {/* Background Gradient */}
+        <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/50 via-purple-50/30 to-pink-50/50 dark:from-indigo-900/10 dark:via-purple-900/10 dark:to-pink-900/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+        
+        <div className="relative flex items-start gap-4">
+          <div className="relative flex-shrink-0">
+            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 rounded-full opacity-0 group-hover:opacity-100 blur-md transition-opacity duration-300" />
+            <img
+              src={profileUrl}
+              alt={profileName}
+              className="relative w-14 h-14 rounded-full object-cover border-2 border-white dark:border-gray-800 ring-2 ring-indigo-100 dark:ring-indigo-900/50 group-hover:ring-indigo-300 dark:group-hover:ring-indigo-600 transition-all duration-300"
+              onError={(e) => {
+                e.target.src = ProfileMarry;
+              }}
+            />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="mb-5">
+              <h3 className="font-bold text-gray-900 dark:text-white mb-1.5 text-lg">Create a new post</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Share your podcast video with your followers</p>
             </div>
 
             {/* Action Buttons */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={handleLibraryClick}
-                className="flex items-center gap-4 p-4 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 transition-all group shadow-lg shadow-blue-500/30"
+                className="relative flex items-center gap-3 p-4 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 transition-all group/btn shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 hover:scale-[1.02] overflow-hidden"
               >
-                <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center text-white group-hover:scale-110 transition-transform">
+                <div className="absolute inset-0 bg-white/0 group-hover/btn:bg-white/10 transition-colors" />
+                <div className="relative w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center text-white group-hover/btn:scale-110 group-hover/btn:rotate-3 transition-all duration-300">
                   <Library size={24} />
                 </div>
-                <div className="text-left flex-1">
+                <div className="relative text-left flex-1 min-w-0">
                   <p className="font-bold text-sm text-white">From Library</p>
-                  <p className="text-xs text-white/80 mt-0.5">Choose existing</p>
+                  <p className="text-xs text-white/90 mt-0.5 truncate">Choose existing</p>
                 </div>
               </button>
 
               <button
                 onClick={handleCreateNewClick}
-                className="flex items-center gap-4 p-4 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 transition-all group shadow-lg shadow-purple-500/30"
+                className="relative flex items-center gap-3 p-4 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 transition-all group/btn shadow-lg shadow-purple-500/30 hover:shadow-xl hover:shadow-purple-500/40 hover:scale-[1.02] overflow-hidden"
               >
-                <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center text-white group-hover:scale-110 transition-transform">
+                <div className="absolute inset-0 bg-white/0 group-hover/btn:bg-white/10 transition-colors" />
+                <div className="relative w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center text-white group-hover/btn:scale-110 group-hover/btn:rotate-3 transition-all duration-300">
                   <Video size={24} />
                 </div>
-                <div className="text-left flex-1">
+                <div className="relative text-left flex-1 min-w-0">
                   <p className="font-bold text-sm text-white">Create New</p>
-                  <p className="text-xs text-white/80 mt-0.5">Record podcast</p>
+                  <p className="text-xs text-white/90 mt-0.5 truncate">Record podcast</p>
                 </div>
               </button>
             </div>

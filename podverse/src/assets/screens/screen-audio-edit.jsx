@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
+import { useLocation } from "react-router-dom";
 import WaveSurfer from "wavesurfer.js";
 import RegionsPlugin from "wavesurfer.js/dist/plugin/wavesurfer.regions.min.js";
 import { Play, Pause, Square, Upload, Trash2, ZoomIn, ZoomOut } from 'lucide-react';
@@ -6,7 +7,24 @@ import BaseLayout from "../components/layouts/BaseLayout";
 import { Sidebar } from "../components/comp-audio-editing/comp-audio-edit-sidebar";
 import { MainPanel } from "../components/comp-audio-editing/comp-audio-edit-main-panel";
 
+const stripQueryString = (value = '') => value.split('?')[0];
+
+const extractFileName = (value = '') => {
+  const withoutQuery = stripQueryString(value);
+  const parts = withoutQuery.split('/');
+  return parts[parts.length - 1] || withoutQuery;
+};
+
+const getFriendlyTrackName = (value = '', fallback = 'Track') => {
+  const baseName = extractFileName(value) || fallback;
+  const underscoreIndex = baseName.indexOf('_');
+  const friendly = underscoreIndex > 0 ? baseName.slice(0, underscoreIndex) : baseName;
+  return friendly || fallback;
+};
+
 const AudioEditor = () => {
+  const location = useLocation();
+  
   // State for audio tracks/clips
   const [audioClips, setAudioClips] = useState([]);
   const [audioBuffers, setAudioBuffers] = useState({});
@@ -16,6 +34,7 @@ const AudioEditor = () => {
   const [volume, setVolume] = useState(75);
   const [zoom, setZoom] = useState(1);
   const [selectedClipId, setSelectedClipId] = useState(null);
+  const [recordingLoaded, setRecordingLoaded] = useState(false);
 
   // Refs
   const waveformContainerRef = useRef(null);  
@@ -85,6 +104,78 @@ const AudioEditor = () => {
       }
     };
   }, []);
+
+  // Load recording from URL if provided (from recording modal)
+  useEffect(() => {
+    if (recordingLoaded || audioClips.length > 0) return; // Don't reload if already loaded or clips exist
+    
+    const recordingUrl = location.state?.recordingUrl || sessionStorage.getItem('recordingUrl');
+    const recordingFilename = sessionStorage.getItem('recordingFilename') || 'recording.ogg';
+    
+    if (recordingUrl) {
+      // Load recording as audio track
+      const loadRecordingFromUrl = async () => {
+        try {
+          console.log('Loading recording from URL:', recordingUrl);
+          
+          // Create audio element to get duration
+          const audio = new Audio();
+          audio.crossOrigin = 'anonymous';
+          audio.src = recordingUrl;
+          
+          await new Promise((resolve, reject) => {
+            audio.addEventListener('loadedmetadata', () => resolve());
+            audio.addEventListener('error', (e) => reject(e));
+            // Timeout after 10 seconds
+            setTimeout(() => reject(new Error('Timeout loading audio')), 10000);
+          });
+          
+          const duration = audio.duration;
+          const clipId = `recording-${Date.now()}`;
+          const friendlyName = getFriendlyTrackName(recordingFilename || recordingUrl, 'Recording');
+          
+          const clip = {
+            id: clipId,
+            name: recordingFilename || friendlyName,
+            displayName: friendlyName,
+            originalName: recordingFilename || extractFileName(recordingUrl),
+            url: recordingUrl,
+            duration,
+            startTime: 0,
+            endTime: duration,
+            color: 'bg-green-500'
+          };
+          
+          // Try to load audio buffer for waveform
+          try {
+            const response = await fetch(recordingUrl);
+            const arrayBuffer = await response.arrayBuffer();
+            const audioContext = new AudioContext();
+            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+            setAudioBuffers(prev => ({ ...prev, [clipId]: audioBuffer }));
+          } catch (bufferError) {
+            console.warn('Could not load audio buffer for waveform:', bufferError);
+          }
+          
+          setAudioClips([clip]);
+          setRecordingLoaded(true);
+          
+          // Clean up sessionStorage
+          sessionStorage.removeItem('recordingUrl');
+          sessionStorage.removeItem('recordingFilename');
+          
+          console.log('Recording loaded successfully');
+        } catch (error) {
+          console.error('Error loading recording from URL:', error);
+          // Clean up sessionStorage on error too
+          sessionStorage.removeItem('recordingUrl');
+          sessionStorage.removeItem('recordingFilename');
+        }
+      };
+      
+      loadRecordingFromUrl();
+    }
+  }, [location.state, recordingLoaded, audioClips.length]);
 
   // Format time helper
   const formatTime = (seconds) => {
@@ -176,23 +267,33 @@ const AudioEditor = () => {
   const handleAddStockAudio = async (stockTrack) => {
     try {
       console.log('Adding stock audio to main panel:', stockTrack);
+      const friendlyName = getFriendlyTrackName(
+        stockTrack.displayName || stockTrack.name || stockTrack.filename || stockTrack.id,
+        'Track'
+      );
+      const normalizedTrack = {
+        ...stockTrack,
+        displayName: stockTrack.displayName || friendlyName,
+        name: stockTrack.name || friendlyName,
+        originalName: stockTrack.originalName || stockTrack.name || stockTrack.filename || stockTrack.path || friendlyName
+      };
       
       // Create audio buffer for the stock track
       const newBuffers = { ...audioBuffers };
       
       try {
         // Fetch the audio file and create buffer
-        const response = await fetch(stockTrack.url);
+        const response = await fetch(normalizedTrack.url);
         const arrayBuffer = await response.arrayBuffer();
         const audioContext = new AudioContext();
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-        newBuffers[stockTrack.id] = audioBuffer;
+        newBuffers[normalizedTrack.id] = audioBuffer;
       } catch (bufferError) {
         console.error('Error loading audio buffer for stock track:', bufferError);
       }
 
       // Add to audio clips
-      const updatedClips = [...audioClips, stockTrack];
+      const updatedClips = [...audioClips, normalizedTrack];
       setAudioClips(updatedClips);
       setAudioBuffers(newBuffers);
       
@@ -207,6 +308,11 @@ const AudioEditor = () => {
       alert('Error adding audio to panel: ' + error.message);
     }
   };
+
+  const handleTracksChange = useCallback(async (updatedTracks) => {
+    setAudioClips(updatedTracks);
+    await loadCombinedAudio(updatedTracks);
+  }, [loadCombinedAudio]);
 
   // Handle file upload from Sidebar - THIS IS THE KEY FUNCTION
   const handleFileUpload = async (files) => {
@@ -229,9 +335,12 @@ const AudioEditor = () => {
         const duration = audio.duration;
         const clipId = `clip-${Date.now()}-${Math.random()}`;
 
+        const friendlyName = getFriendlyTrackName(file.name, 'Track');
         const clip = {
           id: clipId,
-          name: file.name,
+          name: file.name || friendlyName,
+          displayName: friendlyName,
+          originalName: file.name || friendlyName,
           url,
           duration,
           startTime: 0, // All tracks start from the beginning
@@ -321,6 +430,7 @@ const AudioEditor = () => {
             audioTracks={audioClips}
             audioBuffers={audioBuffers}
             onRemoveTrack={removeClip}
+            onTracksChange={handleTracksChange}
             isPlaying={isPlaying}
             setIsPlaying={setIsPlaying}
             currentTime={currentTime}
