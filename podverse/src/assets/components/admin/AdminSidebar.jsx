@@ -3,7 +3,7 @@ import {
   FaUsers, FaVideo, FaFileAlt, FaMicrophone, FaChartBar, FaCog,
   FaShieldAlt, FaDatabase, FaUserShield, FaBell, FaRobot, FaTachometerAlt,
   FaBars, FaTimes, FaPodcast, FaChevronDown, FaChevronRight, FaFlag,
-  FaClipboardList, FaChartLine
+  FaClipboardList, FaChartLine, FaCreditCard
 } from 'react-icons/fa';
 
 const AdminSidebar = ({ collapsed, onToggle, activeRoute, onNavigate }) => {
@@ -42,6 +42,14 @@ const AdminSidebar = ({ collapsed, onToggle, activeRoute, onNavigate }) => {
       single: true,
       description: 'User list, profiles, details, edit all in one'
     },
+    {
+      id: 'subscriptions',
+      label: 'Subscriptions',
+      icon: FaCreditCard,
+      route: '/admin/subscriptions',
+      single: true,
+      description: 'Manage user subscriptions'
+    },
 
     // AI & GENERATION (2)
     {
@@ -50,7 +58,6 @@ const AdminSidebar = ({ collapsed, onToggle, activeRoute, onNavigate }) => {
       icon: FaRobot,
       items: [
         { label: 'Avatar Templates', route: '/admin/ai/avatars', description: 'Manage avatar templates' },
-        { label: 'Voices', route: '/admin/ai/voices', description: 'Manage voices' }
       ]
     },
 
@@ -60,36 +67,10 @@ const AdminSidebar = ({ collapsed, onToggle, activeRoute, onNavigate }) => {
       label: 'Content',
       icon: FaFileAlt,
       items: [
-        { label: 'Posts & Comments', route: '/admin/posts', description: 'Posts, comments, moderation' },
+        { label: 'Posts & Comments', route: '/admin/posts', description: 'Posts and comments' },
         { label: 'FAQs', route: '/admin/faqs', description: 'FAQs' },
-        { label: 'Media Library', route: '/admin/media', description: 'Videos, audio, images' }
       ]
     },
-
-    // SYSTEM MANAGEMENT (4)
-    {
-      id: 'system',
-      label: 'System',
-      icon: FaCog,
-      items: [
-        { label: 'Settings', route: '/admin/settings', description: 'Settings + API keys + storage' },
-        { label: 'Admin Users', route: '/admin/admin-users', description: 'Admins + roles + permissions' },
-        { label: 'Security', route: '/admin/security', description: 'Logs + privacy + audit' },
-        { label: 'Database & Health', route: '/admin/database', description: 'DB + system health' }
-      ]
-    },
-
-    // SOCIAL & COMMUNICATION (3)
-    {
-      id: 'social',
-      label: 'Social',
-      icon: FaBell,
-      items: [
-        { label: 'Social Management', route: '/admin/social', description: 'Connections + notifications' },
-        { label: 'Content Reports', route: '/admin/reports', description: 'Flagged content moderation' },
-        { label: 'Activity Logs', route: '/admin/activity', description: 'All platform activity' }
-      ]
-    }
   ];
 
   return (

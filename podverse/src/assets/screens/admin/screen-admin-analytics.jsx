@@ -34,7 +34,6 @@ const AdminAnalytics = () => {
     }
   };
 
-  // All data comes from API - no hardcoded data
 
   const handleExport = () => {
     alert(`Exporting analytics report as ${exportFormat.toUpperCase()}...`);
@@ -88,10 +87,6 @@ const AdminAnalytics = () => {
         <div className="bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl shadow-lg p-6 text-white">
           <div className="flex items-center justify-between mb-4">
             <FaUsers className="text-3xl opacity-80" />
-            <div className="flex items-center gap-2 text-sm bg-white/20 px-3 py-1 rounded-full">
-              <HiArrowTrendingUp />
-              <span>+12.5%</span>
-            </div>
           </div>
           <h3 className="text-sm font-medium opacity-90">Total Users</h3>
           <p className="text-3xl font-bold mt-2">{analytics?.total_users?.toLocaleString() || '0'}</p>
@@ -101,10 +96,6 @@ const AdminAnalytics = () => {
         <div className="bg-gradient-to-br from-blue-500 to-cyan-600 rounded-xl shadow-lg p-6 text-white">
           <div className="flex items-center justify-between mb-4">
             <FaVideo className="text-3xl opacity-80" />
-            <div className="flex items-center gap-2 text-sm bg-white/20 px-3 py-1 rounded-full">
-              <HiArrowTrendingUp />
-              <span>+23.1%</span>
-            </div>
           </div>
           <h3 className="text-sm font-medium opacity-90">Total Content</h3>
           <p className="text-3xl font-bold mt-2">{analytics?.total_posts?.toLocaleString() || '0'}</p>
@@ -114,10 +105,6 @@ const AdminAnalytics = () => {
         <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl shadow-lg p-6 text-white">
           <div className="flex items-center justify-between mb-4">
             <FaEye className="text-3xl opacity-80" />
-            <div className="flex items-center gap-2 text-sm bg-white/20 px-3 py-1 rounded-full">
-              <HiArrowTrendingUp />
-              <span>+18.7%</span>
-            </div>
           </div>
           <h3 className="text-sm font-medium opacity-90">Total Views</h3>
           <p className="text-3xl font-bold mt-2">{analytics?.total_views ? (analytics.total_views > 1000000 ? `${(analytics.total_views / 1000000).toFixed(1)}M` : analytics.total_views.toLocaleString()) : '0'}</p>
@@ -127,10 +114,6 @@ const AdminAnalytics = () => {
         <div className="bg-gradient-to-br from-pink-500 to-rose-600 rounded-xl shadow-lg p-6 text-white">
           <div className="flex items-center justify-between mb-4">
             <FaHeart className="text-3xl opacity-80" />
-            <div className="flex items-center gap-2 text-sm bg-white/20 px-3 py-1 rounded-full">
-              <HiArrowTrendingDown />
-              <span>-2.3%</span>
-            </div>
           </div>
           <h3 className="text-sm font-medium opacity-90">Engagement</h3>
           <p className="text-3xl font-bold mt-2">{analytics?.engagement_rate?.toFixed(1) || '0'}%</p>
@@ -164,7 +147,7 @@ const AdminAnalytics = () => {
                         <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-indigo-500 rounded-lg flex items-center justify-center text-white font-bold text-sm">
                           {idx + 1}
                         </div>
-                        <span className="font-medium text-gray-800">{post.description || `Post ${post.id?.substring(0, 8) || 'N/A'}`}</span>
+                        <span className="font-medium text-gray-800">{post.title || 'N/A'}</span>
                       </div>
                     </td>
                     <td className="px-6 py-4 text-center text-gray-700">{post.views?.toLocaleString() || 0}</td>

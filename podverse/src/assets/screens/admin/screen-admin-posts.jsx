@@ -7,10 +7,10 @@ import {
 import { adminApi } from '../../utils/adminApi';
 
 // FILE: screens/admin/screen-admin-posts.jsx
-// Consolidated: Posts + Comments + Moderation Queue
+// Consolidated: Posts + Comments
 
 const AdminPosts = () => {
-  const [activeTab, setActiveTab] = useState('posts'); // posts, comments, moderation
+  const [activeTab, setActiveTab] = useState('posts'); // posts, comments
   const [posts, setPosts] = useState([]);
   const [comments, setComments] = useState([]);
   const [flaggedContent, setFlaggedContent] = useState([]);
@@ -43,7 +43,6 @@ const AdminPosts = () => {
     try {
       if (activeTab === 'posts') await loadPosts();
       else if (activeTab === 'comments') await loadComments();
-      else if (activeTab === 'moderation') await loadFlaggedContent();
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -89,15 +88,6 @@ const AdminPosts = () => {
     }
   };
 
-  const loadFlaggedContent = async () => {
-    try {
-      // Moderation queue - since status column doesn't exist, show empty for now
-      setFlaggedContent([]);
-    } catch (error) {
-      console.error('Error loading flagged content:', error);
-      setFlaggedContent([]);
-    }
-  };
 
   // Status change removed - posts and comments tables don't have status columns
 
@@ -110,12 +100,6 @@ const AdminPosts = () => {
     } catch (error) {
       console.error('Error loading users:', error);
     }
-  };
-
-  const handleCreatePost = () => {
-    setEditingPost(null);
-    setPostForm({ user_id: '', video_url: '', thumbnail_url: '' });
-    setShowPostModal(true);
   };
 
   const handleEditPost = (post) => {
@@ -133,9 +117,6 @@ const AdminPosts = () => {
       if (editingPost) {
         await adminApi.updatePost(editingPost.id, postForm);
         alert('Post updated successfully');
-      } else {
-        await adminApi.createPost(postForm);
-        alert('Post created successfully');
       }
       setShowPostModal(false);
       loadPosts();
@@ -143,12 +124,6 @@ const AdminPosts = () => {
       console.error('Error saving post:', error);
       alert('Failed to save post');
     }
-  };
-
-  const handleCreateComment = () => {
-    setEditingComment(null);
-    setCommentForm({ content: '', post_id: '', user_id: '' });
-    setShowCommentModal(true);
   };
 
   const handleEditComment = (comment) => {
@@ -166,10 +141,7 @@ const AdminPosts = () => {
       if (editingComment) {
         await adminApi.updateComment(editingComment.id, { content: commentForm.content });
         alert('Comment updated successfully');
-      } else {
-        await adminApi.createComment(commentForm);
-        alert('Comment created successfully');
-      }
+      } 
       setShowCommentModal(false);
       loadComments();
     } catch (error) {
@@ -258,27 +230,7 @@ const AdminPosts = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-800">Content Management</h1>
-          <p className="text-gray-600 mt-1">Posts, comments, and moderation in one place</p>
-        </div>
-        <div className="flex gap-2">
-          {activeTab === 'posts' && (
-            <button
-              onClick={handleCreatePost}
-              className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg font-medium hover:shadow-lg transition-all flex items-center gap-2"
-            >
-              <FaPlus />
-              Create Post
-            </button>
-          )}
-          {activeTab === 'comments' && (
-            <button
-              onClick={handleCreateComment}
-              className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg font-medium hover:shadow-lg transition-all flex items-center gap-2"
-            >
-              <FaPlus />
-              Create Comment
-            </button>
-          )}
+          <p className="text-gray-600 mt-1">Posts and comments</p>
         </div>
       </div>
 
@@ -309,21 +261,6 @@ const AdminPosts = () => {
               <FaComment />
               <span>Comments</span>
               <span className="bg-blue-100 text-blue-600 px-2 py-1 rounded-full text-xs">{comments.length}</span>
-            </div>
-          </button>
-          <button
-            onClick={() => { setActiveTab('moderation'); setCurrentPage(1); }}
-            className={`flex-1 px-6 py-4 font-semibold transition-colors ${activeTab === 'moderation'
-              ? 'text-purple-600 border-b-2 border-purple-600'
-              : 'text-gray-600 hover:text-gray-800'
-              }`}
-          >
-            <div className="flex items-center justify-center gap-2">
-              <FaFlag />
-              <span>Moderation Queue</span>
-              <span className="bg-red-100 text-red-600 px-2 py-1 rounded-full text-xs">
-                0
-              </span>
             </div>
           </button>
         </div>
@@ -580,7 +517,7 @@ const AdminPosts = () => {
         </div>
       </div>
 
-      {/* Post Create/Edit Modal */}
+      {/* Post Edit Modal */}
       {showPostModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl p-8 max-w-2xl w-full mx-4 shadow-2xl">

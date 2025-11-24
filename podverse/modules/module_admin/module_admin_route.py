@@ -429,20 +429,23 @@ async def get_all_posts(
         client = auth_data["client"]
         offset = (page - 1) * limit
         
-        # Build query - posts table doesn't have status column
+        # Build query - select all columns including title
         query = client.table("posts").select(
             "*, profiles:user_id(id, username, full_name, profile_url)"
         )
         
-        # Note: posts table doesn't have status or content column, so we skip search filtering
-        # Search removed since posts table doesn't have content column
+        # Add search filter if provided (search in title and description)
+        if search:
+            # Search in both title and description using or filter
+            query = query.or_(f"title.ilike.%{search}%,description.ilike.%{search}%")
         
         # Get paginated results
         response = query.order("created_at", desc=True).range(offset, offset + limit - 1).execute()
         
         # Get total count
         count_query = client.table("posts").select("id", count="exact")
-        # Search removed since posts table doesn't have content column
+        if search:
+            count_query = count_query.or_(f"title.ilike.%{search}%,description.ilike.%{search}%")
         count_response = count_query.execute()
         total = count_response.count if hasattr(count_response, 'count') else len(count_response.data)
         
@@ -539,10 +542,8 @@ async def get_all_comments(
         client = auth_data["client"]
         offset = (page - 1) * limit
         
-        # Build query
-        query = client.table("comments").select(
-            "*, profiles:user_id(id, username, full_name, profile_url), posts:post_id(id, content)"
-        )
+        # Build query - fetch comments and enrich with profile/post data separately
+        query = client.table("comments").select("*")
         
         # Comments table doesn't have status column, so we skip status filtering
         if search:
@@ -550,6 +551,24 @@ async def get_all_comments(
         
         # Get paginated results
         response = query.order("created_at", desc=True).range(offset, offset + limit - 1).execute()
+        comments = response.data
+        
+        # Enrich comments with profile and post data
+        for comment in comments:
+            try:
+                # Get profile
+                if comment.get("user_id"):
+                    profile_res = client.table("profiles").select("id, username, full_name, profile_url").eq("id", comment["user_id"]).limit(1).execute()
+                    comment["profiles"] = profile_res.data[0] if profile_res.data else None
+                
+                # Get post
+                if comment.get("post_id"):
+                    post_res = client.table("posts").select("id, content").eq("id", comment["post_id"]).limit(1).execute()
+                    comment["posts"] = post_res.data[0] if post_res.data else None
+            except Exception as e:
+                print(f"Error enriching comment {comment.get('id')}: {e}")
+                comment["profiles"] = None
+                comment["posts"] = None
         
         # Get total count
         count_query = client.table("comments").select("id", count="exact")
@@ -560,7 +579,7 @@ async def get_all_comments(
         
         return {
             "success": True,
-            "comments": response.data,
+            "comments": comments,
             "pagination": {
                 "page": page,
                 "limit": limit,
@@ -686,7 +705,7 @@ async def get_analytics_overview(
         
         # Get top posts by views (only get columns that exist)
         try:
-            top_posts_response = service_client.table("posts").select("id, views, created_at, video_url, thumbnail_url").order("views", desc=True).limit(5).execute()
+            top_posts_response = service_client.table("posts").select("id, title, views, created_at, video_url, thumbnail_url").order("views", desc=True).limit(5).execute()
             top_posts = top_posts_response.data if top_posts_response.data else []
             # Add a simple description for display
             for post in top_posts:
@@ -1000,6 +1019,7 @@ async def create_comment(
             "success": True,
             "message": "Comment created successfully",
             "comment": response.data[0]
+            
         }
     except HTTPException:
         raise
@@ -1166,20 +1186,47 @@ async def delete_avatar_template(
         folder_path = f"speaker-{speaker.lower()}"
         
         deleted = False
+        deleted_file = None
         for possible_file in possible_files:
+            storage_path = f"{folder_path}/{possible_file}"
             try:
-                service_client.storage.from_('avatar-templates').remove([f"{folder_path}/{possible_file}"])
-                deleted = True
-                break
-            except:
+                # Check if file exists first by listing files
+                files = service_client.storage.from_('avatar-templates').list(folder_path)
+                file_exists = any(f['name'] == possible_file for f in files)
+                
+                if file_exists:
+                    # Delete the file
+                    service_client.storage.from_('avatar-templates').remove([storage_path])
+                    deleted = True
+                    deleted_file = possible_file
+                    print(f"✅ Successfully deleted: {storage_path}")
+                    break
+            except Exception as e:
+                print(f"Error trying to delete {possible_file}: {e}")
                 continue
         
         if not deleted:
-            raise HTTPException(status_code=404, detail="Template not found")
+            # Try to find the actual file name by listing all files and matching
+            try:
+                files = service_client.storage.from_('avatar-templates').list(folder_path)
+                matching_files = [f for f in files if filename.lower() in f['name'].lower()]
+                if matching_files:
+                    actual_file = matching_files[0]['name']
+                    storage_path = f"{folder_path}/{actual_file}"
+                    service_client.storage.from_('avatar-templates').remove([storage_path])
+                    deleted = True
+                    deleted_file = actual_file
+                    print(f"✅ Successfully deleted (found by search): {storage_path}")
+            except Exception as e:
+                print(f"Error searching for file: {e}")
+        
+        if not deleted:
+            raise HTTPException(status_code=404, detail=f"Avatar template not found: {template_id}")
         
         return {
             "success": True,
-            "message": "Avatar template deleted successfully"
+            "message": f"Avatar template deleted successfully: {deleted_file}",
+            "deleted_file": deleted_file
         }
     except HTTPException:
         raise
@@ -1280,5 +1327,173 @@ async def delete_voice(
         raise
     except Exception as e:
         print(f"Error deleting voice: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ==================== Subscription Management Routes ====================
+
+class SubscriptionUpdate(BaseModel):
+    status: Optional[str] = None
+    plan: Optional[str] = None
+    current_period_end: Optional[str] = None
+
+@router.get("/subscriptions")
+async def get_all_subscriptions(
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
+    search: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    plan: Optional[str] = Query(None),
+    auth_data: dict = Depends(check_admin_access)
+):
+    """Get all subscriptions with filtering and pagination"""
+    try:
+        client = auth_data["client"]
+        offset = (page - 1) * limit
+        
+        # Build query with count
+        count_query = client.table("subscriptions").select("*", count="exact")
+        
+        # Apply filters to count query
+        if status:
+            count_query = count_query.eq("status", status)
+        if plan:
+            count_query = count_query.eq("plan", plan)
+        
+        # Get total count first
+        count_response = count_query.execute()
+        total = count_response.count if hasattr(count_response, 'count') else len(count_response.data)
+        
+        # Build main query - fetch subscriptions
+        query = client.table("subscriptions").select("*")
+        
+        # Apply filters
+        if status:
+            query = query.eq("status", status)
+        if plan:
+            query = query.eq("plan", plan)
+        
+        # Get paginated results
+        response = query.order("created_at", desc=True).range(offset, offset + limit - 1).execute()
+        subscriptions = response.data
+        
+        # Enrich subscriptions with profile data from profiles table
+        if subscriptions:
+            user_ids = [s["user_id"] for s in subscriptions if s.get("user_id")]
+            
+            if user_ids:
+                # Fetch profiles for these user_ids
+                profiles_result = client.table("profiles")\
+                    .select("id, username, full_name, profile_url, email")\
+                    .in_("id", user_ids)\
+                    .execute()
+                
+                # Create a map of user_id -> profile
+                profiles_map = {p["id"]: p for p in profiles_result.data}
+                
+                # Attach profiles to subscriptions
+                for subscription in subscriptions:
+                    user_id = subscription.get("user_id")
+                    subscription["profiles"] = profiles_map.get(user_id)
+        
+        # Filter by search term if provided (search in user email/username)
+        if search:
+            search_lower = search.lower()
+            filtered_subscriptions = []
+            for s in subscriptions:
+                profile = s.get("profiles") or {}
+                email = profile.get("email", "").lower()
+                username = profile.get("username", "").lower()
+                full_name = profile.get("full_name", "").lower()
+                
+                if search_lower in email or search_lower in username or search_lower in full_name:
+                    filtered_subscriptions.append(s)
+            
+            subscriptions = filtered_subscriptions
+            total = len(subscriptions)
+        
+        return {
+            "success": True,
+            "subscriptions": subscriptions,
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total,
+                "total_pages": (total + limit - 1) // limit
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error fetching subscriptions: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.patch("/subscriptions/{subscription_id}")
+async def update_subscription(
+    subscription_id: str,
+    subscription_update: SubscriptionUpdate,
+    auth_data: dict = Depends(check_admin_access)
+):
+    """Update a subscription"""
+    try:
+        client = auth_data["client"]
+        
+        # Build update data
+        update_data = {}
+        if subscription_update.status is not None:
+            update_data["status"] = subscription_update.status
+        if subscription_update.plan is not None:
+            update_data["plan"] = subscription_update.plan
+        if subscription_update.current_period_end is not None:
+            update_data["current_period_end"] = subscription_update.current_period_end
+        update_data["updated_at"] = datetime.now().isoformat()
+        
+        # Update subscription
+        response = client.table("subscriptions")\
+            .update(update_data)\
+            .eq("id", subscription_id)\
+            .execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Subscription not found")
+        
+        return {
+            "success": True,
+            "subscription": response.data[0]
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error updating subscription: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/subscriptions/{subscription_id}")
+async def delete_subscription(
+    subscription_id: str,
+    auth_data: dict = Depends(check_admin_access)
+):
+    """Delete a subscription"""
+    try:
+        client = auth_data["client"]
+        
+        # Delete subscription
+        response = client.table("subscriptions")\
+            .delete()\
+            .eq("id", subscription_id)\
+            .execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Subscription not found")
+        
+        return {
+            "success": True,
+            "message": "Subscription deleted successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error deleting subscription: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 

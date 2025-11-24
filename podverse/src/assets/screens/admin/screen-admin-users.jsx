@@ -142,19 +142,6 @@ const AdminUsers = () => {
     }
   };
 
-  const handleCreate = () => {
-    setEditingUser(null);
-    setUserForm({
-      email: '',
-      username: '',
-      full_name: '',
-      password: '',
-      role: 'user',
-      onboarding_complete: false
-    });
-    setShowUserModal(true);
-  };
-
   const handleEdit = (user) => {
     setEditingUser(user);
     setUserForm({
@@ -313,15 +300,6 @@ const AdminUsers = () => {
         <div>
           <h1 className="text-3xl font-bold text-gray-800">User Management</h1>
           <p className="text-gray-600 mt-1">Manage and monitor all platform users</p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={handleCreate}
-            className="px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg font-semibold hover:shadow-lg transition-all flex items-center gap-2"
-          >
-            <FaPlus />
-            Add User
-          </button>
         </div>
       </div>
 

@@ -23,10 +23,11 @@ import AdminUsers from './assets/screens/admin/screen-admin-users';
 import AdminPosts from './assets/screens/admin/screen-admin-posts';
 import AdminAnalytics from './assets/screens/admin/screen-admin-analytics';
 import FAQs from './assets/screens/admin/screen-admin-faqs';
-import MediaLibrary from './assets/screens/admin/screen-admin-media';
 import AdminAIAvatars from './assets/screens/admin/screen-admin-ai-avatars';
-import AdminAIVoices from './assets/screens/admin/screen-admin-ai-voices';
+import AdminSubscriptions from './assets/screens/admin/screen-admin-subscriptions';
 import ScreenPodcastFeedback from './assets/screens/screen-podcast-feedback';
+import SubscriptionPage from './assets/screens/screen-subscription';
+import SubscriptionSuccessPage from './assets/screens/screen-subscription-success';
 
 function App() {
   return (
@@ -202,14 +203,6 @@ function App() {
             }
           />
           <Route
-            path="/admin/media"
-            element={
-              <AdminLayout>
-                <MediaLibrary />
-              </AdminLayout>
-            }
-          />
-          <Route
             path="/admin/ai/avatars"
             element={
               <AdminLayout>
@@ -218,18 +211,34 @@ function App() {
             }
           />
           <Route
-            path="/admin/ai/voices"
+            path="/admin/subscriptions"
             element={
               <AdminLayout>
-                <AdminAIVoices />
+                <AdminSubscriptions />
               </AdminLayout>
             }
           />
-          <Route 
+          <Route
             path="/feedback"
             element={
               <PrivateRoute>
                 <ScreenPodcastFeedback />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/subscription"
+            element={
+              <PrivateRoute>
+                <SubscriptionPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/subscription-success"
+            element={
+              <PrivateRoute>
+                <SubscriptionSuccessPage />
               </PrivateRoute>
             }
           />

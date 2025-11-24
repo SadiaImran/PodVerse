@@ -250,5 +250,30 @@ export const adminApi = {
             method: 'DELETE',
         });
     },
+
+    // Subscriptions
+    getSubscriptions: async (params = {}) => {
+        const queryParams = new URLSearchParams();
+        if (params.page) queryParams.append('page', params.page);
+        if (params.limit) queryParams.append('limit', params.limit);
+        if (params.search) queryParams.append('search', params.search);
+        if (params.status) queryParams.append('status', params.status);
+        if (params.plan) queryParams.append('plan', params.plan);
+
+        return adminApiRequest(`/admin/subscriptions?${queryParams.toString()}`);
+    },
+
+    updateSubscription: async (subscriptionId, data) => {
+        return adminApiRequest(`/admin/subscriptions/${subscriptionId}`, {
+            method: 'PATCH',
+            body: JSON.stringify(data),
+        });
+    },
+
+    deleteSubscription: async (subscriptionId) => {
+        return adminApiRequest(`/admin/subscriptions/${subscriptionId}`, {
+            method: 'DELETE',
+        });
+    },
 };
 
