@@ -1,5 +1,5 @@
 import React from "react";
-import { Download, Loader2, Bell, Save } from "lucide-react";
+import { Download, Loader2, Bell, Save, X, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -9,6 +9,7 @@ import {
 import { formatDistanceToNow } from "date-fns";
 import { getSupabaseAuthorizedtoken } from "@/assets/supabaseClient";
 import { useEditorContext } from "../../contexts/editor-context";
+import axios from "axios";
 
 /**
  * Interface representing a single video render attempt
@@ -72,14 +73,97 @@ const RenderControls: React.FC<RenderControlsProps> = ({
   const [autoDownloadPending, setAutoDownloadPending] = React.useState(false);
   // Track upload in progress to prevent double uploads
   const uploadInProgressRef = React.useRef<Set<string>>(new Set());
+  // Post creation modal state
+  const [showPostModal, setShowPostModal] = React.useState(false);
+  const [uploadedVideoUrl, setUploadedVideoUrl] = React.useState<string | null>(null);
+  const [uploadedThumbnailUrl, setUploadedThumbnailUrl] = React.useState<string | null>(null);
+  const [isCreatingPost, setIsCreatingPost] = React.useState(false);
 
   // Check if rendering is disabled via environment variable
   const isRenderDisabled = (import.meta as any).env?.VITE_DISABLE_RENDER === "true";
 
+  // Handle post creation
+  const handleCreatePost = React.useCallback(async (status: 'draft' | 'published') => {
+    if (!uploadedVideoUrl) return;
+    
+    setIsCreatingPost(true);
+    try {
+      // Get podcast metadata from sessionStorage
+      const podcastConfigRaw = sessionStorage.getItem('podcastConfig');
+      const videoGenMetaRaw = sessionStorage.getItem('videoGenMeta');
+      
+      let title = 'My Podcast Video';
+      let description = 'A podcast video created with PodVerse';
+      let tags: string[] = [];
+      
+      if (podcastConfigRaw) {
+        try {
+          const config = JSON.parse(podcastConfigRaw);
+          title = config.podcastName || title;
+          description = config.description || description;
+          tags = Array.isArray(config.tags) ? config.tags : [];
+        } catch (e) {
+          console.warn('Failed to parse podcastConfig:', e);
+        }
+      }
+      
+      if (videoGenMetaRaw) {
+        try {
+          const meta = JSON.parse(videoGenMetaRaw);
+          if (meta.podcastTitle && !title) {
+            title = meta.podcastTitle;
+          }
+        } catch (e) {
+          console.warn('Failed to parse videoGenMeta:', e);
+        }
+      }
+      
+      // Use uploaded thumbnail URL if available, otherwise backend will generate
+      const thumbnailUrl = uploadedThumbnailUrl || null;
+      
+      // Get auth token
+      const token = await getSupabaseAuthorizedtoken();
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+      
+      // Call post creation API
+      const response = await axios.post(
+        'http://localhost:8000/posts/create',
+        {
+          title,
+          description,
+          video_url: uploadedVideoUrl,
+          thumbnail_url: thumbnailUrl, // Backend will generate actual thumbnail
+          status,
+          tags
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+      
+      if (response.data.success) {
+        alert(`Post ${status === 'draft' ? 'saved as draft' : 'published'} successfully!`);
+        setShowPostModal(false);
+        setUploadedVideoUrl(null);
+      } else {
+        throw new Error(response.data.message || 'Failed to create post');
+      }
+    } catch (error: any) {
+      console.error('Error creating post:', error);
+      alert(error.response?.data?.detail || error.message || 'Failed to create post. Please try again.');
+    } finally {
+      setIsCreatingPost(false);
+    }
+  }, [uploadedVideoUrl, uploadedThumbnailUrl]);
+
   /**
    * Upload rendered video to Supabase Storage
    */
-  const uploadVideoToSupabase = React.useCallback(async (videoUrl: string, renderId: string, projectName?: string): Promise<string | null> => {
+  const uploadVideoToSupabase = React.useCallback(async (videoUrl: string, renderId: string, projectName?: string): Promise<{ video_url: string | null; thumbnail_url: string | null }> => {
     try {
       console.log("[Video Upload] Starting upload to Supabase...", { videoUrl, renderId });
       
@@ -87,7 +171,7 @@ const RenderControls: React.FC<RenderControlsProps> = ({
       const token = await getSupabaseAuthorizedtoken();
       if (!token) {
         console.error("[Video Upload] No authentication token found");
-        return null;
+        return { video_url: null, thumbnail_url: null };
       }
 
       // Download the video file
@@ -101,9 +185,24 @@ const RenderControls: React.FC<RenderControlsProps> = ({
 
       // Create FormData
       const formData = new FormData();
-      const fileName = projectName 
-        ? `${projectName}_${renderId}.mp4`
-        : `rendered_video_${renderId}.mp4`;
+      
+      // Check if we should overwrite original video (from video generation)
+      const originalVideoPath = sessionStorage.getItem('originalVideoPath');
+      const jobId = sessionStorage.getItem('videoJobId');
+      
+      let fileName;
+      if (originalVideoPath) {
+        // Use original path to overwrite the generated video
+        // Remove bucket prefix if present, keep just the filename
+        fileName = originalVideoPath.split('/').pop() || originalVideoPath;
+        console.log("[Video Upload] Using original video path for overwrite:", fileName);
+        formData.append("overwrite_path", originalVideoPath); // Pass original path for backend
+      } else {
+        // Create new file name
+        fileName = projectName 
+          ? `${projectName}_${renderId}.mp4`
+          : `rendered_video_${renderId}.mp4`;
+      }
       
       formData.append("file", blob, fileName);
       if (projectName) {
@@ -112,6 +211,9 @@ const RenderControls: React.FC<RenderControlsProps> = ({
       // Always pass render_id for unique filename
       if (renderId) {
         formData.append("render_id", renderId);
+      }
+      if (jobId) {
+        formData.append("job_id", jobId);
       }
 
       // Upload to backend
@@ -134,11 +236,15 @@ const RenderControls: React.FC<RenderControlsProps> = ({
 
       const result = await uploadResponse.json();
       console.log("[Video Upload] Upload successful", result);
+      console.log("[Video Upload] Thumbnail URL:", result.thumbnail_url);
       
-      return result.video_url || null;
+      return {
+        video_url: result.video_url || null,
+        thumbnail_url: result.thumbnail_url || null
+      };
     } catch (error) {
       console.error("[Video Upload] Upload error:", error);
-      return null;
+      return { video_url: null, thumbnail_url: null };
     }
   }, [projectId]);
 
@@ -192,22 +298,28 @@ const RenderControls: React.FC<RenderControlsProps> = ({
           // Use projectId from context as project name
           const projectName = projectId || "podverse-video";
           
-          const supabaseUrl = await uploadVideoToSupabase(
+          const uploadResult = await uploadVideoToSupabase(
             state.url,
             renderId,
             projectName
           );
 
           // Update render with Supabase URL
-          if (supabaseUrl) {
+          if (uploadResult.video_url) {
             setRenders((prev) =>
               prev.map((render) =>
                 render.id === renderId
-                  ? { ...render, supabaseUrl, isUploading: false }
+                  ? { ...render, supabaseUrl: uploadResult.video_url, isUploading: false }
                   : render
               )
             );
-            console.log("[Video Upload] Video saved to Supabase:", supabaseUrl);
+            console.log("[Video Upload] Video saved to Supabase:", uploadResult.video_url);
+            console.log("[Video Upload] Thumbnail saved to Supabase:", uploadResult.thumbnail_url);
+            
+            // Show post creation modal after successful upload
+            setUploadedVideoUrl(uploadResult.video_url);
+            setUploadedThumbnailUrl(uploadResult.thumbnail_url);
+            setShowPostModal(true);
           } else {
             // Upload failed, but keep the render
             setRenders((prev) =>
@@ -442,6 +554,50 @@ const RenderControls: React.FC<RenderControlsProps> = ({
           `Download Video`
         )}
       </Button>
+
+      {/* Post Creation Modal */}
+      {showPostModal && uploadedVideoUrl && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+          <div className="bg-gradient-to-br from-purple-800 to-indigo-900 rounded-3xl shadow-2xl p-8 max-w-md w-full text-center border border-purple-600 relative">
+            <button
+              onClick={() => setShowPostModal(false)}
+              className="absolute top-4 right-4 text-white/70 hover:text-white transition-colors"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            
+            <Sparkles className="w-16 h-16 text-yellow-300 mx-auto mb-6 animate-pulse" />
+            <h2 className="text-3xl font-bold text-white mb-4">Video Ready!</h2>
+            <p className="text-purple-200 leading-relaxed mb-8">
+              Your edited video has been saved to Supabase. Would you like to save it as a draft or publish it now?
+            </p>
+            
+            <div className="flex flex-col gap-4">
+              <button
+                onClick={async () => {
+                  await handleCreatePost('draft');
+                }}
+                disabled={isCreatingPost}
+                className="w-full px-6 py-3 bg-white/10 border border-purple-400 text-purple-200 rounded-xl font-semibold hover:bg-white/20 transition-all duration-300 shadow-md flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {isCreatingPost ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                Save as Draft
+              </button>
+              
+              <button
+                onClick={async () => {
+                  await handleCreatePost('published');
+                }}
+                disabled={isCreatingPost}
+                className="w-full px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-bold hover:from-green-600 hover:to-emerald-700 transition-all duration-300 shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {isCreatingPost ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
+                Publish Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

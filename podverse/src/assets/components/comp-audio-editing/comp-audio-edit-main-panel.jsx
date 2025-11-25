@@ -601,7 +601,10 @@ export const MainPanel = ({
   volume: externalVolume = 75,
   setVolume: externalSetVolume,
   zoom: externalZoom = 1,
-  setZoom: externalSetZoom
+  setZoom: externalSetZoom,
+  onFinalizeAudio,
+  isFinalizing = false,
+  canFinalize = false
 }) => {
   const [internalIsPlaying, setInternalIsPlaying] = useState(false);
   const [internalCurrentTime, setInternalCurrentTime] = useState(0);
@@ -618,7 +621,7 @@ export const MainPanel = ({
     setTracks(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
       if (onTracksChange) {
-        onTracksChange(next);
+        Promise.resolve().then(() => onTracksChange(next));
       }
       return next;
     });
@@ -639,13 +642,13 @@ export const MainPanel = ({
       const displayName = track.displayName || getReadableTrackName(inferredNameSource);
       const originalName = track.originalName || track.name || extractFileName(track.url || inferredNameSource);
       return {
-      ...track,
+        ...track,
         name: track.name || originalName || displayName,
         displayName,
         originalName,
-      startTime: track.startTime !== undefined ? track.startTime : index * 5,
-      volume: track.volume !== undefined ? track.volume : 100,
-      speed: track.speed !== undefined ? track.speed : 1.0
+        startTime: track.startTime !== undefined ? track.startTime : index * 5,
+        volume: track.volume !== undefined ? track.volume : 100,
+        speed: track.speed !== undefined ? track.speed : 1.0
       };
     });
     setTracks(newTracks);
@@ -1200,13 +1203,29 @@ export const MainPanel = ({
               </button>
             </div>
 
-            <button 
-              onClick={handleMasterExport}
-              className="px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white rounded-lg transition-all duration-200 font-medium shadow-md hover:shadow-lg"
-              title="Export entire project"
-            >
-              Export Project
-            </button>
+            <div className="flex flex-wrap gap-3">
+              <button 
+                onClick={handleMasterExport}
+                className="px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white rounded-lg transition-all duration-200 font-medium shadow-md hover:shadow-lg"
+                title="Export entire project"
+              >
+                Export Project
+              </button>
+              {onFinalizeAudio && (
+                <button
+                  onClick={onFinalizeAudio}
+                  disabled={isFinalizing || !canFinalize}
+                  className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 shadow-md ${
+                    isFinalizing || !canFinalize
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-green-500 to-emerald-600 text-white hover:from-green-600 hover:to-emerald-700 hover:shadow-lg'
+                  }`}
+                  title="Finalize this edit and move forward"
+                >
+                  {isFinalizing ? 'Finalizing...' : 'Finalize Audio'}
+                </button>
+              )}
+            </div>
           </div>
         </div>
 

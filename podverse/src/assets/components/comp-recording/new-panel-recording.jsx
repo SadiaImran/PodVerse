@@ -408,6 +408,14 @@ const NewPanelsRecording = ({ podcastConfig = {} }) => {
   const [podcastScript, setPodcastScript] = useState(null);
 
   useEffect(() => {
+    try {
+      sessionStorage.setItem('podcastConfig', JSON.stringify(podcastConfig || {}));
+    } catch (err) {
+      console.warn('Unable to persist podcastConfig:', err);
+    }
+  }, [podcastConfig]);
+
+  useEffect(() => {
     transcriptRef.current = transcript;
   }, [transcript]);
 

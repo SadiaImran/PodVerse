@@ -1,11 +1,13 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import WaveSurfer from "wavesurfer.js";
 import RegionsPlugin from "wavesurfer.js/dist/plugin/wavesurfer.regions.min.js";
 import { Play, Pause, Square, Upload, Trash2, ZoomIn, ZoomOut } from 'lucide-react';
 import BaseLayout from "../components/layouts/BaseLayout";
 import { Sidebar } from "../components/comp-audio-editing/comp-audio-edit-sidebar";
 import { MainPanel } from "../components/comp-audio-editing/comp-audio-edit-main-panel";
+import { useAuth } from "../context/AuthContext";
+import { getSupabaseAuthorizedtoken } from "../supabaseClient";
 
 const stripQueryString = (value = '') => value.split('?')[0];
 
@@ -22,8 +24,55 @@ const getFriendlyTrackName = (value = '', fallback = 'Track') => {
   return friendly || fallback;
 };
 
+const sanitizeFileName = (value = '', fallbackPrefix = 'track') => {
+  const extracted = extractFileName(value) || `${fallbackPrefix}.wav`;
+  const sanitized = extracted.replace(/[^a-zA-Z0-9._-]/g, '_');
+  if (sanitized) {
+    return sanitized;
+  }
+  return `${fallbackPrefix}_${Date.now()}.wav`;
+};
+
+const buildSanitizedFileName = (value = '', fallbackPrefix = 'track') => {
+  const base = value && value.includes('.') ? value : `${value || fallbackPrefix}.wav`;
+  return sanitizeFileName(base, fallbackPrefix);
+};
+
+const blobToDataUrl = (blob) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+
+const AUDIO_EDIT_API = 'http://localhost:8000/audio-edit';
+
+const mergeAudioBlobs = async (audioBlobs, filenames) => {
+  const form = new FormData();
+  audioBlobs.forEach((blob, index) => {
+    const fileName = filenames[index] || `track_${index + 1}.wav`;
+    const file = new File([blob], fileName, { type: blob.type || 'audio/wav' });
+    form.append('files', file);
+  });
+
+  const response = await fetch(`${AUDIO_EDIT_API}/merge_audio`, {
+    method: 'POST',
+    body: form,
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || 'Failed to merge audio tracks');
+  }
+
+  return response.blob();
+};
+
 const AudioEditor = () => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user } = useAuth();
   
   // State for audio tracks/clips
   const [audioClips, setAudioClips] = useState([]);
@@ -35,6 +84,11 @@ const AudioEditor = () => {
   const [zoom, setZoom] = useState(1);
   const [selectedClipId, setSelectedClipId] = useState(null);
   const [recordingLoaded, setRecordingLoaded] = useState(false);
+  const [isFinalizing, setIsFinalizing] = useState(false);
+  const [finalizedAudioUrl, setFinalizedAudioUrl] = useState(null);
+  const [finalizedAudioName, setFinalizedAudioName] = useState(null);
+  const [finalizeModalOpen, setFinalizeModalOpen] = useState(false);
+  const finalizedAudioBlobRef = useRef(null);
 
   // Refs
   const waveformContainerRef = useRef(null);  
@@ -105,6 +159,9 @@ const AudioEditor = () => {
     };
   }, []);
 
+  // Store original recording path for overwrite
+  const [originalRecordingPath, setOriginalRecordingPath] = useState(null);
+
   // Load recording from URL if provided (from recording modal)
   useEffect(() => {
     if (recordingLoaded || audioClips.length > 0) return; // Don't reload if already loaded or clips exist
@@ -160,7 +217,33 @@ const AudioEditor = () => {
           setAudioClips([clip]);
           setRecordingLoaded(true);
           
-          // Clean up sessionStorage
+          // Extract and store original recording path before cleanup
+          let storagePath = null;
+          if (recordingUrl.includes('/storage/v1/object/sign/recordings/')) {
+            const urlParts = recordingUrl.split('/storage/v1/object/sign/recordings/');
+            if (urlParts.length > 1) {
+              storagePath = urlParts[1].split('?')[0]; // Remove query params
+            }
+          } else if (recordingUrl.includes('/storage/v1/object/public/recordings/')) {
+            const urlParts = recordingUrl.split('/storage/v1/object/public/recordings/');
+            if (urlParts.length > 1) {
+              storagePath = urlParts[1].split('?')[0];
+            }
+          }
+          
+          // Fallback to filename if path extraction failed
+          if (!storagePath && recordingFilename) {
+            storagePath = recordingFilename;
+          }
+          
+          // Store original path for overwrite
+          if (storagePath) {
+            setOriginalRecordingPath(storagePath);
+            sessionStorage.setItem('originalRecordingPath', storagePath);
+            console.log('📁 Original recording path stored for overwrite:', storagePath);
+          }
+          
+          // Clean up sessionStorage (but keep originalRecordingPath)
           sessionStorage.removeItem('recordingUrl');
           sessionStorage.removeItem('recordingFilename');
           
@@ -309,6 +392,190 @@ const AudioEditor = () => {
     }
   };
 
+  const handleFinalizeAudio = useCallback(async () => {
+    if (audioClips.length === 0) {
+      alert('Please add at least one track before finalizing.');
+      return;
+    }
+    setIsFinalizing(true);
+    try {
+      const sortedClips = [...audioClips].sort(
+        (a, b) => (a.startTime || 0) - (b.startTime || 0)
+      );
+
+      const audioBlobs = [];
+      const filenames = [];
+
+      for (let i = 0; i < sortedClips.length; i++) {
+        const clip = sortedClips[i];
+        const response = await fetch(clip.url);
+        if (!response.ok) {
+          throw new Error(`Failed to download audio for track ${clip.displayName || clip.name}`);
+        }
+        const blob = await response.blob();
+        audioBlobs.push(blob);
+
+        const label =
+          clip.displayName ||
+          clip.name ||
+          clip.originalName ||
+          `track_${i + 1}`;
+        const fallback = label.replace(/\s+/g, '_').toLowerCase() || `track_${i + 1}`;
+        filenames.push(buildSanitizedFileName(`${label}.wav`, fallback));
+      }
+
+      const mergedBlob = await mergeAudioBlobs(audioBlobs, filenames);
+      const finalName = `edited_audio_${new Date()
+        .toISOString()
+        .replace(/[:.]/g, '-')}.wav`;
+
+      if (finalizedAudioUrl) {
+        URL.revokeObjectURL(finalizedAudioUrl);
+      }
+
+      const objectUrl = URL.createObjectURL(mergedBlob);
+      finalizedAudioBlobRef.current = mergedBlob;
+      setFinalizedAudioUrl(objectUrl);
+      setFinalizedAudioName(finalName);
+
+      let kbIdFromStorage = sessionStorage.getItem('current_kb_id');
+      if (!kbIdFromStorage) {
+        const kbInfoRaw = sessionStorage.getItem('selectedKnowledgeBase');
+        if (kbInfoRaw) {
+          try {
+            const parsed = JSON.parse(kbInfoRaw);
+            kbIdFromStorage = parsed?.id || parsed?.selectedKbId || null;
+          } catch {
+            kbIdFromStorage = null;
+          }
+        }
+      }
+      kbIdFromStorage = kbIdFromStorage || 'kb_unknown';
+
+      let storedPodcastTitle = '';
+      try {
+        const configRaw = sessionStorage.getItem('podcastConfig');
+        if (configRaw) {
+          storedPodcastTitle = JSON.parse(configRaw)?.podcastName || '';
+        }
+      } catch {
+        storedPodcastTitle = '';
+      }
+
+      const metaPayload = {
+        userId: user?.id || null,
+        kbId: kbIdFromStorage || 'kb_unknown',
+        podcastTitle:
+          storedPodcastTitle ||
+          (recordingFilename ? recordingFilename.replace(/\.[^/.]+$/, '') : '') ||
+          finalName.replace('.wav', ''),
+      };
+
+      try {
+        sessionStorage.setItem('videoGenMeta', JSON.stringify(metaPayload));
+      } catch (err) {
+        console.warn('Unable to persist videoGen metadata:', err);
+      }
+
+      // Upload edited audio to Supabase
+      let supabaseAudioUrl = null;
+      try {
+        console.log('📤 Uploading edited audio to Supabase...');
+        const token = await getSupabaseAuthorizedtoken();
+        const audioFile = new File([mergedBlob], finalName, { type: 'audio/wav' });
+        const formData = new FormData();
+        formData.append('file', audioFile);
+        formData.append('user_id', metaPayload.userId || 'unknown');
+        formData.append('kb_id', metaPayload.kbId);
+        formData.append('podcast_title', metaPayload.podcastTitle);
+        
+        // Add original recording path to overwrite if available
+        const originalPath = originalRecordingPath || sessionStorage.getItem('originalRecordingPath');
+        if (originalPath) {
+          formData.append('original_recording_path', originalPath);
+          console.log('🔄 Will overwrite original recording:', originalPath);
+        }
+
+        const uploadResponse = await fetch('http://localhost:8000/audios/upload-edited-audio', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          body: formData
+        });
+
+        if (uploadResponse.ok) {
+          const uploadResult = await uploadResponse.json();
+          console.log('✅ Edited audio uploaded to Supabase:', uploadResult.audio_url);
+          supabaseAudioUrl = uploadResult.audio_url;
+          // Store Supabase URL for video generation (preferred over blob)
+          sessionStorage.setItem('editedAudioSupabaseUrl', supabaseAudioUrl);
+        } else {
+          const errorText = await uploadResponse.text();
+          console.warn('⚠️ Failed to upload edited audio to Supabase:', errorText);
+        }
+      } catch (uploadErr) {
+        console.warn('⚠️ Error uploading edited audio to Supabase:', uploadErr);
+        // Continue even if upload fails
+      }
+
+      // Store audio info for video generation
+      // Prefer Supabase URL if available, otherwise try to store blob (may fail if too large)
+      if (supabaseAudioUrl) {
+        // Use Supabase URL instead of blob
+        sessionStorage.setItem('videoGenAudioUrl', supabaseAudioUrl);
+        sessionStorage.setItem('videoGenAudioName', finalName);
+        sessionStorage.setItem('videoGenAudioSource', 'supabase'); // Mark as Supabase URL
+      } else {
+        // Fallback: try to store blob (may fail for large files)
+        try {
+          const dataUrl = await blobToDataUrl(mergedBlob);
+          sessionStorage.setItem('videoGenAudioDataUrl', dataUrl);
+          sessionStorage.setItem('videoGenAudioName', finalName);
+          sessionStorage.setItem('videoGenAudioSource', 'blob'); // Mark as blob
+        } catch (err) {
+          console.warn('Unable to cache finalized audio for navigation (blob too large):', err);
+          // Still store the name and object URL reference
+          sessionStorage.setItem('videoGenAudioName', finalName);
+          sessionStorage.setItem('videoGenAudioObjectUrl', objectUrl);
+          sessionStorage.setItem('videoGenAudioSource', 'objectUrl'); // Mark as object URL
+        }
+      }
+
+      setFinalizeModalOpen(true);
+    } catch (error) {
+      console.error('Finalize audio error:', error);
+      alert(error.message || 'Failed to finalize audio. Please try again.');
+    } finally {
+      setIsFinalizing(false);
+    }
+  }, [audioClips, finalizedAudioUrl]);
+
+  const handleKeepEditing = useCallback(() => {
+    setFinalizeModalOpen(false);
+  }, []);
+
+  const handleGoToVideoGeneration = useCallback(() => {
+    if (!finalizedAudioBlobRef.current || !finalizedAudioName) {
+      alert('Please finalize your audio before continuing.');
+      return;
+    }
+
+    const audioFile = new File(
+      [finalizedAudioBlobRef.current],
+      finalizedAudioName,
+      { type: finalizedAudioBlobRef.current.type || 'audio/wav' }
+    );
+
+    navigate('/video-generation', {
+      state: {
+        source: 'audio-edit',
+        audioFile,
+        audioFileName: finalizedAudioName,
+      },
+    });
+  }, [finalizedAudioName, navigate]);
+
   const handleTracksChange = useCallback(async (updatedTracks) => {
     setAudioClips(updatedTracks);
     await loadCombinedAudio(updatedTracks);
@@ -414,6 +681,14 @@ const AudioEditor = () => {
     setZoom(prev => Math.max(0.1, prev - 0.2));
   };
 
+  useEffect(() => {
+    return () => {
+      if (finalizedAudioUrl) {
+        URL.revokeObjectURL(finalizedAudioUrl);
+      }
+    };
+  }, [finalizedAudioUrl]);
+
   return (
     <BaseLayout homeScreen={false} autoCollapse={true}>
       <div className="min-h-screen bg-gray-50">
@@ -440,6 +715,9 @@ const AudioEditor = () => {
             setVolume={setVolume}
             zoom={zoom}
             setZoom={setZoom}
+            onFinalizeAudio={handleFinalizeAudio}
+            isFinalizing={isFinalizing}
+            canFinalize={audioClips.length > 0}
           />
         </div>
 
@@ -448,6 +726,38 @@ const AudioEditor = () => {
           ref={waveformRef} 
           className="hidden"
         ></div>
+
+        {finalizeModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
+            <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl p-8 space-y-6 animate-slide-in-right">
+              <div className="flex items-center gap-3 text-indigo-600 font-semibold">
+                <Play className="w-6 h-6" />
+                <span>Audio Finalized</span>
+              </div>
+              <div className="space-y-3">
+                <h2 className="text-2xl font-bold text-gray-900">Great work! Your edit is ready.</h2>
+                <p className="text-gray-600 leading-relaxed">
+                  {finalizedAudioName || 'Your audio'} has been merged and is ready for the next step.
+                  You can keep refining here or jump into Video Generation to bring it to life.
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  onClick={handleKeepEditing}
+                  className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-200 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+                >
+                  Continue Editing
+                </button>
+                <button
+                  onClick={handleGoToVideoGeneration}
+                  className="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-600 text-white font-semibold shadow-md hover:shadow-lg transition-all"
+                >
+                  Go to Video Generation
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </BaseLayout>
   );

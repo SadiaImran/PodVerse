@@ -18,10 +18,12 @@ PodVerse is an innovative platform that helps users create, personalize, and sum
 - **LiveKit Server**: Real-time audio/video communication (Port 7880)
 - **LiveKit Egress**: Audio recording service (Port 8081)
 - **Redis**: Message queue for LiveKit (Port 6379)
+- **Remotion Render Server**: Video rendering service (Port 4000)
 
 ### Frontend
 - **React + Vite**: Modern web interface
 - **Tailwind CSS**: Styling framework
+- **Remotion**: Video editing and rendering engine
 
 ## 📋 Prerequisites
 
@@ -187,12 +189,81 @@ npm install
 npm run dev
 ```
 
+### 7. Start Remotion Render Server (For Video Editor)
+
+The video editor requires a separate Remotion render server to generate final MP4 videos from the timeline.
+
+```bash
+# In a separate terminal, navigate to podverse directory
+cd podverse
+
+# Start the Remotion render server
+npm run render-server
+```
+
+**Important Notes:**
+- The render server runs on **port 4000** by default
+- It must be running alongside the frontend dev server for video rendering to work
+- The first time you run it, Chrome Headless Shell (~85MB) will be downloaded automatically
+- Rendered videos are saved in `public/rendered-videos/` directory
+- Render state files are stored in `tmp/render-state/` directory
+
+**What the Render Server Does:**
+- Receives render requests from the video editor
+- Bundles React components into a video composition
+- Renders frames using Chrome Headless Shell
+- Encodes frames into MP4 format
+- Provides progress updates during rendering
+- Serves completed videos for download
+
+**Running All Servers Together:**
+
+You need to run multiple services in separate terminals:
+
+**Terminal 1 - Backend API:**
+```bash
+cd podverse/modules
+python main.py
+# Or: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+**Terminal 2 - Frontend Dev Server:**
+```bash
+cd podverse
+npm run dev
+```
+
+**Terminal 3 - Remotion Render Server:**
+```bash
+cd podverse
+npm run render-server
+```
+
+**Terminal 4 - AI Agent (Optional, for podcast recording):**
+```bash
+cd podverse/modules/module_ai
+python agent.py dev
+```
+
+**Quick Start (All Services):**
+
+If you want to run everything at once, you can use a process manager:
+
+```bash
+# Install concurrently (one-time setup)
+npm install -D concurrently
+
+# Then create a script in package.json:
+# "dev:all": "concurrently \"npm run dev\" \"npm run render-server\""
+```
+
 ## 🎯 Usage Guide
 
 ### 1. Access the Application
 
 - **Frontend**: http://localhost:5173
 - **Backend API**: http://localhost:8000
+- **Remotion Render Server**: http://localhost:4000
 - **LiveKit Server**: ws://localhost:7880
 - **Egress Service**: http://localhost:8081
 
@@ -294,6 +365,46 @@ docker-compose logs egress
 # Check file permissions in egress_temp directory
 ```
 
+#### 5. Video Render Server Issues
+
+**Render server not starting:**
+```bash
+# Make sure tsx is installed
+cd podverse
+npm install -D tsx
+
+# Check if port 4000 is already in use
+netstat -an | findstr :4000
+
+# Verify the server file exists
+ls server/remotion/index.ts
+```
+
+**Render requests failing (404/500 errors):**
+```bash
+# Ensure render server is running
+# Check server terminal for error messages
+
+# Verify Vite proxy configuration in vite.config.js
+# Should proxy /api/latest/ssr/* to http://localhost:4000
+
+# Check browser console for detailed error messages
+```
+
+**Module resolution errors:**
+```bash
+# If you see "Can't resolve '@/components/ui/...'" errors:
+# The webpack alias should be configured in custom-renderer.ts
+# Verify the alias points to the correct src/ directory
+```
+
+**Chrome Headless Shell download issues:**
+```bash
+# First render will download Chrome (~85MB)
+# If download fails, check internet connection
+# Chrome is cached after first download
+```
+
 ### Port Conflicts
 
 If you encounter port conflicts:
@@ -302,9 +413,14 @@ If you encounter port conflicts:
 # Check what's using the ports
 netstat -an | findstr :7880
 netstat -an | findstr :8000
+netstat -an | findstr :4000
 netstat -an | findstr :6379
+netstat -an | findstr :5173
 
-# Stop conflicting services or change ports in docker-compose.yaml
+# Stop conflicting services or change ports in:
+# - docker-compose.yaml (for Docker services)
+# - server/remotion/index.ts (for render server, set REMOTION_SERVER_PORT env var)
+# - vite.config.js (for frontend dev server)
 ```
 
 ## 📝 API Endpoints

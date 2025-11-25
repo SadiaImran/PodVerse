@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import tempfile
 from typing import Dict, List, Tuple, Optional
@@ -22,9 +23,12 @@ from .module_video import (
     video_status,
     get_upload_headers
 )
+from connection_supabase_client import get_service_role_client
 
 load_dotenv()
 aai.settings.api_key = os.environ.get("ASSEMBLYAI_API_KEY")
+VIDEO_STORAGE_BUCKET = os.getenv("SUPABASE_VIDEO_BUCKET", "videos")
+SIGNED_URL_TTL = int(os.getenv("VIDEO_SIGNED_URL_TTL", 60 * 60 * 24 * 7))
 
 router = APIRouter()
 
@@ -42,11 +46,158 @@ class ProcessingStatus(BaseModel):
     speaker_b_video_id: Optional[str] = None
     transcript: Optional[List[Dict]] = None
     error: Optional[str] = None
+    supabase_video_url: Optional[str] = None
+    video_storage_path: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+    user_id: Optional[str] = None
+    kb_id: Optional[str] = None
+    podcast_title: Optional[str] = None
 
 # In-memory job tracking
 processing_jobs: Dict[str, ProcessingStatus] = {}
 # Store merged video paths
 merged_video_files: Dict[str, str] = {}
+
+def _slugify_component(value: Optional[str], fallback: str) -> str:
+    value = (value or fallback or "").strip()
+    if not value:
+        return fallback
+    slug = re.sub(r'[^A-Za-z0-9_-]+', '_', value)
+    slug = slug.strip('_')
+    return slug or fallback
+
+
+def generate_thumbnail_from_video(video_path: str, output_path: str, timestamp: str = "00:00:03") -> bool:
+    """
+    Generate thumbnail from video using FFmpeg.
+    """
+    try:
+        import subprocess
+        command = [
+            'ffmpeg',
+            '-ss', timestamp,
+            '-i', video_path,
+            '-vframes', '1',
+            '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2',
+            '-q:v', '2',
+            '-y',
+            output_path
+        ]
+        result = subprocess.run(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=30
+        )
+        return result.returncode == 0
+    except Exception as e:
+        print(f"Error generating thumbnail: {e}")
+        return False
+
+
+def upload_video_to_supabase_storage(
+    local_path: str,
+    *,
+    user_id: Optional[str],
+    kb_id: Optional[str],
+    podcast_title: Optional[str],
+) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    """
+    Upload merged video to Supabase storage, generate thumbnail, and return (path, signed_url, thumbnail_signed_url).
+    """
+    if not os.path.exists(local_path):
+        print(f"⚠️ Video file not found for upload: {local_path}")
+        return None, None, None
+
+    try:
+        service_client = get_service_role_client()
+    except Exception as e:
+        print(f"⚠️ Unable to initialize Supabase service client: {e}")
+        return None, None, None
+
+    user_slug = _slugify_component(user_id, "unknown")
+    kb_slug = _slugify_component(kb_id, "kb")
+    title_slug = _slugify_component(podcast_title, "podcast")
+    storage_path = f"user_{user_slug}_title_{title_slug}_kb_{kb_slug}.mp4"
+
+    try:
+        with open(local_path, "rb") as video_file:
+            file_data = video_file.read()
+        service_client.storage.from_(VIDEO_STORAGE_BUCKET).upload(
+            storage_path,
+            file_data,
+            {"content-type": "video/mp4", "upsert": True},
+        )
+        print(f"✅ Uploaded video to Supabase: {storage_path}")
+    except Exception as e:
+        print(f"⚠️ Failed to upload video to Supabase: {e}")
+        return None, None, None
+
+    signed_url = None
+    try:
+        signed_resp = service_client.storage.from_(VIDEO_STORAGE_BUCKET).create_signed_url(
+            storage_path, SIGNED_URL_TTL
+        )
+        if isinstance(signed_resp, dict):
+            signed_url = (
+                signed_resp.get("signedURL")
+                or signed_resp.get("signed_url")
+                or signed_resp.get("url")
+            )
+        elif isinstance(signed_resp, str):
+            signed_url = signed_resp
+        print(f"🔗 Signed URL created for video: {signed_url}")
+    except Exception as e:
+        print(f"⚠️ Failed to create signed URL: {e}")
+
+    # Generate and upload thumbnail
+    thumbnail_signed_url = None
+    try:
+        import tempfile
+        thumbnail_filename = storage_path.replace('.mp4', '_thumbnail.jpg')
+        temp_thumbnail_path = os.path.join(tempfile.gettempdir(), f"thumb_{os.path.basename(thumbnail_filename)}")
+        
+        if generate_thumbnail_from_video(local_path, temp_thumbnail_path):
+            print(f"✅ Generated thumbnail: {temp_thumbnail_path}")
+            
+            # Upload thumbnail to thumbnails bucket
+            with open(temp_thumbnail_path, "rb") as thumb_file:
+                thumb_data = thumb_file.read()
+            
+            service_client.storage.from_("thumbnails").upload(
+                thumbnail_filename,
+                thumb_data,
+                {"content-type": "image/jpeg", "upsert": True},
+            )
+            print(f"✅ Uploaded thumbnail to Supabase: {thumbnail_filename}")
+            
+            # Generate signed URL for thumbnail
+            thumb_signed_resp = service_client.storage.from_("thumbnails").create_signed_url(
+                thumbnail_filename, SIGNED_URL_TTL
+            )
+            if isinstance(thumb_signed_resp, dict):
+                thumbnail_signed_url = (
+                    thumb_signed_resp.get("signedURL")
+                    or thumb_signed_resp.get("signed_url")
+                    or thumb_signed_resp.get("url")
+                )
+            elif isinstance(thumb_signed_resp, str):
+                thumbnail_signed_url = thumb_signed_resp
+            print(f"🔗 Signed URL created for thumbnail: {thumbnail_signed_url}")
+            
+            # Cleanup temp thumbnail
+            try:
+                os.remove(temp_thumbnail_path)
+            except:
+                pass
+        else:
+            print(f"⚠️ Failed to generate thumbnail from video")
+    except Exception as e:
+        print(f"⚠️ Error generating/uploading thumbnail: {e}")
+        import traceback
+        traceback.print_exc()
+
+    return storage_path, signed_url, thumbnail_signed_url
 
 
 def generate_srt_from_utterances(utterances: List[Dict], output_path: str) -> str:
@@ -509,7 +660,10 @@ def process_podcast_background(
     use_original_voice_a: bool,
     use_original_voice_b: bool,
     add_subtitles: bool,  # NEW PARAMETER
-    authorization: str
+    authorization: str,
+    user_id: Optional[str],
+    kb_id: Optional[str],
+    podcast_title: Optional[str],
 ):
     """Background task to process podcast audio into avatar videos."""
     temp_files = [audio_file_path]
@@ -613,13 +767,31 @@ def process_podcast_background(
         )
         
         # Step 5: Poll for completion
-        max_wait = 600
+        # Increased timeout to 60 minutes (3600 seconds) - HeyGen can take time
+        max_wait = int(os.getenv("HEYGEN_VIDEO_TIMEOUT_SECONDS", 3600))  # Default: 60 minutes
+        check_interval = int(os.getenv("HEYGEN_STATUS_CHECK_INTERVAL", 60))  # Default: 60 seconds (1 minute)
         start_time = time.time()
         
         video_url_a = None
         video_url_b = None
+        last_status_update = start_time
+        
+        print(f"⏳ Starting video polling (max wait: {max_wait}s, check interval: {check_interval}s)")
         
         while time.time() - start_time < max_wait:
+            elapsed = int(time.time() - start_time)
+            minutes = elapsed // 60
+            seconds = elapsed % 60
+            
+            # Update status every 30 seconds to show progress
+            if time.time() - last_status_update >= 30:
+                update_job_status(
+                    job_id,
+                    progress=85,
+                    message=f"Waiting for videos to render... ({minutes}m {seconds}s elapsed)"
+                )
+                last_status_update = time.time()
+            
             if not video_url_a:
                 try:
                     status_a = video_status(video_id_a, authorization)
@@ -628,14 +800,17 @@ def process_podcast_background(
                         print(f"✅ Speaker A video ready: {video_url_a}")
                         update_job_status(
                             job_id,
-                            progress=87,
+                            progress=90,
                             message="Speaker A ready, waiting for Speaker B...",
                             speaker_a_video=video_url_a
                         )
                     elif status_a["status"] == "failed":
                         raise Exception("Speaker A video generation failed")
+                    elif status_a["status"] == "processing":
+                        print(f"⏳ Speaker A still processing... ({minutes}m {seconds}s)")
                 except Exception as e:
                     print(f"⚠️ Error checking Speaker A status: {e}")
+                    # Don't fail immediately, continue polling
             
             if not video_url_b:
                 try:
@@ -645,20 +820,74 @@ def process_podcast_background(
                         print(f"✅ Speaker B video ready: {video_url_b}")
                         update_job_status(
                             job_id,
+                            progress=92,
+                            message="Speaker B ready, preparing final video...",
                             speaker_b_video=video_url_b
                         )
                     elif status_b["status"] == "failed":
                         raise Exception("Speaker B video generation failed")
+                    elif status_b["status"] == "processing":
+                        print(f"⏳ Speaker B still processing... ({minutes}m {seconds}s)")
                 except Exception as e:
                     print(f"⚠️ Error checking Speaker B status: {e}")
+                    # Don't fail immediately, continue polling
             
             if video_url_a and video_url_b:
+                print(f"✅ Both videos ready! Total time: {minutes}m {seconds}s")
                 break
             
-            time.sleep(10)
+            # Sleep for check interval (reduced API calls)
+            time.sleep(check_interval)
         
+        # Check if we timed out but videos might be ready
         if not video_url_a or not video_url_b:
-            raise Exception("One or more videos failed to generate or timed out")
+            elapsed = int(time.time() - start_time)
+            minutes = elapsed // 60
+            
+            # Final check - sometimes videos complete right after timeout
+            print(f"⏰ Timeout reached ({minutes} minutes). Performing final status check...")
+            
+            if not video_url_a:
+                try:
+                    status_a = video_status(video_id_a, authorization)
+                    if status_a["status"] == "completed":
+                        video_url_a = status_a["video_url"]
+                        print(f"✅ Speaker A video ready (after timeout check): {video_url_a}")
+                    elif status_a["status"] == "processing":
+                        print(f"⚠️ Speaker A still processing after {minutes} minutes")
+                except Exception as e:
+                    print(f"⚠️ Final check for Speaker A failed: {e}")
+            
+            if not video_url_b:
+                try:
+                    status_b = video_status(video_id_b, authorization)
+                    if status_b["status"] == "completed":
+                        video_url_b = status_b["video_url"]
+                        print(f"✅ Speaker B video ready (after timeout check): {video_url_b}")
+                    elif status_b["status"] == "processing":
+                        print(f"⚠️ Speaker B still processing after {minutes} minutes")
+                except Exception as e:
+                    print(f"⚠️ Final check for Speaker B failed: {e}")
+            
+            # If still not ready, mark as waiting instead of failing
+            if not video_url_a or not video_url_b:
+                missing = []
+                if not video_url_a:
+                    missing.append("Speaker A")
+                if not video_url_b:
+                    missing.append("Speaker B")
+                
+                update_job_status(
+                    job_id,
+                    status="waiting",
+                    progress=85,
+                    message=f"Videos still processing on HeyGen. Please check back later. Missing: {', '.join(missing)}",
+                    error=f"Timeout after {minutes} minutes. Videos may still be processing on HeyGen. Video IDs: A={video_id_a}, B={video_id_b}"
+                )
+                
+                # Don't raise exception - let user check status later
+                print(f"⏸️ Job paused - videos still processing. User can check status later.")
+                return  # Exit gracefully, job can be resumed later
         
         # Step 6: Merge videos (with optional subtitles)
         if video_url_a and video_url_b:
@@ -680,6 +909,13 @@ def process_podcast_background(
                 
                 merged_video_files[job_id] = merged_video_path
                 merged_video_url = f"/video/api/podcast/merged/{job_id}"
+
+                storage_path, signed_url, thumbnail_signed_url = upload_video_to_supabase_storage(
+                    merged_video_path,
+                    user_id=user_id,
+                    kb_id=kb_id,
+                    podcast_title=podcast_title,
+                )
                 
                 print(f"✅ Dynamic podcast video created: {merged_video_path}")
                 
@@ -691,7 +927,10 @@ def process_podcast_background(
                     speaker_a_video=video_url_a,
                     speaker_b_video=video_url_b,
                     merged_video_url=merged_video_url,
-                    transcript=utterances
+                    transcript=utterances,
+                    supabase_video_url=signed_url,
+                    video_storage_path=storage_path,
+                    thumbnail_url=thumbnail_signed_url  # Add thumbnail URL to job status
                 )
             except Exception as e:
                 print(f"⚠️ Failed to merge videos: {e}")
@@ -745,6 +984,9 @@ async def process_podcast(
     use_original_voice_b: bool = Form(True),
     add_subtitles: bool = Form(False),  # NEW PARAMETER
     conversation_id: Optional[str] = Form(None),
+    user_id: Optional[str] = Form(None),
+    kb_id: Optional[str] = Form(None),
+    podcast_title: Optional[str] = Form(None),
     authorization: str = Depends(verify_token)
 ):
     """Process uploaded podcast audio into avatar videos."""
@@ -777,7 +1019,10 @@ async def process_podcast(
         job_id=job_id,
         status="pending",
         progress=0,
-        message="Job queued"
+        message="Job queued",
+        user_id=user_id,
+        kb_id=kb_id,
+        podcast_title=podcast_title
     )
     
     processing_jobs[job_id] = job
@@ -795,7 +1040,10 @@ async def process_podcast(
         use_original_voice_a=use_original_voice_a,
         use_original_voice_b=use_original_voice_b,
         add_subtitles=add_subtitles,  # Pass the flag
-        authorization=authorization
+        authorization=authorization,
+        user_id=user_id,
+        kb_id=kb_id,
+        podcast_title=podcast_title,
     )
     
     return {
@@ -812,6 +1060,11 @@ async def get_job_status(job_id: str):
         raise HTTPException(status_code=404, detail="Job not found")
     
     job = processing_jobs[job_id]
+    
+    # If job is in "waiting" status, check if videos are ready now (optional auto-resume)
+    # Note: This requires authorization token, so we'll just return current status
+    # Frontend can manually trigger resume if needed
+    
     return job.dict()
 
 
@@ -878,7 +1131,20 @@ async def get_avatar_templates(speaker: str, authorization: Optional[str] = Head
     folder_path = f"speaker-{speaker.lower()}"
     
     try:
-        files = supabase.storage.from_('avatar-templates').list(folder_path)
+        service_client = get_service_role_client()
+        
+        # List files in the folder
+        try:
+            files = service_client.storage.from_('avatar-templates').list(folder_path)
+        except Exception as list_error:
+            print(f"Error listing files in folder {folder_path}: {list_error}")
+            # Try listing root and filtering
+            try:
+                all_files = service_client.storage.from_('avatar-templates').list()
+                files = [f for f in all_files if f.get('name', '').startswith(f"speaker-{speaker.lower()}")]
+            except Exception as fallback_error:
+                print(f"Fallback listing also failed: {fallback_error}")
+                raise HTTPException(status_code=500, detail=f"Failed to list avatar templates: {str(fallback_error)}")
         
         # Get user's subscription status if authenticated
         subscription_status = "free"  # Default to free
@@ -899,15 +1165,55 @@ async def get_avatar_templates(speaker: str, authorization: Optional[str] = Head
         
         templates = []
         for file in files:
-            public_url = supabase.storage.from_('avatar-templates').get_public_url(
-                f"{folder_path}/{file['name']}"
-            )
-            templates.append({
-                "id": file['name'].split('.')[0],
-                "name": file['name'].replace('-', ' ').replace('.jpg', '').replace('.png', '').title(),
-                "url": public_url,
-                "speaker": speaker
-            })
+            # Handle both folder structure and flat structure
+            if isinstance(file, dict):
+                file_name = file.get('name', '')
+                # If file is in a folder, construct full path
+                if '/' in file_name or folder_path in file_name:
+                    file_path = file_name
+                else:
+                    file_path = f"{folder_path}/{file_name}" if folder_path else file_name
+            else:
+                file_name = str(file)
+                file_path = f"{folder_path}/{file_name}" if folder_path else file_name
+            
+            # Generate signed URL (valid for 7 days = 604800 seconds)
+            try:
+                signed_url_response = service_client.storage.from_('avatar-templates').create_signed_url(
+                    file_path,
+                    604800  # 7 days expiration
+                )
+                
+                # Handle different response formats
+                if isinstance(signed_url_response, dict):
+                    signed_url = (
+                        signed_url_response.get("signedURL") or
+                        signed_url_response.get("signed_url") or
+                        signed_url_response.get("url")
+                    )
+                elif isinstance(signed_url_response, str):
+                    signed_url = signed_url_response
+                else:
+                    signed_url = None
+                    
+                if not signed_url:
+                    print(f"⚠️ No signed URL returned for {file_path}, response: {signed_url_response}")
+            except Exception as e:
+                print(f"Error generating signed URL for avatar template {file_path}: {e}")
+                import traceback
+                traceback.print_exc()
+                signed_url = None
+            
+            # Only add template if we have a valid URL
+            if signed_url:
+                templates.append({
+                    "id": file_name.split('.')[0],
+                    "name": file_name.replace('-', ' ').replace('.jpg', '').replace('.png', '').title(),
+                    "url": signed_url,
+                    "speaker": speaker
+                })
+            else:
+                print(f"⚠️ Skipping template {file_name} - no valid signed URL")
         
         # Filter templates based on subscription plan
         # Free: Only first 2 templates per speaker (2 for A, 2 for B)
@@ -917,5 +1223,10 @@ async def get_avatar_templates(speaker: str, authorization: Optional[str] = Head
         
         return {"templates": templates, "subscription_status": subscription_status}
     
+    except HTTPException:
+        raise
     except Exception as e:
+        print(f"❌ Error fetching avatar templates: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to fetch templates: {str(e)}")
