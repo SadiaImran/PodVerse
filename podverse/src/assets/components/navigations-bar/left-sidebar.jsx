@@ -53,11 +53,10 @@ const LeftSidebar = ({ open, setOpen }) => {
   { icon: Music2, label: "Audio Editor", navigateTo: "/audio-edit" },
   { icon: Clapperboard, label: "Video Editor", navigateTo: "/video-editor" },
   { icon: BookOpen, label: "My Library" , navigateTo: "/library" },
-  { icon: Users, label: 'Following', count: 28 , navigateTo: "/following"},
-  { icon: IoAnalyticsOutline, label: "Analytics" , navigateTo:"/analytics"},
-  { icon: TrendingUp, label: 'Trending' , navigateTo: "/trending"},
+  { icon: Search, label: "Search" , navigateTo: "/search" },
   { icon: MessageCircle, label: 'FAQ & Support', navigateTo: "/faq-chatbot" },
-  { icon: Settings, label: 'Settings', navigateTo: "/settings" },
+  { icon: Crown, label: 'Subscription', navigateTo: "/subscription" },
+
   ];
 
   const quickAccess = [
