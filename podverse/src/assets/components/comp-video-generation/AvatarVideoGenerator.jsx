@@ -74,6 +74,12 @@ function AvatarVideoGenerator() {
         sessionStorage.setItem('videoEditorSource', jobStatus.supabase_video_url);
         sessionStorage.setItem('originalVideoPath', jobStatus.video_storage_path || '');
         sessionStorage.setItem('videoJobId', jobStatus.job_id || '');
+        if (jobStatus.transcript_storage_path) {
+          sessionStorage.setItem('transcriptStoragePath', jobStatus.transcript_storage_path);
+        }
+        if (jobStatus.transcript_supabase_url) {
+          sessionStorage.setItem('transcriptSignedUrl', jobStatus.transcript_supabase_url);
+        }
       } catch (err) {
         console.warn('Unable to cache editor source:', err);
       }
@@ -83,7 +89,9 @@ function AvatarVideoGenerator() {
           videoPath: jobStatus.video_storage_path,
           videoName: jobStatus.video_storage_path ? jobStatus.video_storage_path.split('/').pop() : `podcast_${jobStatus.job_id}.mp4`,
           originalVideoPath: jobStatus.video_storage_path,
-          jobId: jobStatus.job_id
+          jobId: jobStatus.job_id,
+          transcriptStoragePath: jobStatus.transcript_storage_path,
+          transcriptSignedUrl: jobStatus.transcript_supabase_url
         } 
       });
     } else {
@@ -107,6 +115,8 @@ function AvatarVideoGenerator() {
     sessionStorage.removeItem('videoEditorSource');
     sessionStorage.removeItem('originalVideoPath');
     sessionStorage.removeItem('videoJobId');
+    sessionStorage.removeItem('transcriptStoragePath');
+    sessionStorage.removeItem('transcriptSignedUrl');
   };
 
   const handleProceedToEditing = () => {
@@ -241,6 +251,23 @@ function AvatarVideoGenerator() {
       }
     }
   }, [jobStatus?.supabase_video_url]);
+
+  useEffect(() => {
+    if (jobStatus?.transcript_storage_path) {
+      try {
+        sessionStorage.setItem('transcriptStoragePath', jobStatus.transcript_storage_path);
+      } catch (err) {
+        console.warn('Failed to cache transcript storage path:', err);
+      }
+    }
+    if (jobStatus?.transcript_supabase_url) {
+      try {
+        sessionStorage.setItem('transcriptSignedUrl', jobStatus.transcript_supabase_url);
+      } catch (err) {
+        console.warn('Failed to cache transcript URL:', err);
+      }
+    }
+  }, [jobStatus?.transcript_storage_path, jobStatus?.transcript_supabase_url]);
 
   const loadAvatars = async () => {
     setLoadingAvatars(true);

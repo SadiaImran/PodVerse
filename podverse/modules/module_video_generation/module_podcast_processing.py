@@ -28,7 +28,9 @@ from connection_supabase_client import get_service_role_client
 load_dotenv()
 aai.settings.api_key = os.environ.get("ASSEMBLYAI_API_KEY")
 VIDEO_STORAGE_BUCKET = os.getenv("SUPABASE_VIDEO_BUCKET", "videos")
+TRANSCRIPTS_BUCKET = os.getenv("SUPABASE_TRANSCRIPTS_BUCKET", "transcripts")
 SIGNED_URL_TTL = int(os.getenv("VIDEO_SIGNED_URL_TTL", 60 * 60 * 24 * 7))
+TRANSCRIPT_SIGNED_URL_TTL = int(os.getenv("TRANSCRIPT_SIGNED_URL_TTL", SIGNED_URL_TTL))
 
 router = APIRouter()
 
@@ -52,6 +54,8 @@ class ProcessingStatus(BaseModel):
     user_id: Optional[str] = None
     kb_id: Optional[str] = None
     podcast_title: Optional[str] = None
+    transcript_storage_path: Optional[str] = None
+    transcript_supabase_url: Optional[str] = None
 
 # In-memory job tracking
 processing_jobs: Dict[str, ProcessingStatus] = {}
@@ -126,7 +130,7 @@ def upload_video_to_supabase_storage(
         service_client.storage.from_(VIDEO_STORAGE_BUCKET).upload(
             storage_path,
             file_data,
-            {"content-type": "video/mp4", "upsert": True},
+            {"content-type": "video/mp4", "upsert": "true"},
         )
         print(f"✅ Uploaded video to Supabase: {storage_path}")
     except Exception as e:
@@ -167,7 +171,7 @@ def upload_video_to_supabase_storage(
             service_client.storage.from_("thumbnails").upload(
                 thumbnail_filename,
                 thumb_data,
-                {"content-type": "image/jpeg", "upsert": True},
+                {"content-type": "image/jpeg", "upsert": "true"},
             )
             print(f"✅ Uploaded thumbnail to Supabase: {thumbnail_filename}")
             
@@ -198,6 +202,65 @@ def upload_video_to_supabase_storage(
         traceback.print_exc()
 
     return storage_path, signed_url, thumbnail_signed_url
+
+
+def upload_transcript_to_supabase_storage(
+    utterances: List[Dict],
+    *,
+    user_id: Optional[str],
+    job_id: str,
+) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Upload transcript JSON to Supabase storage and return (path, signed_url).
+    """
+    if not utterances:
+        print("⚠️ No utterances provided, skipping transcript upload")
+        return None, None
+
+    if not TRANSCRIPTS_BUCKET:
+        print("⚠️ TRANSCRIPTS_BUCKET not configured, skipping transcript upload")
+        return None, None
+
+    try:
+        service_client = get_service_role_client()
+    except Exception as e:
+        print(f"⚠️ Unable to initialize Supabase service client for transcripts: {e}")
+        return None, None
+
+    user_slug = _slugify_component(user_id, "unknown")
+    file_name = f"{user_slug}_transcript_{job_id}.json"
+
+    try:
+        payload = json.dumps({"utterances": utterances}, ensure_ascii=False).encode("utf-8")
+        service_client.storage.from_(TRANSCRIPTS_BUCKET).upload(
+            file_name,
+            payload,
+            {"content-type": "application/json", "upsert": "true"},
+        )
+        print(f"✅ Uploaded transcript to Supabase: {file_name}")
+    except Exception as e:
+        print(f"⚠️ Failed to upload transcript to Supabase: {e}")
+        return None, None
+
+    signed_url = None
+    try:
+        signed_resp = service_client.storage.from_(TRANSCRIPTS_BUCKET).create_signed_url(
+            file_name,
+            TRANSCRIPT_SIGNED_URL_TTL,
+        )
+        if isinstance(signed_resp, dict):
+            signed_url = (
+                signed_resp.get("signedURL")
+                or signed_resp.get("signed_url")
+                or signed_resp.get("url")
+            )
+        elif isinstance(signed_resp, str):
+            signed_url = signed_resp
+        print(f"🔗 Signed URL created for transcript: {signed_url}")
+    except Exception as e:
+        print(f"⚠️ Failed to create signed URL for transcript: {e}")
+
+    return file_name, signed_url
 
 
 def generate_srt_from_utterances(utterances: List[Dict], output_path: str) -> str:
@@ -667,6 +730,8 @@ def process_podcast_background(
 ):
     """Background task to process podcast audio into avatar videos."""
     temp_files = [audio_file_path]
+    transcript_storage_path = None
+    transcript_signed_url = None
     
     try:
         # Step 1: Diarization
@@ -679,6 +744,18 @@ def process_podcast_background(
         print(f"  Total utterances: {len(utterances)}")
         print(f"  Speaker A segments: {len([u for u in utterances if u['speaker'] == 'A'])}")
         print(f"  Speaker B segments: {len([u for u in utterances if u['speaker'] == 'B'])}")
+
+        transcript_storage_path, transcript_signed_url = upload_transcript_to_supabase_storage(
+            utterances,
+            user_id=user_id,
+            job_id=job_id,
+        )
+        if transcript_signed_url:
+            update_job_status(
+                job_id,
+                transcript_supabase_url=transcript_signed_url,
+                transcript_storage_path=transcript_storage_path,
+            )
         
         # Step 2: Upload speaker audio files to HeyGen
         update_job_status(job_id, progress=35, message="Uploading speaker audio files...")
@@ -930,7 +1007,9 @@ def process_podcast_background(
                     transcript=utterances,
                     supabase_video_url=signed_url,
                     video_storage_path=storage_path,
-                    thumbnail_url=thumbnail_signed_url  # Add thumbnail URL to job status
+                    thumbnail_url=thumbnail_signed_url,
+                    transcript_supabase_url=transcript_signed_url,
+                    transcript_storage_path=transcript_storage_path,
                 )
             except Exception as e:
                 print(f"⚠️ Failed to merge videos: {e}")
@@ -944,7 +1023,9 @@ def process_podcast_background(
                     speaker_a_video=video_url_a,
                     speaker_b_video=video_url_b,
                     transcript=utterances,
-                    error=f"Merge failed: {str(e)}"
+                    error=f"Merge failed: {str(e)}",
+                    transcript_supabase_url=transcript_signed_url,
+                    transcript_storage_path=transcript_storage_path,
                 )
         
     except Exception as e:
@@ -955,7 +1036,9 @@ def process_podcast_background(
             job_id,
             status="failed",
             message="Processing failed",
-            error=str(e)
+            error=str(e),
+            transcript_supabase_url=transcript_signed_url,
+            transcript_storage_path=transcript_storage_path,
         )
     
     finally:

@@ -29,7 +29,9 @@ class PostCreate(BaseModel):
     thumbnail_url: str
     status: str  # "draft" or "published"
     tags: Optional[List[str]] = []  # List of tag names
+    transcript_url: Optional[str] = None
 
+# Duplicate class retained for backward compatibility (TODO: consolidate)
 class PostCreate(BaseModel):
     title: str
     description: str
@@ -37,6 +39,7 @@ class PostCreate(BaseModel):
     thumbnail_url: str
     status: str  # "draft" or "published"
     tags: Optional[List[str]] = []  # List of tag names
+    transcript_url: Optional[str] = None
 
 def generate_thumbnail(video_path: str, output_path: str, timestamp: str = "00:00:03") -> bool:
     """
@@ -366,6 +369,7 @@ async def create_post(
             "video_url": post_data.video_url,
             "thumbnail_url": thumbnail_url,
             "status": post_data.status,
+            "transcript_url": post_data.transcript_url,
             "likes": 0,
             "views": 0
         }).execute()

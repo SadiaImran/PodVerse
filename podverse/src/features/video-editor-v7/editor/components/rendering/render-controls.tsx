@@ -228,6 +228,22 @@ const RenderControls: React.FC<RenderControlsProps> = ({
   // Check if rendering is disabled via environment variable
   const isRenderDisabled = (import.meta as any).env?.VITE_DISABLE_RENDER === "true";
 
+  const getStoredTranscriptReference = React.useCallback(() => {
+    try {
+      const storagePath = sessionStorage.getItem("transcriptStoragePath");
+      if (storagePath && storagePath.trim().length > 0) {
+        return storagePath.trim();
+      }
+      const signedUrl = sessionStorage.getItem("transcriptSignedUrl");
+      if (signedUrl && signedUrl.trim().length > 0) {
+        return signedUrl.trim();
+      }
+    } catch (error) {
+      console.warn("Failed to read transcript reference:", error);
+    }
+    return null;
+  }, []);
+
   // Load post data from sessionStorage when modal opens
   React.useEffect(() => {
     if (showPostModal) {
@@ -287,6 +303,8 @@ const RenderControls: React.FC<RenderControlsProps> = ({
         throw new Error('No authentication token found');
       }
       
+      const transcriptReference = getStoredTranscriptReference();
+
       // Call post creation API
       const response = await axios.post(
         'http://localhost:8000/posts/create',
@@ -296,7 +314,8 @@ const RenderControls: React.FC<RenderControlsProps> = ({
           video_url: uploadedVideoUrl,
           thumbnail_url: thumbnailUrl,
           status,
-          tags: postTags
+          tags: postTags,
+          transcript_url: transcriptReference
         },
         {
           headers: {
@@ -322,7 +341,7 @@ const RenderControls: React.FC<RenderControlsProps> = ({
     } finally {
       setIsCreatingPost(false);
     }
-  }, [uploadedVideoUrl, uploadedThumbnailUrl, postTitle, postDescription, postTags]);
+  }, [uploadedVideoUrl, uploadedThumbnailUrl, postTitle, postDescription, postTags, getStoredTranscriptReference]);
 
   // Handle tag management
   const addTag = React.useCallback(() => {
