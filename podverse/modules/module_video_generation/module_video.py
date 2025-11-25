@@ -5,7 +5,7 @@ import subprocess
 import uuid
 from fastapi import APIRouter, HTTPException, Depends, Header, File, UploadFile, Form
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import os
 from typing import Optional, List
 from datetime import datetime
@@ -854,3 +854,295 @@ def test_endpoint():
             "list_videos": "/list (list user's videos from Supabase)"
         }
     }
+
+# --- Podcast Feedback Management ---
+
+class FeedbackCreate(BaseModel):
+    conversation_skills_rating: Optional[int] = Field(None, ge=1, le=5)
+    voice_clarity_rating: Optional[int] = Field(None, ge=1, le=5)
+    ai_accuracy_rating: Optional[int] = Field(None, ge=1, le=5)
+    overall_rating: Optional[int] = Field(None, ge=1, le=5)
+    conversation_skills_feedback: Optional[str] = None
+    voice_clarity_feedback: Optional[str] = None
+    ai_accuracy_feedback: Optional[str] = None
+    general_feedback: Optional[str] = None
+
+
+class FeedbackUpdate(BaseModel):
+    conversation_skills_rating: Optional[int] = Field(None, ge=1, le=5)
+    voice_clarity_rating: Optional[int] = Field(None, ge=1, le=5)
+    ai_accuracy_rating: Optional[int] = Field(None, ge=1, le=5)
+    overall_rating: Optional[int] = Field(None, ge=1, le=5)
+    conversation_skills_feedback: Optional[str] = None
+    voice_clarity_feedback: Optional[str] = None
+    ai_accuracy_feedback: Optional[str] = None
+    general_feedback: Optional[str] = None
+
+
+@router.post("/feedback/")
+async def create_feedback(
+    feedback: FeedbackCreate,
+    auth_data: dict = Depends(get_authenticated_supabase_client)
+):
+    """
+    Create feedback for a podcast session
+    """
+    user_id = auth_data["user_id"]
+    supabase = auth_data["client"]
+
+    try:
+        # Prepare feedback data
+        feedback_data = {
+            "user_id": user_id,
+            "conversation_skills_rating": feedback.conversation_skills_rating,
+            "voice_clarity_rating": feedback.voice_clarity_rating,
+            "ai_accuracy_rating": feedback.ai_accuracy_rating,
+            "overall_rating": feedback.overall_rating,
+            "conversation_skills_feedback": feedback.conversation_skills_feedback,
+            "voice_clarity_feedback": feedback.voice_clarity_feedback,
+            "ai_accuracy_feedback": feedback.ai_accuracy_feedback,
+            "general_feedback": feedback.general_feedback,
+        }
+
+        # Insert feedback into database
+        response = supabase.table("podcast_feedback").insert(feedback_data).execute()
+
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Failed to create feedback")
+
+        return JSONResponse(
+            content={
+                "success": True,
+                "message": "Feedback submitted successfully",
+                "data": response.data[0]
+            },
+            status_code=201
+        )
+
+    except Exception as e:
+        print(f"Error creating feedback: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/feedback/")
+async def get_all_user_feedback(
+    auth_data: dict = Depends(get_authenticated_supabase_client),
+    limit: int = 50,
+    offset: int = 0
+):
+    """
+    Get all feedback submitted by the current user
+    """
+    user_id = auth_data["user_id"]
+    supabase = auth_data["client"]
+
+    try:
+        response = supabase.table("podcast_feedback")\
+            .select("*")\
+            .eq("user_id", user_id)\
+            .order("created_at", desc=True)\
+            .range(offset, offset + limit - 1)\
+            .execute()
+
+        return JSONResponse(
+            content={
+                "success": True,
+                "data": response.data,
+                "count": len(response.data)
+            }
+        )
+
+    except Exception as e:
+        print(f"Error fetching user feedback: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/feedback/{feedback_id}")
+async def get_feedback_by_id(
+    feedback_id: str,
+    auth_data: dict = Depends(get_authenticated_supabase_client)
+):
+    """
+    Get a specific feedback by ID
+    """
+    user_id = auth_data["user_id"]
+    supabase = auth_data["client"]
+
+    try:
+        response = supabase.table("podcast_feedback")\
+            .select("*")\
+            .eq("id", feedback_id)\
+            .eq("user_id", user_id)\
+            .execute()
+
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Feedback not found")
+
+        return JSONResponse(
+            content={
+                "success": True,
+                "data": response.data[0]
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error fetching feedback: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/feedback/{feedback_id}")
+async def update_feedback(
+    feedback_id: str,
+    feedback_update: FeedbackUpdate,
+    auth_data: dict = Depends(get_authenticated_supabase_client)
+):
+    """
+    Update existing feedback
+    """
+    user_id = auth_data["user_id"]
+    supabase = auth_data["client"]
+
+    try:
+        # Prepare update data (only include fields that are provided)
+        update_data = {}
+        if feedback_update.conversation_skills_rating is not None:
+            update_data["conversation_skills_rating"] = feedback_update.conversation_skills_rating
+        if feedback_update.voice_clarity_rating is not None:
+            update_data["voice_clarity_rating"] = feedback_update.voice_clarity_rating
+        if feedback_update.ai_accuracy_rating is not None:
+            update_data["ai_accuracy_rating"] = feedback_update.ai_accuracy_rating
+        if feedback_update.overall_rating is not None:
+            update_data["overall_rating"] = feedback_update.overall_rating
+        if feedback_update.conversation_skills_feedback is not None:
+            update_data["conversation_skills_feedback"] = feedback_update.conversation_skills_feedback
+        if feedback_update.voice_clarity_feedback is not None:
+            update_data["voice_clarity_feedback"] = feedback_update.voice_clarity_feedback
+        if feedback_update.ai_accuracy_feedback is not None:
+            update_data["ai_accuracy_feedback"] = feedback_update.ai_accuracy_feedback
+        if feedback_update.general_feedback is not None:
+            update_data["general_feedback"] = feedback_update.general_feedback
+
+        if not update_data:
+            raise HTTPException(status_code=400, detail="No fields to update")
+
+        # Update feedback
+        response = supabase.table("podcast_feedback")\
+            .update(update_data)\
+            .eq("id", feedback_id)\
+            .eq("user_id", user_id)\
+            .execute()
+
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Feedback not found or unauthorized")
+
+        return JSONResponse(
+            content={
+                "success": True,
+                "message": "Feedback updated successfully",
+                "data": response.data[0]
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error updating feedback: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/feedback/{feedback_id}")
+async def delete_feedback(
+    feedback_id: str,
+    auth_data: dict = Depends(get_authenticated_supabase_client)
+):
+    """
+    Delete feedback
+    """
+    user_id = auth_data["user_id"]
+    supabase = auth_data["client"]
+
+    try:
+        response = supabase.table("podcast_feedback")\
+            .delete()\
+            .eq("id", feedback_id)\
+            .eq("user_id", user_id)\
+            .execute()
+
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Feedback not found or unauthorized")
+
+        return JSONResponse(
+            content={
+                "success": True,
+                "message": "Feedback deleted successfully"
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error deleting feedback: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/feedback/stats/")
+async def get_feedback_stats(
+    auth_data: dict = Depends(get_authenticated_supabase_client)
+):
+    """
+    Get aggregated statistics for user's feedback
+    """
+    user_id = auth_data["user_id"]
+    supabase = auth_data["client"]
+
+    try:
+        # Fetch all user feedback
+        response = supabase.table("podcast_feedback")\
+            .select("*")\
+            .eq("user_id", user_id)\
+            .execute()
+
+        if not response.data:
+            return JSONResponse(
+                content={
+                    "success": True,
+                    "data": {
+                        "total_feedbacks": 0,
+                        "average_ratings": {},
+                        "latest_feedback": None
+                    }
+                }
+            )
+
+        feedbacks = response.data
+        
+        # Calculate averages
+        def calculate_avg(field):
+            values = [f[field] for f in feedbacks if f.get(field) is not None]
+            return round(sum(values) / len(values), 2) if values else None
+
+        stats = {
+            "total_feedbacks": len(feedbacks),
+            "average_ratings": {
+                "conversation_skills": calculate_avg("conversation_skills_rating"),
+                "voice_clarity": calculate_avg("voice_clarity_rating"),
+                "ai_accuracy": calculate_avg("ai_accuracy_rating"),
+                "overall": calculate_avg("overall_rating")
+            },
+            "latest_feedback": feedbacks[0] if feedbacks else None
+        }
+
+        return JSONResponse(
+            content={
+                "success": True,
+                "data": stats
+            }
+        )
+
+    except Exception as e:
+        print(f"Error fetching feedback stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

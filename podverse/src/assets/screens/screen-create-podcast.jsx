@@ -30,6 +30,22 @@ const CreatePodcastPage = () => {
 
   // Load user profile from Supabase
   useEffect(() => {
+    const loadProfile = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("full_name")
+          .eq("id", user.id)
+          .single();
+
+        setFullName(profile?.full_name || "User");
+      }
+    };
+    loadProfile();
+  }, []);
+
+  useEffect(() => {
     const checkAuthAndLoadProfile = async () => {
       const { data: { user } } = await supabase.auth.getUser();
 
@@ -39,14 +55,23 @@ const CreatePodcastPage = () => {
         // 1. FETCH PROFILE and ONBOARDING STATUS
         const { data: profile } = await supabase
           .from("profiles")
-          .select("full_name, onboarding_complete")
+          .select("full_name, onboarding_complete, role") // ⭐ Select role field too
           .eq("id", userId)
           .maybeSingle();
 
         console.log("Profile check after login:", profile);
 
+        // 2. REDIRECT LOGIC
+        // Check if user is admin first
+        if (profile?.role === 'admin') {
+          console.log("Admin user detected, redirecting to admin dashboard...");
+          return navigate("/admin/dashboard", { replace: true });
+        }
+
+        // CASE 1 & 2: No profile or Onboarding is incomplete
         if (!profile || profile.onboarding_complete === false) {
           console.log("Redirecting to onboarding...");
+          // Use { replace: true } to prevent going back to the sign-in page
           return navigate("/onboarding", { replace: true });
         }
 
@@ -317,7 +342,7 @@ const CreatePodcastPage = () => {
               </h2>
               <p className="text-base" style={{ color: '#6A6A6A' }}>Manage your content library</p>
             </div>
-            
+
             {/* New Project Button */}
             <button 
               onClick={() => setShowCreateModal(true)}

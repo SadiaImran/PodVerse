@@ -12,7 +12,7 @@ export const AuthProvider = ({ children }) => {
       try {
         setLoading(true);
         const { data: { session }, error } = await supabase.auth.getSession();
-  
+
         if (session?.user) {
           await loadProfile(session.user);
         } else {
@@ -24,17 +24,17 @@ export const AuthProvider = ({ children }) => {
         setLoading(false);
       }
     };
-  
+
     getInitialSession();
   }, []);
-  
+
 
   // ✅ Fetch user profile safely
   const loadProfile = async (authUser) => {
     try {
       const { data: profile, error } = await supabase
         .from("profiles")
-        .select("full_name, profile_url, onboarding_complete")
+        .select("full_name, profile_url, onboarding_complete, role")
         .eq("id", authUser.id)
         .single();
 
@@ -49,6 +49,7 @@ export const AuthProvider = ({ children }) => {
         full_name: profile?.full_name || "",
         profile_url: profile?.profile_url || null,
         onboarding_complete: profile?.onboarding_complete || false,
+        role: profile?.role || null,
       });
     } catch (err) {
       console.error("Unexpected error loading profile:", err);
@@ -58,6 +59,7 @@ export const AuthProvider = ({ children }) => {
         full_name: "",
         profile_url: null,
         onboarding_complete: false,
+        role: null,
       });
     }
   };
