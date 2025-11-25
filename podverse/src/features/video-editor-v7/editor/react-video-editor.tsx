@@ -168,6 +168,11 @@ export default function ReactVideoEditor({
 
   // Track if video has been auto-loaded
   const videoAutoLoadedRef = useRef(false);
+  const overlaysRef = useRef<Overlay[]>(overlays);
+
+  useEffect(() => {
+    overlaysRef.current = overlays;
+  }, [overlays]);
 
   // Auto-load initial video URL to timeline
   useEffect(() => {
@@ -321,7 +326,7 @@ export default function ReactVideoEditor({
         if (duration && !isNaN(duration) && duration > 0 && isFinite(duration)) {
           console.log('✅ Updating video duration to actual:', duration, 'seconds');
           // Find and update the overlay we just added
-          const currentOverlays = overlays;
+          const currentOverlays = overlaysRef.current;
           const videoOverlay = currentOverlays.find(ov => ov.src === initialVideoUrl);
           if (videoOverlay) {
             const actualDurationFrames = Math.floor(duration * 30);

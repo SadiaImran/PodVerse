@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Heart, MessageCircle, Play, Pause, Volume2, VolumeX, Eye, Tag, MoreVertical, Bookmark, Send } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import ProfileMarry from '../../images/icon-profile-marry.png';
+import { supabase } from '../../supabaseClient';
 
 /**
  * Premium PostCard Component
@@ -16,6 +17,8 @@ import ProfileMarry from '../../images/icon-profile-marry.png';
  * - Tag support
  * - Responsive design
  */
+
+const API_BASE_URL = 'http://localhost:8000';
 
 const PostCard = ({ 
   post, 
@@ -37,6 +40,10 @@ const PostCard = ({
   const [isHovered, setIsHovered] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [loadingComment, setLoadingComment] = useState(false);
+  const [summaryData, setSummaryData] = useState(null);
+  const [summaryVisible, setSummaryVisible] = useState(false);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState(null);
   const videoRef = useRef(null);
   const commentInputRef = useRef(null);
   const viewTracked = useRef(false);
@@ -57,6 +64,10 @@ const PostCard = ({
     setComments(post.comments || []);
     setCommentsCount(post.comments_count || 0);
     setBookmarked(post.user_bookmarked || false);
+    setSummaryData(null);
+    setSummaryVisible(false);
+    setSummaryError(null);
+    setSummaryLoading(false);
   }, [post]);
 
   const handleVideoPlay = () => {
@@ -120,6 +131,58 @@ const PostCard = ({
     }
   };
 
+  const handleToggleSummary = async (e) => {
+    e?.stopPropagation?.();
+
+    if (summaryVisible) {
+      setSummaryVisible(false);
+      return;
+    }
+
+    if (summaryData) {
+      setSummaryVisible(true);
+      return;
+    }
+
+    if (!post.transcript_url) {
+      setSummaryError('Transcript is not available for this post yet.');
+      setSummaryVisible(true);
+      return;
+    }
+
+    setSummaryLoading(true);
+    setSummaryError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setSummaryError('Please sign in to view the summary.');
+        setSummaryLoading(false);
+        return;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/posts/${post.id}/summary`, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        setSummaryData(result);
+        setSummaryVisible(true);
+      } else {
+        setSummaryError(result.detail || result.message || 'Failed to generate summary.');
+        setSummaryVisible(true);
+      }
+    } catch (error) {
+      console.error('Error fetching summary:', error);
+      setSummaryError(error.message || 'Failed to generate summary.');
+      setSummaryVisible(true);
+    } finally {
+      setSummaryLoading(false);
+    }
+  };
+
   const formatTime = (timestamp) => {
     if (!timestamp) return 'Just now';
     const now = new Date();
@@ -142,6 +205,8 @@ const PostCard = ({
 
   const isCompact = variant === 'compact';
   const isFeatured = variant === 'featured';
+  const canSummarize = Boolean(post.transcript_url);
+  const shouldRenderSummarySection = canSummarize || summaryData || summaryError || summaryLoading;
 
   return (
     <article 
@@ -275,6 +340,59 @@ const PostCard = ({
         </div>
       )}
 
+      {shouldRenderSummarySection && (
+        <>
+          <div className="px-6 pb-4 flex items-center justify-end">
+            <button
+              onClick={handleToggleSummary}
+              disabled={summaryLoading}
+              title={!canSummarize ? 'Transcript is not available yet' : undefined}
+              className="px-4 py-2 rounded-xl text-sm font-semibold transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+              style={{
+                backgroundColor: summaryVisible ? '#F3F4FF' : '#6057C7',
+                color: summaryVisible ? '#2F2867' : '#F9F5EB'
+              }}
+              onMouseEnter={(e) => {
+                if (!summaryVisible && !summaryLoading && canSummarize) {
+                  e.target.style.backgroundColor = '#2F2867';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!summaryVisible && !summaryLoading && canSummarize) {
+                  e.target.style.backgroundColor = '#6057C7';
+                }
+              }}
+            >
+              {summaryLoading ? 'Generating summary...' : summaryVisible ? 'Hide Summary' : 'View Summary'}
+            </button>
+          </div>
+
+          {summaryVisible && (
+            <div className="px-6 pb-4">
+              <div className="rounded-2xl border border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/40 p-4 space-y-3">
+                {summaryError && (
+                  <p className="text-sm text-red-500">{summaryError}</p>
+                )}
+                {!summaryError && (
+                  <>
+                    <p className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed">
+                      {summaryData?.summary || 'Summary unavailable.'}
+                    </p>
+                    {summaryData?.key_points && summaryData.key_points.length > 0 && (
+                      <ul className="list-disc pl-5 text-sm text-gray-600 dark:text-gray-300 space-y-1">
+                        {summaryData.key_points.map((point, idx) => (
+                          <li key={idx}>{point}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
       {/* Video Section */}
       <div 
         className="relative bg-black group/video cursor-pointer overflow-hidden"
@@ -301,7 +419,12 @@ const PostCard = ({
         <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover/video:opacity-100 transition-opacity duration-300" />
 
         {/* Play/Pause Button */}
-        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/video:opacity-100 transition-opacity duration-300">
+        <div
+          className={`absolute inset-0 flex items-center justify-center transition-opacity duration-300 ${
+            isPlaying ? 'opacity-0 pointer-events-none' : 'opacity-0 group-hover/video:opacity-100 pointer-events-auto'
+          }`}
+          style={{ visibility: isPlaying ? 'hidden' : 'visible' }}
+        >
           <button
             onClick={(e) => {
               e.stopPropagation();

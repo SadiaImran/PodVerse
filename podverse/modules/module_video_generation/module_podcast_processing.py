@@ -882,7 +882,8 @@ def process_podcast_background(
                             speaker_a_video=video_url_a
                         )
                     elif status_a["status"] == "failed":
-                        raise Exception("Speaker A video generation failed")
+                        reason = status_a.get("error") or "Unknown error"
+                        raise Exception(f"Speaker A video generation failed: {reason}")
                     elif status_a["status"] == "processing":
                         print(f"⏳ Speaker A still processing... ({minutes}m {seconds}s)")
                 except Exception as e:
@@ -902,7 +903,8 @@ def process_podcast_background(
                             speaker_b_video=video_url_b
                         )
                     elif status_b["status"] == "failed":
-                        raise Exception("Speaker B video generation failed")
+                        reason = status_b.get("error") or "Unknown error"
+                        raise Exception(f"Speaker B video generation failed: {reason}")
                     elif status_b["status"] == "processing":
                         print(f"⏳ Speaker B still processing... ({minutes}m {seconds}s)")
                 except Exception as e:
