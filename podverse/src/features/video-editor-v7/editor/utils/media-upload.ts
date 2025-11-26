@@ -9,6 +9,10 @@
 
 import { getUserId } from "./user-id";
 import { UserMediaItem, addMediaItem } from "./indexdb";
+import { getSupabaseAuthorizedtoken } from "../../../../assets/supabaseClient";
+
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
 /**
  * Uploads a file to the server and stores the reference in IndexedDB
@@ -39,9 +43,15 @@ export const uploadMediaFile = async (file: File): Promise<UserMediaItem> => {
     formData.append("file", file);
     formData.append("userId", userId);
 
-    // Upload file to server
-    const response = await fetch("/api/latest/local-media/upload", {
+    const token = await getSupabaseAuthorizedtoken();
+
+    const response = await fetch(`${API_BASE_URL}/visuals/upload`, {
       method: "POST",
+      headers: token
+        ? {
+            Authorization: `Bearer ${token}`,
+          }
+        : undefined,
       body: formData,
     });
 
@@ -50,7 +60,8 @@ export const uploadMediaFile = async (file: File): Promise<UserMediaItem> => {
       throw new Error(errorData.error || "Failed to upload file");
     }
 
-    const { id, serverPath, size } = await response.json();
+    const { id, public_url, storage_path, size } = await response.json();
+    const serverPath = public_url;
 
     // Create media item for IndexedDB
     const mediaItem: UserMediaItem = {
@@ -59,7 +70,8 @@ export const uploadMediaFile = async (file: File): Promise<UserMediaItem> => {
       name: file.name,
       type: fileType,
       serverPath,
-      size,
+      storagePath: storage_path,
+      size: typeof size === "number" ? size : file.size,
       lastModified: file.lastModified,
       thumbnail: thumbnail || "",
       duration,
@@ -181,20 +193,25 @@ export const getMediaDuration = async (
  */
 export const deleteMediaFile = async (
   userId: string,
-  filePath: string
+  storagePath?: string
 ): Promise<boolean> => {
+  if (!storagePath) {
+    return true;
+  }
   try {
-    const response = await fetch("/api/media/delete", {
+    const token = await getSupabaseAuthorizedtoken();
+    const response = await fetch(`${API_BASE_URL}/visuals/cleanup`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({ userId, filePath }),
+      body: JSON.stringify({ paths: [storagePath] }),
     });
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.error || "Failed to delete file");
+      throw new Error(errorData.detail || "Failed to delete visual");
     }
 
     return true;

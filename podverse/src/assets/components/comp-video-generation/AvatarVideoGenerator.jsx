@@ -1031,22 +1031,55 @@ function AvatarVideoGenerator() {
             <Users className="w-4 h-4" />
             Select Avatar
           </label>
-          <select
-            value={avatar?.avatar_id || ""}
-            onChange={(e) => {
-              const selectedAvatar = avatars.find(a => a.avatar_id === e.target.value);
-              setAvatar(selectedAvatar);
-            }}
-            className="w-full px-5 py-4 bg-white/10 border-2 border-purple-300/50 rounded-2xl text-white font-medium focus:outline-none focus:ring-4 focus:ring-purple-400/50 focus:border-purple-400 transition-all duration-300 backdrop-blur-sm hover:bg-white/15"
-            disabled={loadingAvatars}
-          >
-            <option value="">Select avatar...</option>
-            {avatars.map(a => (
-              <option key={a.avatar_id} value={a.avatar_id} className="bg-gray-800">
-                {a.avatar_name} {a.gender ? `(${a.gender})` : ''}
-              </option>
-            ))}
-          </select>
+          {loadingAvatars ? (
+            <div className="flex items-center justify-center py-8 bg-white/5 rounded-2xl">
+              <Loader2 className="w-8 h-8 animate-spin text-purple-400" />
+            </div>
+          ) : (
+            <div className="grid md:grid-cols-3 gap-4 max-h-80 overflow-y-auto pr-1">
+              {avatars.map((a) => {
+                const isSelected = avatar?.avatar_id === a.avatar_id;
+                return (
+                  <button
+                    key={a.avatar_id}
+                    onClick={() => setAvatar(a)}
+                    className={`relative rounded-2xl overflow-hidden border-2 transition-all duration-300 text-left ${
+                      isSelected
+                        ? 'border-purple-400 ring-4 ring-purple-300/40 shadow-xl shadow-purple-500/40'
+                        : 'border-white/15 hover:border-purple-200/40'
+                    }`}
+                  >
+                    <div className="w-full h-32 bg-black/20">
+                      {a.preview_image_url ? (
+                        <img
+                          src={a.preview_image_url}
+                          alt={a.avatar_name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-gray-300 text-sm">
+                          No preview
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-3 bg-white/10 backdrop-blur-sm">
+                      <p className="text-white font-semibold">{a.avatar_name}</p>
+                      <p className="text-purple-200 text-xs">
+                        {a.gender || 'Unknown gender'}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {avatar && (
+            <div className="mt-3 text-purple-200 text-sm bg-purple-500/10 rounded-xl p-3 border border-purple-400/20">
+              <p>
+                Selected: <span className="font-semibold text-white">{avatar.avatar_name}</span>
+              </p>
+            </div>
+          )}
         </div>
       )}
 

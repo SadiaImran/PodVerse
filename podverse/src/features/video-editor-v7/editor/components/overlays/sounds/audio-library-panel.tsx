@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Play, Pause, Upload, Search, ArrowLeft, Music, Volume2, Radio, Headphones, ChevronRight } from "lucide-react";
+import { Play, Pause, Upload, Search, ArrowLeft, Music, Volume2, Radio, Headphones, ChevronRight, Loader2 } from "lucide-react";
 import { getSupabaseAuthorizedtoken } from "@/assets/supabaseClient";
 import { useEditorContext } from "../../../contexts/editor-context";
 import { useTimelinePositioning } from "../../../hooks/use-timeline-positioning";
 import { useTimeline } from "../../../contexts/timeline-context";
 import { OverlayType, SoundOverlay } from "../../../types";
+import { useLocalMedia } from "../../../contexts/local-media-context";
+import { toast } from "@/hooks/use-toast";
 
 const API_BASE_URL = "http://localhost:8000";
 
@@ -38,6 +40,8 @@ const AudioLibraryPanel: React.FC = () => {
   const { addOverlay, overlays, durationInFrames } = useEditorContext();
   const { findNextAvailablePosition } = useTimelinePositioning();
   const { visibleRows } = useTimeline();
+  const { addMediaFile } = useLocalMedia();
+  const [isUploadingLocalAudio, setIsUploadingLocalAudio] = useState(false);
 
   // Fetch stock audio data
   useEffect(() => {
@@ -301,47 +305,58 @@ const AudioLibraryPanel: React.FC = () => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    const file = files[0];
-    const audioUrl = URL.createObjectURL(file);
+    try {
+      setIsUploadingLocalAudio(true);
+      const mediaFile = await addMediaFile(files[0]);
+      if (!mediaFile) {
+        throw new Error("Failed to upload audio");
+      }
 
-    // Calculate duration
-    const audio = new Audio(audioUrl);
-    await new Promise((resolve, reject) => {
-      audio.onloadedmetadata = () => resolve(null);
-      audio.onerror = reject;
-    });
+      const { from, row } = findNextAvailablePosition(
+        overlays,
+        visibleRows,
+        durationInFrames
+      );
 
-    const duration = audio.duration;
-    const { from, row } = findNextAvailablePosition(
-      overlays,
-      visibleRows,
-      durationInFrames
-    );
+      const durationSeconds =
+        typeof mediaFile.duration === "number" && mediaFile.duration > 0
+          ? mediaFile.duration
+          : 0;
 
-    const newSoundOverlay: SoundOverlay = {
-      id: Date.now().toString(),
-      type: OverlayType.SOUND,
-      content: file.name,
-      src: audioUrl,
-      from,
-      row,
-      left: 0,
-      top: 0,
-      width: 1920,
-      height: 100,
-      rotation: 0,
-      isDragging: false,
-      durationInFrames: Math.floor(duration * 30),
-      styles: {
-        opacity: 1,
-      },
-    };
+      const newSoundOverlay: SoundOverlay = {
+        id: Date.now().toString(),
+        type: OverlayType.SOUND,
+        content: mediaFile.name,
+        src: mediaFile.path,
+        from,
+        row,
+        left: 0,
+        top: 0,
+        width: 1920,
+        height: 100,
+        rotation: 0,
+        isDragging: false,
+        durationInFrames:
+          durationSeconds > 0 ? Math.floor(durationSeconds * 30) : 200,
+        styles: {
+          opacity: 1,
+        },
+        sourceStoragePath: mediaFile.storagePath,
+      };
 
-    addOverlay(newSoundOverlay);
-
-    // Reset file input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+      addOverlay(newSoundOverlay);
+    } catch (error) {
+      console.error("Error uploading local audio:", error);
+      toast({
+        title: "Upload failed",
+        description: "Could not upload the selected audio file. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+      setIsUploadingLocalAudio(false);
     }
   };
 
@@ -588,10 +603,15 @@ const AudioLibraryPanel: React.FC = () => {
         {/* Upload Button - Enhanced gradient */}
         <button
           onClick={() => fileInputRef.current?.click()}
-          className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 via-purple-500 to-purple-400 hover:from-purple-500 hover:via-purple-400 hover:to-purple-300 text-white px-3 py-2 rounded-lg transition-all text-sm font-medium shadow-md hover:shadow-lg"
+          disabled={isUploadingLocalAudio}
+          className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 via-purple-500 to-purple-400 hover:from-purple-500 hover:via-purple-400 hover:to-purple-300 text-white px-3 py-2 rounded-lg transition-all text-sm font-medium shadow-md hover:shadow-lg disabled:opacity-60"
         >
-          <Upload size={16} />
-          Upload Audio
+          {isUploadingLocalAudio ? (
+            <Loader2 size={16} className="animate-spin" />
+          ) : (
+            <Upload size={16} />
+          )}
+          {isUploadingLocalAudio ? "Uploading..." : "Upload Audio"}
         </button>
         
         <input

@@ -23,6 +23,7 @@ type BaseOverlay = {
   isDragging: boolean;
   rotation: number;
   type: OverlayType;
+  sourceStoragePath?: string;
 };
 
 // Base style properties
@@ -410,6 +411,7 @@ export interface LocalMediaFile {
   name: string;
   type: "video" | "image" | "audio";
   path: string;
+  storagePath?: string;
   size: number;
   lastModified: number;
   thumbnail?: string;

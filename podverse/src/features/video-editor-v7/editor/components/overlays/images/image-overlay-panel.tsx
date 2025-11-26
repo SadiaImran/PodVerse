@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Search, Upload } from "lucide-react";
+import { Search, Upload, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
@@ -10,6 +10,8 @@ import { useTimeline } from "../../../contexts/timeline-context";
 import { ImageOverlay, Overlay, OverlayType } from "../../../types";
 import { ImageDetails } from "./image-details";
 import { usePexelsImages } from "../../../hooks/use-pexels-images";
+import { useLocalMedia } from "../../../contexts/local-media-context";
+import { toast } from "@/hooks/use-toast";
 
 const POPULAR_IMAGE_CATEGORIES = ["Nature", "Technology", "Business", "People", "Abstract"];
 
@@ -52,6 +54,8 @@ export const ImageOverlayPanel: React.FC = () => {
   const { getAspectRatioDimensions } = useAspectRatio();
   const { visibleRows } = useTimeline();
   const [localOverlay, setLocalOverlay] = useState<Overlay | null>(null);
+  const { addMediaFile } = useLocalMedia();
+  const [isUploadingLocalImage, setIsUploadingLocalImage] = useState(false);
 
   useEffect(() => {
     if (selectedOverlayId === null) {
@@ -140,44 +144,57 @@ export const ImageOverlayPanel: React.FC = () => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    const file = files[0];
-    const imageUrl = URL.createObjectURL(file);
+    try {
+      setIsUploadingLocalImage(true);
+      const mediaFile = await addMediaFile(files[0]);
+      if (!mediaFile) {
+        throw new Error("Failed to upload image");
+      }
 
-    const { width, height } = getAspectRatioDimensions();
-    const { from, row } = findNextAvailablePosition(
-      overlays,
-      visibleRows,
-      durationInFrames
-    );
+      const { width, height } = getAspectRatioDimensions();
+      const { from, row } = findNextAvailablePosition(
+        overlays,
+        visibleRows,
+        durationInFrames
+      );
 
-    const newOverlay: Overlay = {
-      left: 0,
-      top: 0,
-      width,
-      height,
-      durationInFrames: 200,
-      from,
-      id: Date.now(),
-      rotation: 0,
-      row,
-      isDragging: false,
-      type: OverlayType.IMAGE,
-      content: file.name,
-      src: imageUrl,
-      styles: {
-        objectFit: "cover",
-        animation: {
-          enter: "fadeIn",
-          exit: "fadeOut",
+      const newOverlay: Overlay = {
+        left: 0,
+        top: 0,
+        width,
+        height,
+        durationInFrames: 200,
+        from,
+        id: Date.now(),
+        rotation: 0,
+        row,
+        isDragging: false,
+        type: OverlayType.IMAGE,
+        content: mediaFile.name,
+        src: mediaFile.path,
+        styles: {
+          objectFit: "cover",
+          animation: {
+            enter: "fadeIn",
+            exit: "fadeOut",
+          },
         },
-      },
-    };
+        sourceStoragePath: mediaFile.storagePath,
+      };
 
-    addOverlay(newOverlay);
-
-    // Reset file input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+      addOverlay(newOverlay);
+    } catch (error) {
+      console.error("Error uploading local image:", error);
+      toast({
+        title: "Upload failed",
+        description: "Could not upload the selected image. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+      setIsUploadingLocalImage(false);
     }
   };
 
@@ -213,10 +230,15 @@ export const ImageOverlayPanel: React.FC = () => {
             </form>
             <Button
               onClick={() => fileInputRef.current?.click()}
-              className="w-full bg-gradient-to-r from-purple-600 via-purple-500 to-purple-400 hover:from-purple-500 hover:via-purple-400 hover:to-purple-300 text-white shadow-md hover:shadow-lg h-8 px-3 text-sm mb-3"
+              disabled={isUploadingLocalImage}
+              className="w-full bg-gradient-to-r from-purple-600 via-purple-500 to-purple-400 hover:from-purple-500 hover:via-purple-400 hover:to-purple-300 text-white shadow-md hover:shadow-lg h-8 px-3 text-sm mb-3 disabled:opacity-60"
             >
-              <Upload className="h-3.5 w-3.5 mr-1.5" />
-              Upload Image
+              {isUploadingLocalImage ? (
+                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              ) : (
+                <Upload className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              {isUploadingLocalImage ? "Uploading..." : "Upload Image"}
             </Button>
             <input
               ref={fileInputRef}
