@@ -10,6 +10,10 @@ import os
 from typing import Optional, List
 from datetime import datetime
 from connection_supabase_client import get_authenticated_supabase_client, get_service_role_client
+from rembg import remove
+from PIL import Image
+import io
+import tempfile
 
 # Configuration
 HEYGEN_API_KEY = os.environ.get("HEYGEN_API_KEY")
@@ -305,6 +309,56 @@ async def upload_image(
         print(f"❌ Error during upload: {e}")
         raise HTTPException(status_code=500, detail=f"Error uploading image: {str(e)}")
 
+@router.post("/api/remove-background")
+async def remove_background_endpoint(
+    file: UploadFile = File(...),
+    authorization: str = Depends(verify_token)
+):
+    """Remove background from uploaded image."""
+    import uuid
+    
+    if not file.content_type.startswith('image/'):
+        raise HTTPException(status_code=400, detail="File must be an image")
+    
+    try:
+        # Read uploaded image
+        content = await file.read()
+        input_image = Image.open(io.BytesIO(content))
+        
+        print(f"🎨 Removing background from image...")
+        
+        # Remove background
+        output_image = remove(input_image)
+        
+        # Save to temporary file
+        temp_filename = f"{uuid.uuid4()}_no_bg.png"
+        temp_path = os.path.join(tempfile.gettempdir(), temp_filename)
+        output_image.save(temp_path, format='PNG')
+        
+        print(f"✅ Background removed: {temp_path}")
+        
+        # Return as response (you can also upload to storage here if needed)
+        with open(temp_path, 'rb') as f:
+            image_data = f.read()
+        
+        # Cleanup
+        os.remove(temp_path)
+        
+        # Return base64 encoded image
+        import base64
+        base64_image = base64.b64encode(image_data).decode('utf-8')
+        
+        return {
+            "success": True,
+            "image_data": f"data:image/png;base64,{base64_image}",
+            "message": "Background removed successfully"
+        }
+        
+    except Exception as e:
+        print(f"❌ Background removal failed: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to remove background: {str(e)}")
 
 @router.post("/api/create-photo-avatar")
 def create_photo_avatar(

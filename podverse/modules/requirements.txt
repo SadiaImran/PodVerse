@@ -56,3 +56,5 @@ livekit-plugins
 pyjwt
 bs4
 pandas
+rembg
+pillow

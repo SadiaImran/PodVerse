@@ -48,6 +48,9 @@ function AvatarVideoGenerator() {
   const [speakerATemplates, setSpeakerATemplates] = useState([]);
   const [speakerASelectedTemplate, setSpeakerASelectedTemplate] = useState(null);
   const [loadingTemplatesA, setLoadingTemplatesA] = useState(false);
+  const [speakerARemoveBg, setSpeakerARemoveBg] = useState(false);
+  const [speakerAProcessingBg, setSpeakerAProcessingBg] = useState(false);
+  const [speakerAOriginalImage, setSpeakerAOriginalImage] = useState(null); 
   
   // Speaker B configuration
   const [speakerBAvatar, setSpeakerBAvatar] = useState(null);
@@ -61,6 +64,9 @@ function AvatarVideoGenerator() {
   const [speakerBTemplates, setSpeakerBTemplates] = useState([]);
   const [speakerBSelectedTemplate, setSpeakerBSelectedTemplate] = useState(null);
   const [loadingTemplatesB, setLoadingTemplatesB] = useState(false);
+  const [speakerBRemoveBg, setSpeakerBRemoveBg] = useState(false);
+  const [speakerBProcessingBg, setSpeakerBProcessingBg] = useState(false);
+  const [speakerBOriginalImage, setSpeakerBOriginalImage] = useState(null);
   
   const [isProcessing, setIsProcessing] = useState(false);
   const [jobId, setJobId] = useState(null);
@@ -372,6 +378,74 @@ function AvatarVideoGenerator() {
     }
     
     setError("");
+  };
+
+  const handleRemoveBackground = async (speaker) => {
+    const imageFile = speaker === 'A' ? speakerAImageFile : speakerBImageFile;
+    const setProcessing = speaker === 'A' ? setSpeakerAProcessingBg : setSpeakerBProcessingBg;
+    const setImagePreview = speaker === 'A' ? setSpeakerAImagePreview : setSpeakerBImagePreview;
+    const setImageFile = speaker === 'A' ? setSpeakerAImageFile : setSpeakerBImageFile;
+    const setOriginalImage = speaker === 'A' ? setSpeakerAOriginalImage : setSpeakerBOriginalImage;
+    const originalImage = speaker === 'A' ? speakerAOriginalImage : speakerBOriginalImage;
+    const removeBg = speaker === 'A' ? speakerARemoveBg : speakerBRemoveBg;
+  
+    if (!imageFile && !originalImage) {
+      setError(`Please upload an image first for Speaker ${speaker}`);
+      return;
+    }
+  
+    setProcessing(true);
+    setError("");
+  
+    try {
+      const token = await getSupabaseAuthorizedtoken();
+  
+      // If toggling OFF, restore original
+      if (!removeBg && originalImage) {
+        setImagePreview(URL.createObjectURL(originalImage));
+        setImageFile(originalImage);
+        setProcessing(false);
+        return;
+      }
+  
+      // Store original if first time
+      if (!originalImage && imageFile) {
+        setOriginalImage(imageFile);
+      }
+  
+      const formData = new FormData();
+      formData.append('file', originalImage || imageFile);
+  
+      console.log(`🎨 Removing background for Speaker ${speaker}...`);
+  
+      const response = await axios.post(
+        'http://localhost:8000/video/api/remove-background',
+        formData,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+  
+      // Convert base64 to File object
+      const base64Data = response.data.image_data;
+      const base64Response = await fetch(base64Data);
+      const blob = await base64Response.blob();
+      const processedFile = new File([blob], `speaker_${speaker}_no_bg.png`, { type: 'image/png' });
+  
+      setImageFile(processedFile);
+      setImagePreview(URL.createObjectURL(processedFile));
+  
+      console.log(`✅ Background removed for Speaker ${speaker}`);
+  
+    } catch (err) {
+      console.error(`Background removal error for Speaker ${speaker}:`, err);
+      setError(err.response?.data?.detail || `Failed to remove background for Speaker ${speaker}`);
+    } finally {
+      setProcessing(false);
+    }
   };
 
   const uploadCustomAvatar = async (speaker) => {
@@ -872,6 +946,53 @@ function AvatarVideoGenerator() {
               </label>
             )}
           </div>
+
+          {(imageFile || imagePreview) && !customAvatarId && (
+            <div className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 border-2 border-purple-400/40 rounded-2xl p-4 backdrop-blur-sm">
+              <label className="flex items-center gap-3 cursor-pointer group">
+                <div className="relative">
+                  <input
+                    type="checkbox"
+                    checked={speaker === 'A' ? speakerARemoveBg : speakerBRemoveBg}
+                    onChange={async (e) => {
+                      if (speaker === 'A') {
+                        setSpeakerARemoveBg(e.target.checked);
+                      } else {
+                        setSpeakerBRemoveBg(e.target.checked);
+                      }
+                      await handleRemoveBackground(speaker);
+                    }}
+                    disabled={speaker === 'A' ? speakerAProcessingBg : speakerBProcessingBg}
+                    className="sr-only peer"
+                  />
+                  <div className="w-12 h-6 bg-white/20 rounded-full peer peer-checked:bg-gradient-to-r peer-checked:from-purple-500 peer-checked:to-pink-500 transition-all duration-300"></div>
+                  <div className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full transition-all duration-300 peer-checked:translate-x-6 shadow-md"></div>
+                </div>
+                <div className="flex-1">
+                  <span className="text-white font-medium flex items-center gap-2 group-hover:text-purple-200 transition-colors">
+                    {(speaker === 'A' ? speakerAProcessingBg : speakerBProcessingBg) ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Removing background...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-4 h-4" />
+                        Remove Background
+                      </>
+                    )}
+                  </span>
+                  <p className="text-purple-300 text-xs mt-1">
+                    {(speaker === 'A' ? speakerAProcessingBg : speakerBProcessingBg) 
+                      ? "Processing..." 
+                      : (speaker === 'A' ? speakerARemoveBg : speakerBRemoveBg)
+                        ? "✅ Background removed"
+                        : "Original image with background"}
+                  </p>
+                </div>
+              </label>
+            </div>
+          )}
 
           {(imageFile || selectedTemplate) && !customAvatarId && (
             <button
