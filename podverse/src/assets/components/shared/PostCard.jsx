@@ -206,7 +206,7 @@ const PostCard = ({
   const isCompact = variant === 'compact';
   const isFeatured = variant === 'featured';
   const canSummarize = Boolean(post.transcript_url);
-  const shouldRenderSummarySection = canSummarize || summaryData || summaryError || summaryLoading;
+  const shouldRenderSummarySection = true;
 
   return (
     <article 
@@ -345,7 +345,7 @@ const PostCard = ({
           <div className="px-6 pb-4 flex items-center justify-end">
             <button
               onClick={handleToggleSummary}
-              disabled={summaryLoading}
+              disabled={summaryLoading || !canSummarize}
               title={!canSummarize ? 'Transcript is not available yet' : undefined}
               className="px-4 py-2 rounded-xl text-sm font-semibold transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
               style={{

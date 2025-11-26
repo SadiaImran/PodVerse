@@ -699,7 +699,7 @@ async def get_user_posts(
 @router.get("/posts/feed")
 async def get_feed(
     page: int = Query(1, ge=1),
-    limit: int = Query(20, ge=1, le=50),
+    limit: int = Query(20, ge=1, le=500),
     auth_data: dict = Depends(get_authenticated_supabase_client)
 ):
     """
