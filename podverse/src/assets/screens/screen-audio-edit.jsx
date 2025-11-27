@@ -178,13 +178,36 @@ const AudioEditor = () => {
           // Create audio element to get duration
           const audio = new Audio();
           audio.crossOrigin = 'anonymous';
+          audio.preload = 'auto';
           audio.src = recordingUrl;
           
           await new Promise((resolve, reject) => {
-            audio.addEventListener('loadedmetadata', () => resolve());
-            audio.addEventListener('error', (e) => reject(e));
-            // Timeout after 10 seconds
-            setTimeout(() => reject(new Error('Timeout loading audio')), 10000);
+            let timeoutRef;
+            const cleanup = () => {
+              audio.removeEventListener('loadedmetadata', onLoaded);
+              audio.removeEventListener('error', onError);
+              if (timeoutRef) {
+                clearTimeout(timeoutRef);
+              }
+            };
+
+            const onLoaded = () => {
+              cleanup();
+              resolve();
+            };
+
+            const onError = (e) => {
+              cleanup();
+              reject(e instanceof Error ? e : new Error('Failed to load audio metadata'));
+            };
+
+            audio.addEventListener('loadedmetadata', onLoaded);
+            audio.addEventListener('error', onError);
+
+            timeoutRef = setTimeout(() => {
+              cleanup();
+              reject(new Error('Timeout loading audio'));
+            }, 20000); // Allow up to 20s for signed URLs / large files
           });
           
           const duration = audio.duration;
@@ -479,6 +502,7 @@ const AudioEditor = () => {
 
       // Upload edited audio to Supabase
       let supabaseAudioUrl = null;
+      let supabaseStoragePath = null;
       try {
         console.log('📤 Uploading edited audio to Supabase...');
         const token = await getSupabaseAuthorizedtoken();
@@ -508,6 +532,18 @@ const AudioEditor = () => {
           const uploadResult = await uploadResponse.json();
           console.log('✅ Edited audio uploaded to Supabase:', uploadResult.audio_url);
           supabaseAudioUrl = uploadResult.audio_url;
+          supabaseStoragePath = uploadResult.storage_path || originalPath || null;
+
+          if (supabaseStoragePath) {
+            setOriginalRecordingPath(supabaseStoragePath);
+            sessionStorage.setItem('originalRecordingPath', supabaseStoragePath);
+          }
+
+          if (supabaseAudioUrl) {
+            sessionStorage.setItem('recordingUrl', supabaseAudioUrl);
+            sessionStorage.setItem('recordingFilename', finalName);
+          }
+
           // Store Supabase URL for video generation (preferred over blob)
           sessionStorage.setItem('editedAudioSupabaseUrl', supabaseAudioUrl);
         } else {

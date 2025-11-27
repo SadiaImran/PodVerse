@@ -28,7 +28,9 @@ from connection_supabase_client import get_service_role_client
 load_dotenv()
 aai.settings.api_key = os.environ.get("ASSEMBLYAI_API_KEY")
 VIDEO_STORAGE_BUCKET = os.getenv("SUPABASE_VIDEO_BUCKET", "videos")
+TRANSCRIPTS_BUCKET = os.getenv("SUPABASE_TRANSCRIPTS_BUCKET", "transcripts")
 SIGNED_URL_TTL = int(os.getenv("VIDEO_SIGNED_URL_TTL", 60 * 60 * 24 * 7))
+TRANSCRIPT_SIGNED_URL_TTL = int(os.getenv("TRANSCRIPT_SIGNED_URL_TTL", SIGNED_URL_TTL))
 
 router = APIRouter()
 
@@ -52,6 +54,8 @@ class ProcessingStatus(BaseModel):
     user_id: Optional[str] = None
     kb_id: Optional[str] = None
     podcast_title: Optional[str] = None
+    transcript_storage_path: Optional[str] = None
+    transcript_supabase_url: Optional[str] = None
 
 # In-memory job tracking
 processing_jobs: Dict[str, ProcessingStatus] = {}
@@ -126,7 +130,7 @@ def upload_video_to_supabase_storage(
         service_client.storage.from_(VIDEO_STORAGE_BUCKET).upload(
             storage_path,
             file_data,
-            {"content-type": "video/mp4", "upsert": True},
+            {"content-type": "video/mp4", "upsert": "true"},
         )
         print(f"✅ Uploaded video to Supabase: {storage_path}")
     except Exception as e:
@@ -167,7 +171,7 @@ def upload_video_to_supabase_storage(
             service_client.storage.from_("thumbnails").upload(
                 thumbnail_filename,
                 thumb_data,
-                {"content-type": "image/jpeg", "upsert": True},
+                {"content-type": "image/jpeg", "upsert": "true"},
             )
             print(f"✅ Uploaded thumbnail to Supabase: {thumbnail_filename}")
             
@@ -198,6 +202,65 @@ def upload_video_to_supabase_storage(
         traceback.print_exc()
 
     return storage_path, signed_url, thumbnail_signed_url
+
+
+def upload_transcript_to_supabase_storage(
+    utterances: List[Dict],
+    *,
+    user_id: Optional[str],
+    job_id: str,
+) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Upload transcript JSON to Supabase storage and return (path, signed_url).
+    """
+    if not utterances:
+        print("⚠️ No utterances provided, skipping transcript upload")
+        return None, None
+
+    if not TRANSCRIPTS_BUCKET:
+        print("⚠️ TRANSCRIPTS_BUCKET not configured, skipping transcript upload")
+        return None, None
+
+    try:
+        service_client = get_service_role_client()
+    except Exception as e:
+        print(f"⚠️ Unable to initialize Supabase service client for transcripts: {e}")
+        return None, None
+
+    user_slug = _slugify_component(user_id, "unknown")
+    file_name = f"{user_slug}_transcript_{job_id}.json"
+
+    try:
+        payload = json.dumps({"utterances": utterances}, ensure_ascii=False).encode("utf-8")
+        service_client.storage.from_(TRANSCRIPTS_BUCKET).upload(
+            file_name,
+            payload,
+            {"content-type": "application/json", "upsert": "true"},
+        )
+        print(f"✅ Uploaded transcript to Supabase: {file_name}")
+    except Exception as e:
+        print(f"⚠️ Failed to upload transcript to Supabase: {e}")
+        return None, None
+
+    signed_url = None
+    try:
+        signed_resp = service_client.storage.from_(TRANSCRIPTS_BUCKET).create_signed_url(
+            file_name,
+            TRANSCRIPT_SIGNED_URL_TTL,
+        )
+        if isinstance(signed_resp, dict):
+            signed_url = (
+                signed_resp.get("signedURL")
+                or signed_resp.get("signed_url")
+                or signed_resp.get("url")
+            )
+        elif isinstance(signed_resp, str):
+            signed_url = signed_resp
+        print(f"🔗 Signed URL created for transcript: {signed_url}")
+    except Exception as e:
+        print(f"⚠️ Failed to create signed URL for transcript: {e}")
+
+    return file_name, signed_url
 
 
 def generate_srt_from_utterances(utterances: List[Dict], output_path: str) -> str:
@@ -524,7 +587,7 @@ def create_dynamic_podcast_video(
     return final_output
 
 
-def transcribe_and_diarize(audio_file: str) -> Tuple[List[Dict], Dict[str, str]]:
+def transcribe_and_diarize(audio_file: str, split_screen_mode: bool = False) -> Tuple[List[Dict], Dict[str, str]]:
     """Transcribe audio with speaker diarization and split into separate files."""
     print("🎙️ Starting speaker diarization with AssemblyAI...")
     
@@ -563,12 +626,29 @@ def transcribe_and_diarize(audio_file: str) -> Tuple[List[Dict], Dict[str, str]]
             print(f"⚠️ No segments for Speaker {speaker_label}")
             continue
         
-        speaker_audio = AudioSegment.empty()
-        for seg in segments:
-            start_ms = min(int(seg["start"]), len(audio))
-            end_ms = min(int(seg["end"]), len(audio))
-            if start_ms < end_ms:
-                speaker_audio += audio[start_ms:end_ms]
+        if split_screen_mode:
+            # NEW: Create full-length audio with silence gaps
+            speaker_audio = AudioSegment.silent(duration=len(audio))
+            
+            for seg in segments:
+                start_ms = min(int(seg["start"]), len(audio))
+                end_ms = min(int(seg["end"]), len(audio))
+                if start_ms < end_ms:
+                    # Overlay the speaker's audio at the correct timestamp
+                    speaker_audio = speaker_audio.overlay(
+                        audio[start_ms:end_ms], 
+                        position=start_ms
+                    )
+            
+            print(f"✅ Created full-length audio for Speaker {speaker_label} with silence gaps")
+        else:
+            # EXISTING: Concatenated audio
+            speaker_audio = AudioSegment.empty()
+            for seg in segments:
+                start_ms = min(int(seg["start"]), len(audio))
+                end_ms = min(int(seg["end"]), len(audio))
+                if start_ms < end_ms:
+                    speaker_audio += audio[start_ms:end_ms]
         
         if len(speaker_audio) > 0:
             out_path = os.path.join(tempfile.gettempdir(), f"speaker_{speaker_label}.wav")
@@ -577,8 +657,7 @@ def transcribe_and_diarize(audio_file: str) -> Tuple[List[Dict], Dict[str, str]]
             duration = len(speaker_audio) / 1000
             print(f"✅ Exported Speaker {speaker_label}: {duration:.1f}s")
     
-    return utterances, audio_files
-
+    return utterances, audio_files  # ✅ FIX: Return outside the loop!
 
 def upload_audio_to_heygen(audio_file_path: str) -> str:
     """Upload audio file to HeyGen and return asset_id."""
@@ -659,7 +738,8 @@ def process_podcast_background(
     is_custom_avatar_b: bool,
     use_original_voice_a: bool,
     use_original_voice_b: bool,
-    add_subtitles: bool,  # NEW PARAMETER
+    add_subtitles: bool,
+    split_screen_mode: bool, 
     authorization: str,
     user_id: Optional[str],
     kb_id: Optional[str],
@@ -667,18 +747,32 @@ def process_podcast_background(
 ):
     """Background task to process podcast audio into avatar videos."""
     temp_files = [audio_file_path]
+    transcript_storage_path = None
+    transcript_signed_url = None
     
     try:
         # Step 1: Diarization
         update_job_status(job_id, status="diarizing", progress=20, message="Running speaker diarization...")
         
-        utterances, audio_files = transcribe_and_diarize(audio_file_path)
+        utterances, audio_files = transcribe_and_diarize(audio_file_path, split_screen_mode=split_screen_mode)
         temp_files.extend(audio_files.values())
         
         print(f"\n📊 Diarization Summary:")
         print(f"  Total utterances: {len(utterances)}")
         print(f"  Speaker A segments: {len([u for u in utterances if u['speaker'] == 'A'])}")
         print(f"  Speaker B segments: {len([u for u in utterances if u['speaker'] == 'B'])}")
+
+        transcript_storage_path, transcript_signed_url = upload_transcript_to_supabase_storage(
+            utterances,
+            user_id=user_id,
+            job_id=job_id,
+        )
+        if transcript_signed_url:
+            update_job_status(
+                job_id,
+                transcript_supabase_url=transcript_signed_url,
+                transcript_storage_path=transcript_storage_path,
+            )
         
         # Step 2: Upload speaker audio files to HeyGen
         update_job_status(job_id, progress=35, message="Uploading speaker audio files...")
@@ -805,7 +899,8 @@ def process_podcast_background(
                             speaker_a_video=video_url_a
                         )
                     elif status_a["status"] == "failed":
-                        raise Exception("Speaker A video generation failed")
+                        reason = status_a.get("error") or "Unknown error"
+                        raise Exception(f"Speaker A video generation failed: {reason}")
                     elif status_a["status"] == "processing":
                         print(f"⏳ Speaker A still processing... ({minutes}m {seconds}s)")
                 except Exception as e:
@@ -825,7 +920,8 @@ def process_podcast_background(
                             speaker_b_video=video_url_b
                         )
                     elif status_b["status"] == "failed":
-                        raise Exception("Speaker B video generation failed")
+                        reason = status_b.get("error") or "Unknown error"
+                        raise Exception(f"Speaker B video generation failed: {reason}")
                     elif status_b["status"] == "processing":
                         print(f"⏳ Speaker B still processing... ({minutes}m {seconds}s)")
                 except Exception as e:
@@ -892,60 +988,78 @@ def process_podcast_background(
         # Step 6: Merge videos (with optional subtitles)
         if video_url_a and video_url_b:
             subtitle_msg = " with subtitles" if add_subtitles else ""
-            update_job_status(
-                job_id,
-                progress=95,
-                message=f"Creating dynamic podcast video{subtitle_msg}..."
-            )
-            
-            try:
-                merged_video_path = create_dynamic_podcast_video(
-                    video_url_a,
-                    video_url_b,
-                    utterances,
-                    tempfile.gettempdir(),
-                    add_subtitles=add_subtitles  # Pass the flag
+            if split_screen_mode:
+                # Skip merging - just return both video URLs
+                update_job_status(
+                    job_id,
+                    status="completed",
+                    progress=100,
+                    message="Split-screen videos ready!",
+                    speaker_a_video=video_url_a,
+                    speaker_b_video=video_url_b,
+                    transcript=utterances,
+                    # No merged_video_url
                 )
-                
-                merged_video_files[job_id] = merged_video_path
-                merged_video_url = f"/video/api/podcast/merged/{job_id}"
 
-                storage_path, signed_url, thumbnail_signed_url = upload_video_to_supabase_storage(
-                    merged_video_path,
-                    user_id=user_id,
-                    kb_id=kb_id,
-                    podcast_title=podcast_title,
-                )
-                
-                print(f"✅ Dynamic podcast video created: {merged_video_path}")
-                
+            else:
                 update_job_status(
                     job_id,
-                    status="completed",
-                    progress=100,
-                    message="Podcast video ready!",
-                    speaker_a_video=video_url_a,
-                    speaker_b_video=video_url_b,
-                    merged_video_url=merged_video_url,
-                    transcript=utterances,
-                    supabase_video_url=signed_url,
-                    video_storage_path=storage_path,
-                    thumbnail_url=thumbnail_signed_url  # Add thumbnail URL to job status
+                    progress=95,
+                    message=f"Creating dynamic podcast video{subtitle_msg}..."
                 )
-            except Exception as e:
-                print(f"⚠️ Failed to merge videos: {e}")
-                import traceback
-                traceback.print_exc()
-                update_job_status(
-                    job_id,
-                    status="completed",
-                    progress=100,
-                    message="Avatar videos ready! (Merge failed)",
-                    speaker_a_video=video_url_a,
-                    speaker_b_video=video_url_b,
-                    transcript=utterances,
-                    error=f"Merge failed: {str(e)}"
-                )
+                
+                try:
+                    merged_video_path = create_dynamic_podcast_video(
+                        video_url_a,
+                        video_url_b,
+                        utterances,
+                        tempfile.gettempdir(),
+                        add_subtitles=add_subtitles  # Pass the flag
+                    )
+                    
+                    merged_video_files[job_id] = merged_video_path
+                    merged_video_url = f"/video/api/podcast/merged/{job_id}"
+
+                    storage_path, signed_url, thumbnail_signed_url = upload_video_to_supabase_storage(
+                        merged_video_path,
+                        user_id=user_id,
+                        kb_id=kb_id,
+                        podcast_title=podcast_title,
+                    )
+                    
+                    print(f"✅ Dynamic podcast video created: {merged_video_path}")
+                    
+                    update_job_status(
+                        job_id,
+                        status="completed",
+                        progress=100,
+                        message="Podcast video ready!",
+                        speaker_a_video=video_url_a,
+                        speaker_b_video=video_url_b,
+                        merged_video_url=merged_video_url,
+                        transcript=utterances,
+                        supabase_video_url=signed_url,
+                        video_storage_path=storage_path,
+                        thumbnail_url=thumbnail_signed_url,
+                        transcript_supabase_url=transcript_signed_url,
+                        transcript_storage_path=transcript_storage_path,
+                    )
+                except Exception as e:
+                    print(f"⚠️ Failed to merge videos: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    update_job_status(
+                        job_id,
+                        status="completed",
+                        progress=100,
+                        message="Avatar videos ready! (Merge failed)",
+                        speaker_a_video=video_url_a,
+                        speaker_b_video=video_url_b,
+                        transcript=utterances,
+                        error=f"Merge failed: {str(e)}",
+                        transcript_supabase_url=transcript_signed_url,
+                        transcript_storage_path=transcript_storage_path,
+                    )
         
     except Exception as e:
         print(f"❌ Job {job_id} failed: {e}")
@@ -955,7 +1069,9 @@ def process_podcast_background(
             job_id,
             status="failed",
             message="Processing failed",
-            error=str(e)
+            error=str(e),
+            transcript_supabase_url=transcript_signed_url,
+            transcript_storage_path=transcript_storage_path,
         )
     
     finally:
@@ -987,7 +1103,8 @@ async def process_podcast(
     user_id: Optional[str] = Form(None),
     kb_id: Optional[str] = Form(None),
     podcast_title: Optional[str] = Form(None),
-    authorization: str = Depends(verify_token)
+    authorization: str = Depends(verify_token),
+    split_screen_mode: bool = Form(False)
 ):
     """Process uploaded podcast audio into avatar videos."""
     import uuid
@@ -1040,6 +1157,7 @@ async def process_podcast(
         use_original_voice_a=use_original_voice_a,
         use_original_voice_b=use_original_voice_b,
         add_subtitles=add_subtitles,  # Pass the flag
+        split_screen_mode=split_screen_mode,
         authorization=authorization,
         user_id=user_id,
         kb_id=kb_id,

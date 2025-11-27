@@ -8,6 +8,88 @@ import tempfile
 import uuid
 import requests
 import re
+import json
+import textwrap
+
+
+def fetch_transcript_payload(transcript_ref: Optional[str]):
+    """
+    Download transcript JSON from Supabase storage or signed URL.
+    """
+    if not transcript_ref:
+        return None
+
+    try:
+        # Signed URL case
+        if isinstance(transcript_ref, str) and transcript_ref.startswith("http"):
+            resp = requests.get(transcript_ref, timeout=30)
+            resp.raise_for_status()
+            return resp.json()
+
+        # Storage path case
+        service_client = get_service_role_client()
+        storage_response = service_client.storage.from_("transcripts").download(transcript_ref)
+
+        if isinstance(storage_response, dict) and storage_response.get("error"):
+            print(f"⚠️ Error downloading transcript from storage: {storage_response['error']}")
+            return None
+
+        if isinstance(storage_response, bytes):
+            return json.loads(storage_response.decode("utf-8"))
+
+        if isinstance(storage_response, str):
+            return json.loads(storage_response)
+
+        return storage_response
+    except Exception as e:
+        print(f"⚠️ Failed to fetch transcript payload: {e}")
+        return None
+
+
+def build_transcript_summary(utterances: List[dict], max_sentences: int = 3):
+    """
+    Build a lightweight summary and key points from transcript utterances.
+    """
+    if not isinstance(utterances, list):
+        utterances = []
+
+    text_segments = [u.get("text", "").strip() for u in utterances if u.get("text")]
+    full_text = " ".join(text_segments).strip()
+
+    sentences = re.split(r"(?<=[.!?])\s+", full_text)
+    filtered_sentences = [s.strip() for s in sentences if s.strip()]
+    summary_sentences = filtered_sentences[:max_sentences]
+
+    summary = " ".join(summary_sentences)
+    if not summary and full_text:
+        summary = textwrap.shorten(full_text, width=280, placeholder="…")
+
+    key_points = []
+    for utterance in utterances:
+        text_value = utterance.get("text", "").strip()
+        if not text_value:
+            continue
+        speaker = utterance.get("speaker") or "Speaker"
+        snippet = textwrap.shorten(text_value, width=140, placeholder="…")
+        key_points.append(f"{speaker}: {snippet}")
+        if len(key_points) == 3:
+            break
+
+    end_times = [
+        utterance.get("end")
+        for utterance in utterances
+        if isinstance(utterance.get("end"), (int, float))
+    ]
+    duration_seconds = max(end_times) / 1000 if end_times else None
+
+    speakers = sorted({utterance.get("speaker") for utterance in utterances if utterance.get("speaker")})
+
+    return {
+        "summary": summary or "Summary unavailable.",
+        "key_points": key_points,
+        "duration_seconds": duration_seconds,
+        "speakers": speakers,
+    }
 
 router = APIRouter()
 
@@ -29,7 +111,9 @@ class PostCreate(BaseModel):
     thumbnail_url: str
     status: str  # "draft" or "published"
     tags: Optional[List[str]] = []  # List of tag names
+    transcript_url: Optional[str] = None
 
+# Duplicate class retained for backward compatibility (TODO: consolidate)
 class PostCreate(BaseModel):
     title: str
     description: str
@@ -37,6 +121,7 @@ class PostCreate(BaseModel):
     thumbnail_url: str
     status: str  # "draft" or "published"
     tags: Optional[List[str]] = []  # List of tag names
+    transcript_url: Optional[str] = None
 
 def generate_thumbnail(video_path: str, output_path: str, timestamp: str = "00:00:03") -> bool:
     """
@@ -366,6 +451,7 @@ async def create_post(
             "video_url": post_data.video_url,
             "thumbnail_url": thumbnail_url,
             "status": post_data.status,
+            "transcript_url": post_data.transcript_url,
             "likes": 0,
             "views": 0
         }).execute()
@@ -428,6 +514,55 @@ async def create_post(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error creating post: {str(e)}")
+
+
+@router.get("/posts/{post_id}/summary")
+async def get_post_summary(
+    post_id: str,
+    auth_data: dict = Depends(get_authenticated_supabase_client)
+):
+    """
+    Generate a lightweight summary for a published post using its transcript.
+    """
+    try:
+        client = auth_data["client"]
+
+        post_response = client.table("posts").select(
+            "id, transcript_url, title, description, created_at"
+        ).eq("id", post_id).execute()
+
+        if not post_response.data:
+            raise HTTPException(status_code=404, detail="Post not found")
+
+        post = post_response.data[0]
+        transcript_reference = post.get("transcript_url")
+
+        if not transcript_reference:
+            raise HTTPException(status_code=404, detail="Transcript not available for this post")
+
+        transcript_payload = fetch_transcript_payload(transcript_reference)
+        if not transcript_payload:
+            raise HTTPException(status_code=500, detail="Failed to load transcript for summary")
+
+        utterances = transcript_payload.get("utterances")
+        if utterances is None and isinstance(transcript_payload, list):
+            utterances = transcript_payload
+
+        summary_payload = build_transcript_summary(utterances or [])
+
+        return {
+            "success": True,
+            "post_id": post_id,
+            "summary": summary_payload["summary"],
+            "key_points": summary_payload["key_points"],
+            "duration_seconds": summary_payload["duration_seconds"],
+            "speakers": summary_payload["speakers"],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error generating summary for post {post_id}: {e}")
+        raise HTTPException(status_code=500, detail="Unable to generate summary. Please try again later.")
 
 @router.get("/posts")
 def get_all_posts():
@@ -564,7 +699,7 @@ async def get_user_posts(
 @router.get("/posts/feed")
 async def get_feed(
     page: int = Query(1, ge=1),
-    limit: int = Query(20, ge=1, le=50),
+    limit: int = Query(20, ge=1, le=500),
     auth_data: dict = Depends(get_authenticated_supabase_client)
 ):
     """

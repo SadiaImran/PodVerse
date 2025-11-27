@@ -31,6 +31,10 @@ const PostModal = ({
   const [videoLoaded, setVideoLoaded] = useState(false);
   const [videoError, setVideoError] = useState(false);
   const [userProfile, setUserProfile] = useState(null);
+  const [summaryVisible, setSummaryVisible] = useState(false);
+  const [summaryData, setSummaryData] = useState(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState(null);
   const videoRef = useRef(null);
   const viewTracked = useRef(false);
   const commentInputRef = useRef(null);
@@ -75,6 +79,10 @@ const PostModal = ({
       setIsMuted(true);
       setVideoLoaded(false);
       setVideoError(false);
+      setSummaryVisible(false);
+      setSummaryData(null);
+      setSummaryLoading(false);
+      setSummaryError(null);
       viewTracked.current = false;
       if (videoRef.current) {
         videoRef.current.pause();
@@ -167,6 +175,59 @@ const PostModal = ({
     if (videoRef.current) {
       videoRef.current.muted = !isMuted;
       setIsMuted(!isMuted);
+    }
+  };
+
+  const handleSummaryToggle = async (e) => {
+    e?.stopPropagation?.();
+
+    if (summaryVisible) {
+      setSummaryVisible(false);
+      return;
+    }
+
+    if (summaryData) {
+      setSummaryVisible(true);
+      return;
+    }
+
+    if (!post?.transcript_url) {
+      setSummaryError('Transcript is not available yet for this post.');
+      setSummaryVisible(true);
+      return;
+    }
+
+    setSummaryLoading(true);
+    setSummaryError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setSummaryError('Please sign in to view the summary.');
+        setSummaryLoading(false);
+        setSummaryVisible(true);
+        return;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/posts/${post.id}/summary`, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        setSummaryData(result);
+        setSummaryVisible(true);
+      } else {
+        setSummaryError(result.detail || result.message || 'Failed to generate summary.');
+        setSummaryVisible(true);
+      }
+    } catch (error) {
+      console.error('Error fetching summary:', error);
+      setSummaryError(error.message || 'Failed to generate summary.');
+      setSummaryVisible(true);
+    } finally {
+      setSummaryLoading(false);
     }
   };
 
@@ -337,7 +398,10 @@ const PostModal = ({
               
               {/* Video Controls Overlay */}
               {videoLoaded && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/30 transition-all group pointer-events-none">
+                <div
+                  className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/30 transition-all group pointer-events-none"
+                  style={{ visibility: isPlaying ? 'hidden' : 'visible' }}
+                >
                   <button
                     onClick={handlePlayPause}
                     className="w-20 h-20 rounded-full flex items-center justify-center transition-all shadow-2xl pointer-events-auto"
@@ -420,6 +484,45 @@ const PostModal = ({
                   {tag.name || tag}
                 </button>
               ))}
+            </div>
+          )}
+
+          <div className="flex justify-end mb-4">
+            <button
+              onClick={handleSummaryToggle}
+              disabled={summaryLoading || !post?.transcript_url}
+              title={!post?.transcript_url ? 'Transcript is not available yet' : undefined}
+              className="px-4 py-2 rounded-xl text-sm font-semibold transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+              style={{
+                backgroundColor: summaryVisible ? '#F3F4FF' : '#6057C7',
+                color: summaryVisible ? '#2F2867' : '#F9F5EB'
+              }}
+            >
+              {summaryLoading ? 'Generating summary...' : summaryVisible ? 'Hide Summary' : 'View Summary'}
+            </button>
+          </div>
+
+          {summaryVisible && (
+            <div className="mb-4">
+              <div className="rounded-2xl border border-gray-100 bg-gray-50/80 p-4 space-y-3">
+                {summaryError && (
+                  <p className="text-sm text-red-500">{summaryError}</p>
+                )}
+                {!summaryError && (
+                  <>
+                    <p className="text-sm text-gray-800 leading-relaxed">
+                      {summaryData?.summary || 'Summary unavailable.'}
+                    </p>
+                    {summaryData?.key_points && summaryData.key_points.length > 0 && (
+                      <ul className="list-disc pl-5 text-sm text-gray-600 space-y-1">
+                        {summaryData.key_points.map((point, idx) => (
+                          <li key={idx}>{point}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           )}
 

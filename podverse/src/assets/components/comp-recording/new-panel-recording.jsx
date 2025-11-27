@@ -401,9 +401,6 @@ const NewPanelsRecording = ({ podcastConfig = {} }) => {
 
   // Use a ref to hold the latest transcript state for use in event handlers
   const transcriptRef = useRef(transcript);
-  // Buffer assistant segments while the user is streaming to enforce turn-ordering
-  const assistantBufferRef = useRef(null); // { type: 'stream' | 'final', text: string }
-
   const [activeTab, setActiveTab] = useState('transcript'); // 'transcript' or 'script'
   const [podcastScript, setPodcastScript] = useState(null);
 
@@ -931,13 +928,8 @@ const fetchLiveKitToken = async () => {
         const isAgent = participant?.identity?.includes('agent');
         const speaker = isAgent ? 'AI Assistant' : 'You';
         
-        // Strict turn-ordering: buffer assistant while user streams
         if (!segment.final) {
           if (isAgent) {
-            if (currentStreamingSpeaker === 'You') {
-              assistantBufferRef.current = { type: 'stream', text: segment.text };
-              return;
-            }
             // Only update if different to avoid unnecessary re-renders
             if (currentStreamingSpeaker !== 'AI Assistant') {
               setCurrentStreamingSpeaker('AI Assistant');
@@ -978,10 +970,6 @@ const fetchLiveKitToken = async () => {
           }
         } else {
           if (isAgent) {
-            if (currentStreamingSpeaker === 'You') {
-              assistantBufferRef.current = { type: 'final', text: segment.text };
-              return;
-            }
             // Optimized handling of final AI messages
             setTranscript(prev => {
               const lastMessage = prev[prev.length - 1];
@@ -1023,19 +1011,6 @@ const fetchLiveKitToken = async () => {
             if (currentStreamingSpeaker === 'You') {
               setStreamingText('');
               setCurrentStreamingSpeaker(null);
-            }
-            // Process buffered assistant message
-            const buffered = assistantBufferRef.current;
-            if (buffered) {
-              assistantBufferRef.current = null;
-              if (buffered.type === 'final') {
-                setTranscript(prev => [...prev, { speaker: 'AI Assistant', text: buffered.text, timestamp: new Date().toISOString(), isStreaming: false }]);
-                setTimeout(() => setIsSpeaking(false), 200);
-              } else if (buffered.type === 'stream') {
-                setCurrentStreamingSpeaker('AI Assistant');
-                setStreamingText(buffered.text);
-                setIsSpeaking(true);
-              }
             }
           }
         }

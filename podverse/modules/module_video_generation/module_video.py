@@ -21,6 +21,14 @@ HEADERS = {
     "Content-Type": "application/json"
 }
 
+
+if HEYGEN_API_KEY:
+    print(f"\n🔑 CURRENT LOADED KEY: {HEYGEN_API_KEY[:5]}...{HEYGEN_API_KEY[-4:]}")
+    print("--------------------------------------------------\n")
+else:
+    print("\n❌ NO API KEY FOUND\n")
+# --------------------------------------
+
 def get_upload_headers(content_type: str):
     """Get headers for file upload with proper Content-Type"""
     return {
@@ -74,6 +82,7 @@ class StatusResponse(BaseModel):
     video_id: str
     status: str
     video_url: Optional[str] = None
+    error: Optional[str] = None
 
 class AvatarInfo(BaseModel):
     avatar_id: str
@@ -457,15 +466,39 @@ def video_status(
             print(f"❌ Status check failed ({resp.status_code}): {resp.text}")
             raise HTTPException(status_code=resp.status_code, detail=f"HeyGen status check failed: {resp.text}")
 
-        data = resp.json().get("data", {})
-        status = data.get("status")
-        video_url = data.get("video_url")
+        raw_json = resp.json()
+        data = raw_json.get("data", {}) if isinstance(raw_json, dict) else {}
+        status = data.get("status") or raw_json.get("status")
+        video_url = data.get("video_url") or raw_json.get("video_url")
+        error_obj = data.get("error") or raw_json.get("error")
+        error_message = (
+            data.get("error_message")
+            or data.get("status_message")
+            or data.get("message")
+            or raw_json.get("error_message")
+            or raw_json.get("status_message")
+        )
+        error_details = error_message or error_obj
         
         if not status:
-            raise HTTPException(status_code=500, detail=f"Invalid status response: {resp.text}")
+            raise HTTPException(status_code=500, detail=f"Invalid status response: {raw_json}")
+
+        if status.lower() == "failed":
+            print(f"❌ Video generation failed (id={video_id}). details={error_details or raw_json}")
+            return {
+                "video_id": video_id,
+                "status": status,
+                "video_url": video_url,
+                "error": error_details or str(raw_json),
+            }
 
         print(f"📊 Video status: {status}")
-        return {"video_id": video_id, "status": status, "video_url": video_url}
+        return {
+            "video_id": video_id,
+            "status": status,
+            "video_url": video_url,
+            "error": error_details,
+        }
     
     except HTTPException:
         raise

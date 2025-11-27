@@ -35,6 +35,8 @@ function AvatarVideoGenerator() {
   
   // Testing Mode Toggle
   const [isTestingMode, setIsTestingMode] = useState(false);
+
+  const [splitScreenMode, setSplitScreenMode] = useState(false);
   
   // Speaker A configuration
   const [speakerAAvatar, setSpeakerAAvatar] = useState(null);
@@ -74,6 +76,12 @@ function AvatarVideoGenerator() {
         sessionStorage.setItem('videoEditorSource', jobStatus.supabase_video_url);
         sessionStorage.setItem('originalVideoPath', jobStatus.video_storage_path || '');
         sessionStorage.setItem('videoJobId', jobStatus.job_id || '');
+        if (jobStatus.transcript_storage_path) {
+          sessionStorage.setItem('transcriptStoragePath', jobStatus.transcript_storage_path);
+        }
+        if (jobStatus.transcript_supabase_url) {
+          sessionStorage.setItem('transcriptSignedUrl', jobStatus.transcript_supabase_url);
+        }
       } catch (err) {
         console.warn('Unable to cache editor source:', err);
       }
@@ -83,7 +91,9 @@ function AvatarVideoGenerator() {
           videoPath: jobStatus.video_storage_path,
           videoName: jobStatus.video_storage_path ? jobStatus.video_storage_path.split('/').pop() : `podcast_${jobStatus.job_id}.mp4`,
           originalVideoPath: jobStatus.video_storage_path,
-          jobId: jobStatus.job_id
+          jobId: jobStatus.job_id,
+          transcriptStoragePath: jobStatus.transcript_storage_path,
+          transcriptSignedUrl: jobStatus.transcript_supabase_url
         } 
       });
     } else {
@@ -107,6 +117,8 @@ function AvatarVideoGenerator() {
     sessionStorage.removeItem('videoEditorSource');
     sessionStorage.removeItem('originalVideoPath');
     sessionStorage.removeItem('videoJobId');
+    sessionStorage.removeItem('transcriptStoragePath');
+    sessionStorage.removeItem('transcriptSignedUrl');
   };
 
   const handleProceedToEditing = () => {
@@ -241,6 +253,23 @@ function AvatarVideoGenerator() {
       }
     }
   }, [jobStatus?.supabase_video_url]);
+
+  useEffect(() => {
+    if (jobStatus?.transcript_storage_path) {
+      try {
+        sessionStorage.setItem('transcriptStoragePath', jobStatus.transcript_storage_path);
+      } catch (err) {
+        console.warn('Failed to cache transcript storage path:', err);
+      }
+    }
+    if (jobStatus?.transcript_supabase_url) {
+      try {
+        sessionStorage.setItem('transcriptSignedUrl', jobStatus.transcript_supabase_url);
+      } catch (err) {
+        console.warn('Failed to cache transcript URL:', err);
+      }
+    }
+  }, [jobStatus?.transcript_storage_path, jobStatus?.transcript_supabase_url]);
 
   const loadAvatars = async () => {
     setLoadingAvatars(true);
@@ -515,6 +544,8 @@ function AvatarVideoGenerator() {
 
       // NEW: Add subtitle flag
       formData.append('add_subtitles', addSubtitles);
+
+      formData.append('split_screen_mode', splitScreenMode);
 
       // Check if testing mode is enabled
       if (isTestingMode) {
@@ -1092,6 +1123,52 @@ function AvatarVideoGenerator() {
               )}
             </div>
 
+            {/* NEW: Split Screen Mode Toggle Card */}
+            <div className="bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-xl rounded-3xl p-8 border border-white/30 shadow-2xl hover:shadow-purple-500/20 transition-all duration-300">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-500 flex items-center justify-center shadow-lg">
+                  <Users className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-white font-bold text-xl">Split Screen Mode</h3>
+                  <p className="text-purple-200 text-sm">Generate separate speaker videos</p>
+                </div>
+              </div>
+
+              <label className="flex items-center gap-4 cursor-pointer group bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border-2 border-cyan-400/40 rounded-2xl p-5 hover:border-cyan-400/60 transition-all duration-300">
+                <div className="relative">
+                  <input
+                    type="checkbox"
+                    checked={splitScreenMode}
+                    onChange={(e) => setSplitScreenMode(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-16 h-8 bg-white/20 rounded-full peer peer-checked:bg-gradient-to-r peer-checked:from-cyan-500 peer-checked:to-blue-500 transition-all duration-300"></div>
+                  <div className="absolute left-1 top-1 w-6 h-6 bg-white rounded-full transition-all duration-300 peer-checked:translate-x-8 shadow-lg"></div>
+                </div>
+                <div className="flex-1">
+                  <span className="text-white font-bold text-lg block group-hover:text-cyan-100 transition-colors">
+                    Enable Split Screen Videos
+                  </span>
+                  <span className="text-purple-300 text-sm">
+                    {splitScreenMode ? "Two separate videos with timeline-synced silence" : "Standard merged video"}
+                  </span>
+                </div>
+              </label>
+
+              {splitScreenMode && (
+                <div className="mt-4 bg-cyan-500/20 border-2 border-cyan-400/60 rounded-xl p-4">
+                  <p className="text-cyan-100 text-sm flex items-start gap-2">
+                    <Sparkles className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    <span>
+                      Each speaker will have their own full-length video with silence during the other speaker's turns. 
+                      Perfect for manual split-screen editing!
+                    </span>
+                  </p>
+                </div>
+              )}
+            </div>
+
             {/* How it Works */}
             <div className="bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border-2 border-yellow-400/40 rounded-2xl p-6 backdrop-blur-sm">
               <h4 className="font-bold text-yellow-200 mb-4 flex items-center gap-2 text-lg">
@@ -1105,6 +1182,7 @@ function AvatarVideoGenerator() {
                   "Choose preset or custom avatars",
                   "Use original voices or HeyGen TTS",
                   "Optionally add burned-in subtitles",
+                  "Enable split-screen mode for separate videos",
                   "Get lip-synced videos for each speaker"
                 ].map((step, index) => (
                   <li key={index} className="flex items-start gap-3 text-yellow-200/90">
@@ -1267,9 +1345,9 @@ function AvatarVideoGenerator() {
                           Videos Ready!
                         </h4>
                       </div>
-                        
-                      {/* Merged Video */}
-                      {jobStatus.merged_video_url && (
+                      
+                      {/* Merged Video - Only show if NOT in split screen mode */}
+                      {jobStatus.merged_video_url && !splitScreenMode && (
                         <div className="bg-gradient-to-r from-purple-500/20 via-pink-500/20 to-rose-500/20 rounded-2xl p-6 border-2 border-purple-400/60 backdrop-blur-sm">
                           <p className="text-white font-bold mb-4 flex items-center gap-2 text-lg">
                             <Video className="w-6 h-6" />
@@ -1298,6 +1376,82 @@ function AvatarVideoGenerator() {
                         </div>
                       )}
 
+                      {/* NEW: Split Screen Mode - Show both videos prominently */}
+                      {splitScreenMode && (jobStatus.speaker_a_video || jobStatus.speaker_b_video) && (
+                        <div className="bg-gradient-to-r from-cyan-500/20 via-blue-500/20 to-indigo-500/20 rounded-2xl p-6 border-2 border-cyan-400/60 backdrop-blur-sm">
+                          <div className="flex items-center justify-between mb-6">
+                            <p className="text-white font-bold flex items-center gap-2 text-lg">
+                              <Users className="w-6 h-6" />
+                              Split Screen Videos Ready
+                            </p>
+                            <span className="px-4 py-2 bg-cyan-500/30 border border-cyan-400/60 rounded-full text-cyan-100 text-sm font-semibold flex items-center gap-2">
+                              <CheckCircle2 className="w-4 h-4" />
+                              Timeline-Synced
+                            </span>
+                          </div>
+
+                          <div className="grid md:grid-cols-2 gap-6">
+                            {/* Speaker A Video */}
+                            {jobStatus.speaker_a_video && (
+                              <div className="bg-white/5 rounded-xl p-4 border border-white/20">
+                                <p className="text-blue-200 font-semibold mb-3 flex items-center gap-2">
+                                  <Users className="w-5 h-5" />
+                                  Speaker A (Full Timeline)
+                                </p>
+                                <video
+                                  src={jobStatus.speaker_a_video}
+                                  controls
+                                  className="w-full rounded-lg shadow-lg border-2 border-blue-400/40 mb-3"
+                                />
+                                <a
+                                  href={jobStatus.speaker_a_video}
+                                  download={`podcast_speaker_a_${jobId}.mp4`}
+                                  className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-bold px-4 py-2 rounded-xl transition-all duration-300 shadow-lg text-sm"
+                                >
+                                  <Upload className="w-4 h-4" />
+                                  Download Speaker A
+                                </a>
+                              </div>
+                            )}
+
+                            {/* Speaker B Video */}
+                            {jobStatus.speaker_b_video && (
+                              <div className="bg-white/5 rounded-xl p-4 border border-white/20">
+                                <p className="text-pink-200 font-semibold mb-3 flex items-center gap-2">
+                                  <Users className="w-5 h-5" />
+                                  Speaker B (Full Timeline)
+                                </p>
+                                <video
+                                  src={jobStatus.speaker_b_video}
+                                  controls
+                                  className="w-full rounded-lg shadow-lg border-2 border-pink-400/40 mb-3"
+                                />
+                                <a
+                                  href={jobStatus.speaker_b_video}
+                                  download={`podcast_speaker_b_${jobId}.mp4`}
+                                  className="inline-flex items-center gap-2 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white font-bold px-4 py-2 rounded-xl transition-all duration-300 shadow-lg text-sm"
+                                >
+                                  <Upload className="w-4 h-4" />
+                                  Download Speaker B
+                                </a>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Info Box */}
+                          <div className="mt-6 bg-cyan-500/20 border-2 border-cyan-400/60 rounded-xl p-4">
+                            <p className="text-cyan-100 text-sm flex items-start gap-2">
+                              <Info className="w-5 h-5 mt-0.5 flex-shrink-0" />
+                              <span>
+                                <strong>Perfect for editing:</strong> Both videos have the same duration with synchronized silence periods.
+                                Import them into your video editor for easy split-screen layout!
+                              </span>
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Supabase Storage Info */}
                       {jobStatus.supabase_video_url && jobStatus.status === 'completed' && (
                         <div className="bg-gradient-to-r from-emerald-500/15 to-teal-500/15 rounded-2xl p-6 border-2 border-emerald-400/50 backdrop-blur-sm space-y-4">
                           <p className="text-emerald-100 font-semibold flex items-center gap-2 text-lg">
@@ -1323,44 +1477,46 @@ function AvatarVideoGenerator() {
                           </button>
                         </div>
                       )}
-                        
-                      {/* Individual Videos */}
-                      <details className="bg-white/10 rounded-2xl p-5 backdrop-blur-sm border border-white/20 hover:bg-white/15 transition-all duration-300">
-                        <summary className="text-white font-bold cursor-pointer flex items-center gap-2 text-base">
-                          <ArrowRight className="w-5 h-5" />
-                          View Individual Speaker Videos
-                        </summary>
-                        
-                        <div className="mt-5 space-y-4">
-                          {jobStatus.speaker_a_video && (
-                            <div>
-                              <p className="text-purple-200 font-semibold mb-2 flex items-center gap-2">
-                                <Users className="w-4 h-4" />
-                                Speaker A
-                              </p>
-                              <video 
-                                src={jobStatus.speaker_a_video} 
-                                controls 
-                                className="w-full rounded-xl shadow-lg border-2 border-white/20" 
-                              />
-                            </div>
-                          )}
+                      
+                      {/* Individual Videos (Collapsed Details) - Only show if NOT in split screen mode */}
+                      {!splitScreenMode && (
+                        <details className="bg-white/10 rounded-2xl p-5 backdrop-blur-sm border border-white/20 hover:bg-white/15 transition-all duration-300">
+                          <summary className="text-white font-bold cursor-pointer flex items-center gap-2 text-base">
+                            <ArrowRight className="w-5 h-5" />
+                            View Individual Speaker Videos
+                          </summary>
                           
-                          {jobStatus.speaker_b_video && (
-                            <div>
-                              <p className="text-purple-200 font-semibold mb-2 flex items-center gap-2">
-                                <Users className="w-4 h-4" />
-                                Speaker B
-                              </p>
-                              <video 
-                                src={jobStatus.speaker_b_video} 
-                                controls 
-                                className="w-full rounded-xl shadow-lg border-2 border-white/20" 
-                              />
-                            </div>
-                          )}
-                        </div>
-                      </details>
+                          <div className="mt-5 space-y-4">
+                            {jobStatus.speaker_a_video && (
+                              <div>
+                                <p className="text-purple-200 font-semibold mb-2 flex items-center gap-2">
+                                  <Users className="w-4 h-4" />
+                                  Speaker A
+                                </p>
+                                <video 
+                                  src={jobStatus.speaker_a_video} 
+                                  controls 
+                                  className="w-full rounded-xl shadow-lg border-2 border-white/20" 
+                                />
+                              </div>
+                            )}
+                            
+                            {jobStatus.speaker_b_video && (
+                              <div>
+                                <p className="text-purple-200 font-semibold mb-2 flex items-center gap-2">
+                                  <Users className="w-4 h-4" />
+                                  Speaker B
+                                </p>
+                                <video 
+                                  src={jobStatus.speaker_b_video} 
+                                  controls 
+                                  className="w-full rounded-xl shadow-lg border-2 border-white/20" 
+                                />
+                              </div>
+                            )}
+                          </div>
+                        </details>
+                      )}
                     </div>
                   )}
 

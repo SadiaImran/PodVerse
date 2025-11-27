@@ -7,17 +7,16 @@ import PostCard from '../shared/PostCard';
 const API_BASE_URL = 'http://localhost:8000';
 
 // Main Activity Feed Component
+const FEED_PAGE_SIZE = 50; // API allows max 50 per page
+
 const ActivityFeed = () => {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
   const navigate = useNavigate();
 
   // Fetch feed posts
-  const fetchFeed = useCallback(async (pageNum = 1, append = false) => {
+  const fetchFeed = useCallback(async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
@@ -26,32 +25,45 @@ const ActivityFeed = () => {
         return;
       }
 
-      if (pageNum === 1) {
-        setLoading(true);
-      } else {
-        setLoadingMore(true);
-      }
+      setLoading(true);
+      setError(null);
 
-      const url = `${API_BASE_URL}/posts/feed?page=${pageNum}&limit=20&status=published`;
+      const aggregatedPosts = [];
+      const visitedPostIds = new Set();
+      let currentPage = 1;
+      let totalPages = 1;
+      let encounteredError = false;
 
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-      });
+      while (currentPage <= totalPages) {
+        const url = `${API_BASE_URL}/posts/feed?page=${currentPage}&limit=${FEED_PAGE_SIZE}&status=published`;
 
-      const result = await response.json();
+        const response = await fetch(url, {
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+        });
 
-      if (result.success) {
-        // Fetch tags for posts if not included in response
+        const result = await response.json();
+
+        if (!response.ok || !result.success) {
+          const detail = result?.detail;
+          const readableError = Array.isArray(detail)
+            ? detail.map(d => d?.msg || d).join(', ')
+            : typeof detail === 'string'
+              ? detail
+              : 'Failed to load feed';
+          setError(readableError);
+          encounteredError = true;
+          break;
+        }
+
         const publishedPosts = (result.posts || []).filter(post => post.status === 'published' || !post.status);
-        const postsWithTags = await Promise.all(
-          publishedPosts.map(async (post) => {
-            if (post.tags && Array.isArray(post.tags) && post.tags.length > 0) {
-              return post;
-            }
-            
-            // Fetch tags for this post from Supabase
+
+        for (const post of publishedPosts) {
+          if (visitedPostIds.has(post.id)) continue;
+          visitedPostIds.add(post.id);
+
+          if (!post.tags || !Array.isArray(post.tags) || post.tags.length === 0) {
             try {
               const { data: postTags, error: tagsError } = await supabase
                 .from('post_tags')
@@ -66,45 +78,55 @@ const ActivityFeed = () => {
                 .eq('post_id', post.id);
 
               if (!tagsError && postTags) {
-                return {
-                  ...post,
-                  tags: postTags.map(pt => ({
-                    id: pt.tags?.id || pt.tag_id,
-                    name: pt.tags?.name,
-                    tag_id: pt.tag_id,
-                    tag: pt.tags
-                  }))
-                };
+                post.tags = postTags.map(pt => ({
+                  id: pt.tags?.id || pt.tag_id,
+                  name: pt.tags?.name,
+                  usage_count: pt.tags?.usage_count,
+                  tag_id: pt.tag_id,
+                  tag: pt.tags
+                }));
+              } else {
+                post.tags = [];
               }
             } catch (err) {
               console.error(`Error fetching tags for post ${post.id}:`, err);
+              post.tags = [];
             }
-            
-            return { ...post, tags: [] };
-          })
-        );
+          }
 
-        if (append) {
-          setPosts(prev => [...prev, ...postsWithTags]);
-        } else {
-          setPosts(postsWithTags);
+          aggregatedPosts.push(post);
         }
-        setHasMore(result.pagination.page < result.pagination.total_pages);
-      } else {
-        setError(result.detail || 'Failed to load feed');
+
+        const pagination = result.pagination || {};
+        totalPages = pagination.total_pages || currentPage;
+        if (currentPage >= totalPages) break;
+        currentPage += 1;
+      }
+
+      if (!encounteredError) {
+        const sortedPosts = aggregatedPosts.sort((a, b) => {
+          const dateA = new Date(a.created_at || 0).getTime();
+          const dateB = new Date(b.created_at || 0).getTime();
+          return dateB - dateA;
+        });
+
+        setPosts(sortedPosts);
+
+        if (sortedPosts.length === 0) {
+          setError('No posts found in your feed.');
+        }
       }
     } catch (err) {
       console.error('Error fetching feed:', err);
       setError('Failed to load feed. Please try again.');
     } finally {
       setLoading(false);
-      setLoadingMore(false);
     }
   }, []);
 
   // Initial load
   useEffect(() => {
-    fetchFeed(1, false);
+    fetchFeed();
   }, [fetchFeed]);
 
   // Handle tag click - navigate to search page with tag filter
@@ -138,7 +160,7 @@ const ActivityFeed = () => {
               if (payload.new?.status && payload.new.status !== 'published') {
                 return;
               }
-              fetchFeed(1, false);
+              fetchFeed();
             }
           )
           .subscribe();
@@ -318,15 +340,6 @@ const ActivityFeed = () => {
     }
   };
 
-  // Load more
-  const loadMore = () => {
-    if (!loadingMore && hasMore) {
-      const nextPage = page + 1;
-      setPage(nextPage);
-      fetchFeed(nextPage, true);
-    }
-  };
-
   if (loading) {
     return (
       <div className="text-center py-20">
@@ -344,7 +357,7 @@ const ActivityFeed = () => {
         </div>
         <p className="text-red-500 mb-4 text-lg">{error}</p>
         <button
-          onClick={() => fetchFeed(1, false)}
+          onClick={fetchFeed}
           className="px-6 py-3 text-white rounded-xl transition-all shadow-lg"
           style={{
             backgroundColor: '#6057C7',
@@ -407,28 +420,6 @@ const ActivityFeed = () => {
             />
           ))}
 
-          {/* Load More Button */}
-          {hasMore && (
-            <div className="text-center pt-4">
-              <button
-                onClick={loadMore}
-                disabled={loadingMore}
-                className="px-8 py-3 text-white rounded-xl transition-all font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{
-                  backgroundColor: '#6057C7',
-                  color: '#F9F5EB'
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.backgroundColor = '#2F2867';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.backgroundColor = '#6057C7';
-                }}
-              >
-                {loadingMore ? 'Loading...' : 'Load More Posts'}
-              </button>
-            </div>
-          )}
         </>
       ) : null}
     </div>
