@@ -1,5 +1,9 @@
 import { toast } from "@/hooks/use-toast";
 import { useState } from "react";
+import { getSupabaseAuthorizedtoken } from "@/assets/supabaseClient";
+
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
 // Interface defining the structure of video data returned from Pexels API
 interface PexelsVideo {
@@ -34,11 +38,18 @@ export function usePexelsVideos() {
       // - per_page: number of results to return
       // - size: size of videos to fetch
       // - orientation: aspect ratio of videos
+      const token = await getSupabaseAuthorizedtoken();
+      if (!token) {
+        throw new Error("Missing Supabase auth token.");
+      }
+
       const response = await fetch(
-        `https://api.pexels.com/videos/search?query=${query}&per_page=200&size=medium`,
+        `${API_BASE_URL}/visuals/stock/videos?query=${encodeURIComponent(
+          query
+        )}&per_page=50&size=medium`,
         {
           headers: {
-            Authorization: import.meta.env.VITE_PEXELS_API_KEY || "",
+            Authorization: `Bearer ${token}`,
           },
         }
       );
@@ -48,14 +59,13 @@ export function usePexelsVideos() {
         throw new Error(`HTTP error! status: ${response.status}`);
 
       const data = await response.json();
-      setVideos(data.videos);
+      setVideos(data.videos || []);
     } catch (error) {
       // Log error and show user-friendly toast notification
       console.error("Error fetching Pexels media:", error);
       toast({
         title: "Error fetching media",
-        description:
-          "Failed to fetch media. Have you added your own Pexels API key?",
+        description: "Failed to fetch stock videos. Please try again.",
         variant: "destructive",
       });
     } finally {

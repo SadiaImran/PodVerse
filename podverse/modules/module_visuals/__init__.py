@@ -1,0 +1,2 @@
+# Visuals module package initializer
+

@@ -57,6 +57,7 @@ export const LocalMediaProvider: React.FC<{ children: React.ReactNode }> = ({
           name: item.name,
           type: item.type,
           path: item.serverPath,
+          storagePath: item.storagePath,
           size: item.size,
           lastModified: item.lastModified,
           thumbnail: item.thumbnail,
@@ -90,6 +91,7 @@ export const LocalMediaProvider: React.FC<{ children: React.ReactNode }> = ({
           name: mediaItem.name,
           type: mediaItem.type,
           path: mediaItem.serverPath,
+          storagePath: mediaItem.storagePath,
           size: mediaItem.size,
           lastModified: mediaItem.lastModified,
           thumbnail: mediaItem.thumbnail || "",
@@ -131,7 +133,9 @@ export const LocalMediaProvider: React.FC<{ children: React.ReactNode }> = ({
 
         if (fileToRemove) {
           // Delete from server
-          await deleteMediaFile(userId, fileToRemove.path);
+          if (fileToRemove.storagePath) {
+            await deleteMediaFile(userId, fileToRemove.storagePath);
+          }
 
           // Delete from IndexedDB
           await deleteFromIndexDB(id);
@@ -153,7 +157,9 @@ export const LocalMediaProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       // Delete all files from server
       for (const file of localMediaFiles) {
-        await deleteMediaFile(userId, file.path);
+        if (file.storagePath) {
+          await deleteMediaFile(userId, file.storagePath);
+        }
       }
 
       // Clear IndexedDB

@@ -12,6 +12,9 @@ import { getSupabaseAuthorizedtoken } from "@/assets/supabaseClient";
 import { useEditorContext } from "../../contexts/editor-context";
 import axios from "axios";
 
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+
 /**
  * Interface representing a single video render attempt
  * @property {string} url - URL of the rendered video (if successful)
@@ -200,8 +203,8 @@ const RenderControls: React.FC<RenderControlsProps> = ({
   saveProject,
   renderType = "ssr",
 }) => {
-  // Get projectId from editor context
-  const { projectId } = useEditorContext();
+  // Get project data from editor context
+  const { projectId, overlays } = useEditorContext();
   
   // Store multiple renders
   const [renders, setRenders] = React.useState<RenderItem[]>([]);
@@ -462,6 +465,53 @@ const RenderControls: React.FC<RenderControlsProps> = ({
     document.body.removeChild(a);
   }, [renderType]);
 
+  const cleanedVisualsRef = React.useRef<Set<string>>(new Set());
+
+  const gatherVisualStoragePaths = React.useCallback(() => {
+    if (!overlays?.length) {
+      return [];
+    }
+    const pendingPaths: string[] = [];
+    overlays.forEach((overlay) => {
+      if (
+        overlay.sourceStoragePath &&
+        !cleanedVisualsRef.current.has(overlay.sourceStoragePath)
+      ) {
+        pendingPaths.push(overlay.sourceStoragePath);
+      }
+    });
+    return pendingPaths;
+  }, [overlays]);
+
+  const cleanupVisualsBucket = React.useCallback(async () => {
+    const pathsToDelete = gatherVisualStoragePaths();
+    if (!pathsToDelete.length) {
+      return;
+    }
+
+    try {
+      const token = await getSupabaseAuthorizedtoken();
+      await fetch(`${API_BASE_URL}/visuals/cleanup`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ paths: pathsToDelete }),
+      });
+
+      pathsToDelete.forEach((path) =>
+        cleanedVisualsRef.current.add(path)
+      );
+      console.log(
+        "[Visuals Cleanup] Removed temporary visuals:",
+        pathsToDelete.length
+      );
+    } catch (error) {
+      console.error("[Visuals Cleanup] Failed to remove visuals", error);
+    }
+  }, [gatherVisualStoragePaths]);
+
   const handleDownloadWithUpload = React.useCallback(
     async (render: RenderItem) => {
       if (!render?.url) {
@@ -536,11 +586,12 @@ const RenderControls: React.FC<RenderControlsProps> = ({
         setUploadedVideoUrl(videoUrl);
         setUploadedThumbnailUrl(thumbnailUrl || null);
         setShowPostModal(true);
+        cleanupVisualsBucket();
       }
 
       handleDownload(render.url);
     },
-    [projectId, uploadVideoToSupabase, handleDownload]
+    [projectId, uploadVideoToSupabase, handleDownload, cleanupVisualsBucket]
   );
 
   // Add new render to the list when completed

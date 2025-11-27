@@ -21,6 +21,7 @@ export interface UserMediaItem {
   name: string;
   type: 'video' | 'image' | 'audio';
   serverPath: string;
+  storagePath?: string;
   size: number;
   lastModified: number;
   thumbnail?: string;

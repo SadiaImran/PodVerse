@@ -39,6 +39,8 @@ export const LocalMediaPanel: React.FC = () => {
 
     let newOverlay: Overlay;
 
+    const sourceStoragePath = file.storagePath;
+
     if (file.type === "video") {
       newOverlay = {
         left: 0,
@@ -61,6 +63,7 @@ export const LocalMediaPanel: React.FC = () => {
           transform: "none",
           objectFit: "cover",
         },
+        sourceStoragePath,
       };
     } else if (file.type === "image") {
       newOverlay = {
@@ -84,6 +87,7 @@ export const LocalMediaPanel: React.FC = () => {
             exit: "fadeOut",
           },
         },
+        sourceStoragePath,
       };
     } else if (file.type === "audio") {
       newOverlay = {
@@ -103,6 +107,7 @@ export const LocalMediaPanel: React.FC = () => {
         styles: {
           volume: 1,
         },
+        sourceStoragePath,
       };
     } else {
       return; // Unsupported file type

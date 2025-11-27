@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Search, Upload } from "lucide-react";
+import { Search, Upload, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
@@ -11,6 +11,8 @@ import { useAspectRatio } from "../../../hooks/use-aspect-ratio";
 import { useTimeline } from "../../../contexts/timeline-context";
 import { ClipOverlay, Overlay, OverlayType } from "../../../types";
 import { VideoDetails } from "./video-details";
+import { useLocalMedia } from "../../../contexts/local-media-context";
+import { toast } from "@/hooks/use-toast";
 
 const POPULAR_VIDEO_CATEGORIES = ["Nature", "Technology", "Business", "People", "Abstract"];
 
@@ -58,6 +60,8 @@ export const VideoOverlayPanel: React.FC = () => {
   const { getAspectRatioDimensions } = useAspectRatio();
   const { visibleRows } = useTimeline();
   const [localOverlay, setLocalOverlay] = useState<Overlay | null>(null);
+  const { addMediaFile } = useLocalMedia();
+  const [isUploadingLocalVideo, setIsUploadingLocalVideo] = useState(false);
 
   useEffect(() => {
     if (selectedOverlayId === null) {
@@ -140,53 +144,59 @@ export const VideoOverlayPanel: React.FC = () => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    const file = files[0];
-    const videoUrl = URL.createObjectURL(file);
+    try {
+      setIsUploadingLocalVideo(true);
+      const mediaFile = await addMediaFile(files[0]);
+      if (!mediaFile) {
+        throw new Error("Failed to upload video");
+      }
 
-    // Calculate duration
-    const video = document.createElement("video");
-    video.src = videoUrl;
-    await new Promise((resolve, reject) => {
-      video.onloadedmetadata = () => resolve(null);
-      video.onerror = reject;
-    });
+      const { width, height } = getAspectRatioDimensions();
+      const { from, row } = findNextAvailablePosition(
+        overlays,
+        visibleRows,
+        durationInFrames
+      );
 
-    const duration = video.duration;
-    const { width, height } = getAspectRatioDimensions();
-    const { from, row } = findNextAvailablePosition(
-      overlays,
-      visibleRows,
-      durationInFrames
-    );
+      const newOverlay: Overlay = {
+        left: 0,
+        top: 0,
+        width,
+        height,
+        durationInFrames: mediaFile.duration
+          ? Math.round(mediaFile.duration * 30)
+          : 200,
+        from,
+        id: Date.now(),
+        rotation: 0,
+        row,
+        isDragging: false,
+        type: OverlayType.VIDEO,
+        content: mediaFile.name,
+        src: mediaFile.path,
+        videoStartTime: 0,
+        styles: {
+          opacity: 1,
+          zIndex: 100,
+          transform: "none",
+          objectFit: "cover",
+        },
+        sourceStoragePath: mediaFile.storagePath,
+      };
 
-    const newOverlay: Overlay = {
-      left: 0,
-      top: 0,
-      width,
-      height,
-      durationInFrames: Math.floor(duration * 30),
-      from,
-      id: Date.now(),
-      rotation: 0,
-      row,
-      isDragging: false,
-      type: OverlayType.VIDEO,
-      content: file.name,
-      src: videoUrl,
-      videoStartTime: 0,
-      styles: {
-        opacity: 1,
-        zIndex: 100,
-        transform: "none",
-        objectFit: "cover",
-      },
-    };
-
-    addOverlay(newOverlay);
-
-    // Reset file input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+      addOverlay(newOverlay);
+    } catch (error) {
+      console.error("Error uploading local video:", error);
+      toast({
+        title: "Upload failed",
+        description: "Could not upload the selected video. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+      setIsUploadingLocalVideo(false);
     }
   };
 
@@ -227,10 +237,15 @@ export const VideoOverlayPanel: React.FC = () => {
             </form>
             <Button
               onClick={() => fileInputRef.current?.click()}
-              className="w-full bg-gradient-to-r from-purple-600 via-purple-500 to-purple-400 hover:from-purple-500 hover:via-purple-400 hover:to-purple-300 text-white shadow-md hover:shadow-lg h-8 px-3 text-sm"
+              disabled={isUploadingLocalVideo}
+              className="w-full bg-gradient-to-r from-purple-600 via-purple-500 to-purple-400 hover:from-purple-500 hover:via-purple-400 hover:to-purple-300 text-white shadow-md hover:shadow-lg h-8 px-3 text-sm disabled:opacity-60"
             >
-              <Upload className="h-3.5 w-3.5 mr-1.5" />
-              Upload Video
+              {isUploadingLocalVideo ? (
+                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              ) : (
+                <Upload className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              {isUploadingLocalVideo ? "Uploading..." : "Upload Video"}
             </Button>
             <input
               ref={fileInputRef}

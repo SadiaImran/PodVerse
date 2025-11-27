@@ -15,6 +15,7 @@ from module_video_generation.module_podcast_processing import router as podcast_
 from module_social_media.routes import router as social_media_router
 from module_admin.module_admin_route import router as admin_router
 from module_subscription.subscription_route import router as subscription_router
+from module_visuals.module_visuals_route import router as visuals_router
 from fastapi.staticfiles import StaticFiles
 
 import tempfile
@@ -58,6 +59,7 @@ app.include_router(video_router, prefix="/video", tags=["video"])  # HeyGen endp
 app.include_router(podcast_router, prefix="/video", tags=["video"])  # Podcast processing endpoints
 app.include_router(video_router, prefix="/videos", tags=["video"])  # Supabase endpoints: /videos/upload, /videos/list
 app.include_router(subscription_router)
+app.include_router(visuals_router, prefix="", tags=["visuals"])
 
 app.mount("/output", StaticFiles(directory="module_voice_clone/output"), name="output")
 
