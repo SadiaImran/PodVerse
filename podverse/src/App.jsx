@@ -28,13 +28,14 @@ import AdminSubscriptions from './assets/screens/admin/screen-admin-subscription
 import ScreenPodcastFeedback from './assets/screens/screen-podcast-feedback';
 import SubscriptionPage from './assets/screens/screen-subscription';
 import SubscriptionSuccessPage from './assets/screens/screen-subscription-success';
+import LandingPage from './assets/screens/screen-landing';
 
 function App() {
   return (
     <AuthProvider>
       <Router>
         <Routes>
-          <Route path="/" element={<SignInScreenEmail />} />
+          <Route path="/" element={<LandingPage />} />
           <Route path="/signin-email" element={<SignInScreenEmail />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password/:token" element={<ResetPassword />} />
