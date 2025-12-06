@@ -18,8 +18,8 @@ import tempfile
 import re
 from typing import Dict, Optional, List
 from dotenv import load_dotenv
-from gradio_client import Client
 import requests
+import google.generativeai as genai
 
 from connection_supabase_client import (
     get_authenticated_supabase_client,
@@ -32,16 +32,17 @@ router = APIRouter()
 # ========= CONFIGURATION =========
 load_dotenv()
 
-TOGETHER_API_KEY = os.environ.get("TOGETHER_API_KEY")
-TOGETHER_API_URL = "https://api.together.xyz/v1/chat/completions"
-TOGETHER_MODEL = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
+# Setup Gemini
+GOOGLE_API_KEY = os.environ.get("GEMINI_API_KEY")
+if GOOGLE_API_KEY:
+    genai.configure(api_key=GOOGLE_API_KEY)
+
+# Use Gemini 2.0 Flash Lite Preview for best speed/cost
+GEMINI_MODEL_NAME = "gemini-2.0-flash-lite-preview-02-05" 
 
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 100
-
-# Global client variable for LLM
-client = None
 
 # Small talk patterns
 SMALL_TALK_PATTERNS: Dict[str, str] = {
@@ -51,54 +52,36 @@ SMALL_TALK_PATTERNS: Dict[str, str] = {
 }
 
 # ========= LLM SETUP =========
-def make_llm_hf(query: str, temperature=0.1, max_tokens=512):
-    """Use Hugging Face LLM for document Q&A"""
-    global client
-    if not client:
-        client = get_gradio_client()
-    try:
-        result = client.predict(
-            message=query,
-            api_name="/chat"
-        )
-        return result
-    except Exception as e:
-        print(f"❌ Hugging Face LLM Error: {e}")
-        return "I'm sorry, I couldn't process your request right now."
-
-def make_llm_together(query: str, temperature=0.1, max_tokens=512):
-    """Use Together API for generating responses"""
-    if not TOGETHER_API_KEY:
-        print("❌ TOGETHER_API_KEY not found in environment")
+def make_llm_gemini(query: str, temperature=0.1, max_tokens=1000, model_name=None):
+    """Use Gemini API for generating responses (replaces Together AI & HF)"""
+    if not GOOGLE_API_KEY:
+        print("❌ GEMINI_API_KEY not found in environment")
         return "I'm sorry, I couldn't process your request right now."
     
     try:
-        response = requests.post(
-            TOGETHER_API_URL,
-            headers={
-                "Authorization": f"Bearer {TOGETHER_API_KEY}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "model": TOGETHER_MODEL,
-                "messages": [{"role": "user", "content": query}],
-                "max_tokens": max_tokens,
-                "temperature": temperature
-            },
-            timeout=30
+        model = genai.GenerativeModel(model_name or GEMINI_MODEL_NAME)
+        generation_config = genai.types.GenerationConfig(
+            temperature=temperature,
+            max_output_tokens=max_tokens,
         )
         
-        if response.status_code == 200:
-            result = response.json()
-            return result["choices"][0]["message"]["content"]
+        response = model.generate_content(
+            query,
+            generation_config=generation_config
+        )
+        
+        if response.text:
+            return response.text
         else:
-            print(f"❌ Together API Error: {response.status_code} - {response.text}")
-            return "I'm sorry, I couldn't process your request right now."
+            return "I'm sorry, I couldn't generate a response."
             
     except Exception as e:
-        print(f"❌ Together API Error: {e}")
+        print(f"❌ Gemini API Error: {e}")
+        # Fallback to 1.5 Flash if 2.0 Lite fails/not available
+        if model_name != "gemini-1.5-flash":
+            print("🔄 Retrying with gemini-1.5-flash...")
+            return make_llm_gemini(query, temperature, max_tokens, "gemini-1.5-flash")
         return "I'm sorry, I couldn't process your request right now."
-
 
 # Standard Q&A prompt
 SAFE_PROMPT = PromptTemplate(
@@ -808,11 +791,11 @@ async def generate_response(
             for row in candidate_rows
         ]
 
-        # Use Hugging Face LLM instead of Together API
+        # Use Gemini for Response Generation
         context_text = "\n\n".join([doc.page_content for doc in retrieved_documents])
         full_query = f"Context: {context_text}\n\nQuestion: {q}\n\nAnswer based on the context:"
         
-        answer = make_llm_hf(full_query, temperature=0.1, max_tokens=512)
+        answer = make_llm_gemini(full_query, temperature=0.1, max_tokens=512)
         answer = polish_answer(answer)
 
         sources = [
@@ -1026,7 +1009,7 @@ async def get_conversation_flow(
     Generate a structured conversation flow with topics and questions
     based on the user's knowledge base content.
     ADAPTIVE: More topics for longer documents, covering content sequentially.
-    Uses only togther LLM.
+    Uses Gemini LLM for superior speed.
     """
     try:
         service_client = get_service_role_client()
@@ -1140,10 +1123,10 @@ Here's the content:
 Create podcast questions that explore ONLY what's in this content. Be specific and reference the actual material.
 """
         
-        # Try Together LLM
+        # Try Gemini LLM
         try:
-            print("🤖 Using Together LLM for flow generation...")
-            response = make_llm_together(flow_prompt, temperature=0.3, max_tokens=3000)
+            print("🤖 Using Gemini LLM for flow generation...")
+            response = make_llm_gemini(flow_prompt, temperature=0.3, max_tokens=3000)
             
             # Clean up response
             cleaned = response.strip()
@@ -1160,20 +1143,20 @@ Create podcast questions that explore ONLY what's in this content. Be specific a
             
             # Validate structure
             if "topics" in flow_data and len(flow_data["topics"]) >= num_topics - 2:
-                print(f"✅ Flow generated via Together: {len(flow_data['topics'])} topics")
+                print(f"✅ Flow generated via Gemini: {len(flow_data['topics'])} topics")
                 return {
                     "flow": flow_data, 
                     "success": True, 
-                    "method": "together", 
+                    "method": "gemini", 
                     "doc_size": total_words,
                     "coverage": f"{len(flow_data['topics'])} topics covering {total_chunks} chunks"
                 }
             else:
-                print(f"⚠️ Together response has {len(flow_data.get('topics', []))} topics, expected {num_topics}")
+                print(f"⚠️ Gemini response has {len(flow_data.get('topics', []))} topics, expected {num_topics}")
                 raise ValueError("Insufficient topics generated")
                 
-        except Exception as together_error:
-            print(f"⚠️ Together flow generation failed: {together_error}")
+        except Exception as gemini_error:
+            print(f"⚠️ Gemini flow generation failed: {gemini_error}")
             print(f"   Raw response: {response[:500] if 'response' in locals() else 'No response'}")
         
         # SEQUENTIAL FALLBACK - Divide document into equal sections
@@ -1416,7 +1399,7 @@ Create the conversation now, discussing ONLY what is covered in the knowledge ba
         # ------------------------------------------------ #
 
         print(f"[script-gen] Calling LLM with {config['max_tokens']} max tokens (STRICT RAG mode)")
-        script_text = make_llm_together(prompt, temperature=0.3, max_tokens=config['max_tokens'])  # Lower temp for more factual
+        script_text = make_llm_gemini(prompt, temperature=0.3, max_tokens=config['max_tokens'])  # Lower temp for more factual
         
         if not script_text or len(script_text) < 50:
             return {

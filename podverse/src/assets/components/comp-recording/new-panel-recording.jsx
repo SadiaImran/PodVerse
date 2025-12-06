@@ -1601,7 +1601,7 @@ const fetchLiveKitToken = async () => {
                           }>
                             {/* Speaker name */}
                             <div className={`text-sm font-semibold mb-1 ${
-                              isUser ? 'text-purple-100' : 
+                              isUser ? 'text-white' : 
                               entry.isSystem ? 'text-yellow-700' :
                               isAI ? 'text-blue-700' : 'text-gray-600'
                             }`}>
@@ -1609,7 +1609,7 @@ const fetchLiveKitToken = async () => {
                                entry.isSystem ? 'System' :
                                isAI ? aiAgentName : entry.speaker}
                             </div>
-                            <p className="text-base leading-relaxed">
+                            <p className={`text-base leading-relaxed ${isUser ? 'text-white' : 'text-gray-800'}`}>
                               {entry.text}
                             </p>
                           </div>

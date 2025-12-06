@@ -716,18 +716,21 @@ async def entrypoint_host(ctx: agents.JobContext):
             init_instruction = f"""{KB_STRICT_PREFIX}
 You are PODHOST starting a podcast interview about "{doc_title}".
 
-Context from the document:
+Context from the uploaded material:
 {initial_context[:1000] if initial_context else "Opening the conversation..."}
 
-Your opening should:
-1. Greet the guest warmly (one sentence)
-2. Briefly mention you'll be exploring "{doc_title}" (one sentence)
-3. Give a 1-2 sentence teaser based on the context above
-4. Ask this opening question naturally: "{first_question}"
+Your opening MUST follow this structure:
+1. Greet the guest warmly and introduce yourself (e.g., "Welcome! I'm [Name]...")
+2. Briefly mention the exciting topic you'll be exploring today ("{doc_title}")
+3. Give a short, intriguing teaser based on the context above (1 sentence)
+4. Transition smoothly into this first question: "{first_question}"
 
-Make it sound like a real podcast opening - enthusiastic but not over the top.
-DO NOT mention "documents", "uploads", or "chunks" - just reference "your work" or "your project".
-REMEMBER: Only ask about content that's in their document. Do not speculate or add external knowledge."""
+CRITICAL STYLE RULES:
+- Sound like a professional yet warm podcast host.
+- NEVER use the words "document", "file", "pdf", "upload", or "chunks".
+- Instead, refer to "your work", "your research", "your project", or "Stackware".
+- Do not say "According to..." or "The text states...". Just state the facts naturally.
+- Keep the intro under 4 sentences total."""
 
         else:
             print("⚠️ Flow exists but no questions found")
