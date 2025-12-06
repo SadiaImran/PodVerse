@@ -69,6 +69,34 @@ const mergeAudioBlobs = async (audioBlobs, filenames) => {
   return response.blob();
 };
 
+const downloadAudioAsBlob = async (url) => {
+  const response = await fetch(url);
+  const blob = await response.blob();
+  return blob;
+};
+
+const uploadAudioToBackend = async (blob, filename, endpoint, formData = {}) => {
+  const safeName = buildSanitizedFileName(filename || 'track.wav');
+  const file = new File([blob], safeName, { type: blob.type || 'audio/wav' });
+  const form = new FormData();
+  form.append('file', file);
+  
+  Object.entries(formData).forEach(([key, value]) => {
+      form.append(key, value);
+  });
+  
+  const response = await fetch(`${AUDIO_EDIT_API}${endpoint}`, {
+      method: 'POST',
+      body: form,
+  });
+  
+  if (!response.ok) {
+      throw new Error(`Backend error: ${response.statusText}`);
+  }
+  
+  return response.blob();
+};
+
 const AudioEditor = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -725,6 +753,81 @@ const AudioEditor = () => {
     };
   }, [finalizedAudioUrl]);
 
+  // Handle Magic Silence Removal
+  const handleRemoveSilence = useCallback(async (trackId) => {
+    const track = audioClips.find(t => t.id === trackId);
+    if (!track) return;
+
+    const friendlyName = getFriendlyTrackName(track.name || track.originalName, 'Track');
+    const fallbackPrefix = friendlyName.replace(/\s+/g, '_').toLowerCase() || 'track';
+
+    // Notification
+    const loadingNotif = document.createElement('div');
+    loadingNotif.textContent = `Removing silence from ${friendlyName}...`;
+    loadingNotif.className = 'fixed top-4 right-4 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+    document.body.appendChild(loadingNotif);
+
+    try {
+      // Download original audio
+      const audioBlob = await downloadAudioAsBlob(track.url);
+      
+      // Send to backend
+      const processedBlob = await uploadAudioToBackend(
+        audioBlob,
+        buildSanitizedFileName(`${friendlyName}.wav`, fallbackPrefix),
+        '/remove-silence',
+        { threshold: -40, duration: 0.5 }
+      );
+
+      // Create new track object
+      const newUrl = URL.createObjectURL(processedBlob);
+      
+      // Get new duration
+      const audio = new Audio(newUrl);
+      await new Promise(resolve => {
+        audio.addEventListener('loadedmetadata', () => resolve());
+      });
+      const newDuration = audio.duration;
+
+      // Update audio clips
+      setAudioClips(prev => prev.map(t => {
+        if (t.id === trackId) {
+          return {
+            ...t,
+            url: newUrl,
+            duration: newDuration,
+            name: `${t.name} (Cleaned)`,
+            displayName: `${t.displayName} (Cleaned)`
+          };
+        }
+        return t;
+      }));
+
+      // Refresh buffers
+      try {
+        const arrayBuffer = await processedBlob.arrayBuffer();
+        const audioContext = new AudioContext();
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+        setAudioBuffers(prev => ({ ...prev, [trackId]: audioBuffer }));
+      } catch (e) {
+        console.error("Buffer update failed:", e);
+      }
+
+      // Success notification
+      document.body.removeChild(loadingNotif);
+      const notification = document.createElement('div');
+      notification.textContent = 'Silence removed successfully!';
+      notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+      document.body.appendChild(notification);
+      setTimeout(() => document.body.removeChild(notification), 3000);
+
+    } catch (error) {
+      console.error("Silence removal failed:", error);
+      document.body.removeChild(loadingNotif);
+      alert('Failed to remove silence: ' + error.message);
+    }
+  }, [audioClips]);
+
   return (
     <BaseLayout homeScreen={false} autoCollapse={true}>
       <div className="min-h-screen bg-gray-50">
@@ -754,6 +857,7 @@ const AudioEditor = () => {
             onFinalizeAudio={handleFinalizeAudio}
             isFinalizing={isFinalizing}
             canFinalize={audioClips.length > 0}
+            onRemoveSilence={handleRemoveSilence} 
           />
         </div>
 

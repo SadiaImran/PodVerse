@@ -11,7 +11,8 @@ import {
     Download,
     RotateCcw,
     Trash2,
-    Check
+    Check,
+    Wand2
 } from 'lucide-react';
 
 const API_BASE_URL = 'http://localhost:8000/audio-edit';
@@ -79,7 +80,7 @@ const uploadAudioToBackend = async (blob, filename, endpoint, formData = {}) => 
     return response.blob();
 };
 
-const TrackEditPanel = ({ track, isVisible, onClose, onUpdate, onDuplicate, onDelete, onExport, onReset }) => {
+const TrackEditPanel = ({ track, isVisible, onClose, onUpdate, onDuplicate, onDelete, onExport, onReset, onRemoveSilence }) => {
     const [localSettings, setLocalSettings] = useState({
         volume: 100,
         speed: 1.0,
@@ -521,6 +522,17 @@ const TrackEditPanel = ({ track, isVisible, onClose, onUpdate, onDuplicate, onDe
                 )}
 
                 {/* Action Buttons */}
+                <div className="space-y-3 pt-4 border-t border-gray-200">
+                    <h4 className="font-medium text-gray-900">Magic Tools</h4>
+                    <button 
+                        onClick={() => onRemoveSilence && onRemoveSilence(track.id)}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-lg transition-all duration-200 shadow-md hover:shadow-lg group"
+                    >
+                        <Wand2 className="w-4 h-4 group-hover:rotate-12 transition-transform" />
+                        Auto Remove Silence
+                    </button>
+                </div>
+
                 <div className="space-y-3 pt-4 border-t border-gray-200">
                     <h4 className="font-medium text-gray-900">Actions</h4>
                     <div className="grid grid-cols-2 gap-2">

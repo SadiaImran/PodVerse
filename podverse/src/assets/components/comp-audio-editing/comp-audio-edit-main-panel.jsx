@@ -604,7 +604,8 @@ export const MainPanel = ({
   setZoom: externalSetZoom,
   onFinalizeAudio,
   isFinalizing = false,
-  canFinalize = false
+  canFinalize = false,
+  onRemoveSilence
 }) => {
   const [internalIsPlaying, setInternalIsPlaying] = useState(false);
   const [internalCurrentTime, setInternalCurrentTime] = useState(0);
@@ -1076,6 +1077,7 @@ export const MainPanel = ({
         onDelete={removeTrack}
         onExport={handleExportTrack}
         onReset={handleResetTrack}
+        onRemoveSilence={onRemoveSilence}
       />
 
       {/* Main Content */}
