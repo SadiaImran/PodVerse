@@ -44,6 +44,18 @@ EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 100
 
+# GLOBAL EMBEDDING MODEL (Load once)
+# This prevents reloading the model on every request, significantly reducing latency
+_GLOBAL_EMBEDDINGS = None
+
+def get_embeddings_model():
+    global _GLOBAL_EMBEDDINGS
+    if _GLOBAL_EMBEDDINGS is None:
+        print("📥 Loading embedding model (once)...")
+        _GLOBAL_EMBEDDINGS = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+        print("✅ Embedding model loaded.")
+    return _GLOBAL_EMBEDDINGS
+
 # Small talk patterns
 SMALL_TALK_PATTERNS: Dict[str, str] = {
     r"^\s*(hi|hello|hey)(?:\s+how\s+are\s+you)?\b": "Hi there! Thanks for having me on the show, I'm doing fantastic! How about you?",
@@ -342,7 +354,7 @@ async def upload_knowledge_base(
                     })
 
                 # Generate embeddings and store
-                embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+                embeddings = get_embeddings_model()
                 vectors = embeddings.embed_documents([c.page_content for c in chunks])
 
                 rows = [
@@ -454,7 +466,7 @@ async def add_url_knowledge_base(
             })
 
         # Generate embeddings
-        embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+        embeddings = get_embeddings_model()
         vectors = embeddings.embed_documents([c.page_content for c in chunks])
 
         # Store in documents table with kb_id
@@ -557,7 +569,7 @@ async def process_existing_document(
                 "user_id": user_id
             })
 
-        embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+        embeddings = get_embeddings_model()
         vectors = embeddings.embed_documents([c.page_content for c in chunks])
 
         rows = [
@@ -680,7 +692,7 @@ async def generate_response(
             print(f"[respond] Error checking documents: {e}")
 
         # Retrieve relevant documents
-        embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+        embeddings = get_embeddings_model()
         query_vector = embeddings.embed_query(q)
 
         candidate_rows = []
@@ -828,7 +840,11 @@ async def internal_respond(
     """
     Internal endpoint for agent to query knowledge base - returns only answer text.
     Uses service role client (no auth required).
+    OPTIMIZED: Uses RPC and ThreadPool for speed.
     """
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+    
     try:
         start_time = time.time()
         service_client = get_service_role_client()
@@ -836,7 +852,7 @@ async def internal_respond(
 
         print(f"[internal/respond] 🔍 Processing query: {q[:60]}... for user={user_id}, kb_id={kb_id}")
 
-        # 1️⃣ Handle small talk
+        # 1️⃣ Handle small talk (Fastest)
         smalltalk = detect_small_talk(q)
         if smalltalk:
             return {"answer_text": smalltalk}
@@ -845,7 +861,69 @@ async def internal_respond(
         is_initial_query = any(phrase in q.lower() for phrase in ["what is this document about", "tell me about the document", "what is this about"])
         if is_initial_query:
             print(f"[internal/respond] 🚀 Fast initial context query detected")
-            # Use smaller limit for faster response
+            fallback_query = (
+                service_client.table("documents")
+                .select("content")
+                .eq("user_id", user_id)
+            )
+            if kb_id:
+                fallback_query = fallback_query.eq("kb_id", kb_id)
+            
+            fallback = fallback_query.limit(3).execute()
+            if fallback.data:
+                context_text = "\n\n".join([doc["content"][:800] for doc in fallback.data])
+                return {"answer_text": context_text}
+
+        # 2️⃣ Get embeddings for query (Run in thread to avoid blocking)
+        embeddings = get_embeddings_model()
+        loop = asyncio.get_running_loop()
+        
+        # Run CPU-bound embedding generation in a separate thread
+        with ThreadPoolExecutor() as pool:
+            query_vector = await loop.run_in_executor(pool, embeddings.embed_query, q)
+
+        # 3️⃣ USE RPC (Server-side Vector Search) - Much Faster than manual Python loop
+        candidate_rows = []
+        try:
+            rpc_params = {
+                "query_embedding": query_vector,
+                "match_count": 5,
+                "filter_user_id": user_id
+            }
+            # Call Supabase RPC
+            rpc_result = service_client.rpc("match_documents_simple", rpc_params).execute()
+            
+            if rpc_result.data:
+                # Filter by kb_id if provided
+                if kb_id:
+                    candidate_rows = [row for row in rpc_result.data if row.get("kb_id") == kb_id]
+                else:
+                    candidate_rows = rpc_result.data
+                print(f"[internal/respond] ✅ RPC search successful: {len(candidate_rows)} results")
+        except Exception as rpc_error:
+            print(f"[internal/respond] ⚠️ RPC search failed: {rpc_error}")
+            
+            # Fallback: Try v2 RPC
+            try:
+                rpc_result = service_client.rpc(
+                    "match_documents_v2",
+                    {
+                        "query_embedding": query_vector,
+                        "match_count": 5,
+                        "metadata_filter": {"user_id": user_id}
+                    },
+                ).execute()
+                if rpc_result.data:
+                    if kb_id:
+                        candidate_rows = [row for row in rpc_result.data if row.get("kb_id") == kb_id]
+                    else:
+                        candidate_rows = rpc_result.data
+            except Exception as e2:
+                print(f"[internal/respond] ⚠️ Fallback RPC failed: {e2}")
+
+        # 4️⃣ Fallback to Manual Search ONLY if RPC failed or returned nothing
+        if not candidate_rows:
+            print("[internal/respond] 🐢 Using manual fallback search (slower)...")
             fallback_query = (
                 service_client.table("documents")
                 .select("content, metadata, embedding, kb_id")
@@ -853,77 +931,31 @@ async def internal_respond(
             )
             if kb_id:
                 fallback_query = fallback_query.eq("kb_id", kb_id)
+
+            # Limit to 20 for performance
+            fallback = fallback_query.limit(20).execute()
             
-            fallback = fallback_query.limit(5).execute()  # Very small limit for speed
             if fallback.data:
-                # Just return the first few chunks as context
-                context_parts = [doc["content"][:500] for doc in fallback.data[:3]]  # First 500 chars of top 3 docs
-                context_text = "\n\n".join(context_parts)
-                print(f"[internal/respond] ⚡ Fast initial context: {len(context_text)} chars")
-                return {"answer_text": context_text}
+                scored = []
+                qv = np.array(query_vector, dtype=np.float32).reshape(1, -1)
+                
+                for row in fallback.data:
+                    emb = row.get("embedding")
+                    if not emb: continue
+                    try:
+                        if isinstance(emb, str): emb = json.loads(emb)
+                        dv = np.array(emb, dtype=np.float32).reshape(1, -1)
+                        score = float(cosine_similarity(qv, dv)[0][0])
+                        scored.append((score, row))
+                    except Exception: continue
 
-        # 2️⃣ Get embeddings for query
-        embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
-        query_vector = embeddings.embed_query(q)
-        qv = np.array(query_vector, dtype=np.float32).reshape(1, -1)
+                scored.sort(key=lambda x: x[0], reverse=True)
+                candidate_rows = [r for _, r in scored[:5]]
 
-        # 3️⃣ Fetch candidate docs from DB (with proper filters)
-        fallback_query = (
-            service_client.table("documents")
-            .select("content, metadata, embedding, kb_id")
-            .eq("user_id", user_id)
-        )
-        if kb_id:
-            fallback_query = fallback_query.eq("kb_id", kb_id)
-
-        # Optimized limit for faster initial context fetch
-        fallback = fallback_query.limit(20).execute()
-        candidate_rows = []
-
-        # 4️⃣ Compute cosine similarity
-        if fallback.data:
-            scored = []
-            for row in fallback.data:
-                emb = row.get("embedding")
-                if not emb:
-                    continue
-                try:
-                    if isinstance(emb, str):
-                        emb = json.loads(emb)
-                    dv = np.array(emb, dtype=np.float32).reshape(1, -1)
-                    score = float(cosine_similarity(qv, dv)[0][0])
-                    scored.append((score, row))
-                except Exception as e:
-                    print(f"[respond] ⚠️ embed parse fail: {e}")
-                    continue
-
-            # sort high→low and keep top 5
-            scored.sort(key=lambda x: x[0], reverse=True)
-            candidate_rows = [r for _, r in scored[:5]]
-
-            if scored:
-                avg_score = np.mean([s for s, _ in scored[:5]])
-                print(f"[respond] ✅ Found {len(candidate_rows)} top chunks (avg score={avg_score:.3f})")
-            else:
-                print(f"[respond] ⚠️ No scored matches found.")
-
-        # 5️⃣ Fallback if no embeddings matched
+        # 5️⃣ Merge top chunks as context
         if not candidate_rows:
-            if fallback.data:
-                print(f"[internal/respond] ⚠️ Embedding similarity failed, using text fallback")
-                # simple fuzzy fallback
-                import difflib
-                matches = sorted(
-                    fallback.data,
-                    key=lambda r: difflib.SequenceMatcher(None, q.lower(), r["content"].lower()).ratio(),
-                    reverse=True,
-                )
-                candidate_rows = matches[:3]
-            else:
-                answer = "I don't know based on the provided documents."
-                return {"answer_text": answer}
+             return {"answer_text": "No relevant information found."}
 
-        # 6️⃣ Merge top chunks as context
         retrieved_documents = [
             Document(page_content=row.get("content", ""), metadata=row.get("metadata", {}))
             for row in candidate_rows
@@ -931,7 +963,7 @@ async def internal_respond(
         context_text = "\n\n".join([doc.page_content for doc in retrieved_documents])
 
         elapsed = time.time() - start_time
-        print(f"[internal/respond] ⏱️ Query processed in {elapsed:.2f}s, found {len(candidate_rows)} relevant chunks")
+        print(f"[internal/respond] ⚡ Query processed in {elapsed:.2f}s")
 
         return {"answer_text": context_text}
 
