@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  FaPodcast, 
+import {
+  FaPodcast,
   FaRocket,
   FaPlay,
   FaTwitter,
@@ -16,9 +16,9 @@ import {
   FaArrowUp
 } from 'react-icons/fa';
 import { MdVideoLibrary } from 'react-icons/md';
-import { 
-  Mic, 
-  Video, 
+import {
+  Mic,
+  Video,
   Users,
   Wand2,
   Radio,
@@ -147,7 +147,7 @@ function LandingPage() {
   return (
     <div className="min-h-screen bg-white overflow-hidden" style={{ fontFamily: "'Inter', 'DM Sans', sans-serif" }}>
       {/* Navigation Bar */}
-      <motion.nav 
+      <motion.nav
         initial={{ y: -100 }}
         animate={{ y: 0 }}
         transition={{ duration: 0.6, ease: "easeOut" }}
@@ -156,7 +156,7 @@ function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16 lg:h-20">
             {/* Logo */}
-            <motion.div 
+            <motion.div
               className="cursor-pointer flex items-center gap-2"
               whileHover={{ scale: 1.02 }}
               onClick={() => navigate('/')}
@@ -167,7 +167,7 @@ function LandingPage() {
               >
                 <FaPodcast className="text-lg" />
               </div>
-              <span 
+              <span
                 className="text-2xl font-bold"
                 style={{ color: colors.primary }}
               >
@@ -190,7 +190,7 @@ function LandingPage() {
 
             {/* Action Buttons */}
             <div className="hidden lg:flex items-center gap-3">
-              <motion.button 
+              <motion.button
                 onClick={() => navigate('/signin-email')}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
@@ -198,7 +198,7 @@ function LandingPage() {
               >
                 Sign In
               </motion.button>
-              <motion.button 
+              <motion.button
                 onClick={() => navigate('/signup-email')}
                 whileHover={{ scale: 1.02, boxShadow: '0 20px 40px -10px rgba(124, 58, 237, 0.4)' }}
                 whileTap={{ scale: 0.98 }}
@@ -230,10 +230,10 @@ function LandingPage() {
               >
                 <div className="flex flex-col gap-2">
                   {['About', 'Features', 'How It Works', 'Pricing'].map((item) => (
-                <a 
+                    <a
                       key={item}
                       href={`#${item.toLowerCase().replace(/\s+/g, '-')}`}
-                  onClick={() => setIsMobileMenuOpen(false)}
+                      onClick={() => setIsMobileMenuOpen(false)}
                       className="px-4 py-3 text-gray-600 hover:text-purple-600 hover:bg-purple-50 rounded-lg font-medium transition-colors"
                     >
                       {item}
@@ -243,15 +243,15 @@ function LandingPage() {
                     <button
                       onClick={() => { navigate('/signin-email'); setIsMobileMenuOpen(false); }}
                       className="w-full py-3 text-purple-600 font-semibold rounded-full border-2 border-purple-200 hover:bg-purple-50 transition-all"
-                  >
-                    Sign In
+                    >
+                      Sign In
                     </button>
                     <button
                       onClick={() => { navigate('/signup-email'); setIsMobileMenuOpen(false); }}
                       className="w-full py-3 text-white font-semibold rounded-full transition-all"
                       style={{ background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.accent} 100%)` }}
-                  >
-                    Get Started
+                    >
+                      Get Started
                     </button>
                   </div>
                 </div>
@@ -279,15 +279,15 @@ function LandingPage() {
         </div>
 
         {/* Static Bubble Circles */}
-        <div 
+        <div
           className="absolute top-20 right-20 w-80 h-80 rounded-full pointer-events-none"
           style={{ backgroundColor: colors.primaryLight, opacity: 0.15 }}
         />
-        <div 
+        <div
           className="absolute bottom-20 left-20 w-[450px] h-[450px] rounded-full pointer-events-none"
           style={{ backgroundColor: colors.primary, opacity: 0.12 }}
         />
-        <div 
+        <div
           className="absolute top-1/2 left-1/3 w-64 h-64 rounded-full pointer-events-none"
           style={{ backgroundColor: colors.accent, opacity: 0.08 }}
         />
@@ -295,7 +295,7 @@ function LandingPage() {
         <div className="max-w-7xl mx-auto relative z-10">
           <div className="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
             {/* Left: Text Content */}
-            <motion.div 
+            <motion.div
               initial="hidden"
               animate="visible"
               variants={staggerContainer}
@@ -318,7 +318,7 @@ function LandingPage() {
                 >
                   Amazing
                 </span>
-                    <br />
+                <br />
                 <span className="text-gray-800">Podcasts with </span>
                 <span
                   className="bg-clip-text text-transparent"
@@ -336,7 +336,7 @@ function LandingPage() {
               </motion.p>
 
               <motion.div variants={fadeInUp} className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start mb-12">
-                <motion.button 
+                <motion.button
                   onClick={() => navigate('/signup-email')}
                   whileHover={{ scale: 1.03, boxShadow: '0 25px 50px -12px rgba(124, 58, 237, 0.4)' }}
                   whileTap={{ scale: 0.97 }}
@@ -346,7 +346,7 @@ function LandingPage() {
                   Start Creating Free
                   <FaArrowRight />
                 </motion.button>
-                <motion.button 
+                <motion.button
                   whileHover={{ scale: 1.03, backgroundColor: colors.bg }}
                   whileTap={{ scale: 0.97 }}
                   onClick={() => document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })}
@@ -368,13 +368,13 @@ function LandingPage() {
                   <div key={i} className="text-center lg:text-left px-4 py-3 rounded-2xl bg-white/60 backdrop-blur-sm border border-purple-100/50 shadow-sm">
                     <div className="text-2xl lg:text-3xl font-bold" style={{ color: colors.primary }}>{stat.value}</div>
                     <div className="text-sm text-gray-500 font-medium">{stat.label}</div>
-                </div>
+                  </div>
                 ))}
               </motion.div>
             </motion.div>
 
             {/* Right: Hero Image */}
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, x: 50 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.8, delay: 0.3 }}
@@ -386,17 +386,17 @@ function LandingPage() {
                 style={{ background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.accent} 100%)` }}
               />
 
-                <motion.div
-                  whileHover={{ scale: 1.02 }}
+              <motion.div
+                whileHover={{ scale: 1.02 }}
                 transition={{ duration: 0.4 }}
                 className="rounded-3xl overflow-hidden shadow-2xl border-2 border-purple-100/80 bg-white"
-                >
-                  <img
-                    src={banner1}
+              >
+                <img
+                  src={banner1}
                   alt="PodVerse Studio Preview"
                   className="w-full h-auto"
-                  />
-                </motion.div>
+                />
+              </motion.div>
             </motion.div>
           </div>
         </div>
@@ -405,7 +405,7 @@ function LandingPage() {
       {/* Features Section */}
       <section id="features" className="py-24 px-6 relative" style={{ backgroundColor: colors.bg }}>
         <div className="max-w-7xl mx-auto">
-              <motion.div
+          <motion.div
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true, margin: "-100px" }}
@@ -415,7 +415,7 @@ function LandingPage() {
             <motion.div variants={fadeInUp} className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white text-purple-700 text-sm font-medium mb-4 shadow-sm">
               <Zap className="w-4 h-4" />
               Powerful Features
-              </motion.div>
+            </motion.div>
             <motion.h2 variants={fadeInUp} className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-4">
               <span className="text-gray-800">Everything You Need to </span>
               <span style={{ color: colors.primary }}>Create</span>
@@ -440,7 +440,7 @@ function LandingPage() {
                 className="bg-white rounded-3xl p-8 shadow-lg border border-purple-100/60 transition-all duration-300 group relative overflow-hidden"
               >
                 {/* Subtle gradient overlay on hover */}
-                <div 
+                <div
                   className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
                   style={{ background: `linear-gradient(135deg, ${colors.primary}03 0%, ${colors.accent}05 100%)` }}
                 />
@@ -451,8 +451,8 @@ function LandingPage() {
                     color: colors.primary
                   }}
                 >
-                    {feature.icon}
-                  </div>
+                  {feature.icon}
+                </div>
                 <h3 className="text-xl font-bold text-gray-800 mb-3 relative z-10">{feature.title}</h3>
                 <p className="text-gray-600 leading-relaxed relative z-10">{feature.description}</p>
               </motion.div>
@@ -464,11 +464,11 @@ function LandingPage() {
       {/* How It Works Section */}
       <section id="how-it-works" className="py-24 px-6 relative overflow-hidden bg-white">
         {/* Static Bubble Circles */}
-        <div 
+        <div
           className="absolute -left-32 top-20 w-96 h-96 rounded-full pointer-events-none"
           style={{ backgroundColor: colors.primaryLight, opacity: 0.12 }}
         />
-        <div 
+        <div
           className="absolute -right-20 bottom-10 w-80 h-80 rounded-full pointer-events-none"
           style={{ backgroundColor: colors.primary, opacity: 0.1 }}
         />
@@ -504,9 +504,9 @@ function LandingPage() {
             {/* Connecting line */}
             <div className="hidden md:block absolute top-24 left-[16.67%] right-[16.67%] h-0.5 bg-gradient-to-r from-purple-200 via-purple-300 to-purple-200" />
 
-              {steps.map((step, index) => (
-                <motion.div
-                  key={index}
+            {steps.map((step, index) => (
+              <motion.div
+                key={index}
                 variants={fadeInUp}
                 whileHover={{ y: -10, boxShadow: '0 30px 60px -15px rgba(124, 58, 237, 0.2)' }}
                 className="relative bg-white rounded-3xl p-8 shadow-xl border border-purple-100/60 text-center transition-all"
@@ -516,9 +516,9 @@ function LandingPage() {
                   className="absolute -top-5 left-1/2 -translate-x-1/2 w-10 h-10 rounded-full text-white text-lg font-bold flex items-center justify-center shadow-xl"
                   style={{ background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.accent} 100%)` }}
                 >
-                      {index + 1}
-                  </div>
-                  
+                  {index + 1}
+                </div>
+
                 <div
                   className="w-24 h-24 rounded-3xl flex items-center justify-center mx-auto mb-6 mt-6"
                   style={{
@@ -527,12 +527,12 @@ function LandingPage() {
                   }}
                 >
                   {step.icon}
-                  </div>
+                </div>
 
                 <h3 className="text-xl font-bold text-gray-800 mb-3">{step.title}</h3>
                 <p className="text-gray-600 leading-relaxed">{step.description}</p>
-                </motion.div>
-              ))}
+              </motion.div>
+            ))}
           </motion.div>
         </div>
       </section>
@@ -540,11 +540,11 @@ function LandingPage() {
       {/* Pricing Section */}
       <section id="pricing" className="py-24 px-6 relative overflow-hidden" style={{ backgroundColor: colors.bg }}>
         {/* Subtle bubble decorations */}
-        <div 
+        <div
           className="absolute top-20 right-10 w-64 h-64 rounded-full pointer-events-none"
           style={{ backgroundColor: colors.primary, opacity: 0.06 }}
         />
-        <div 
+        <div
           className="absolute bottom-20 left-10 w-80 h-80 rounded-full pointer-events-none"
           style={{ backgroundColor: colors.accent, opacity: 0.05 }}
         />
@@ -680,7 +680,7 @@ function LandingPage() {
                 Contact Sales
               </motion.button>
             </motion.div>
-            </motion.div>
+          </motion.div>
         </div>
       </section>
 
@@ -733,7 +733,7 @@ function LandingPage() {
                 </button>
                 <AnimatePresence>
                   {openFaqIndex === index && (
-                    <motion.div 
+                    <motion.div
                       initial={{ height: 0, opacity: 0 }}
                       animate={{ height: 'auto', opacity: 1 }}
                       exit={{ height: 0, opacity: 0 }}
@@ -776,32 +776,32 @@ function LandingPage() {
               className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white mb-6"
             >
               Ready to Create Your First Podcast?
-          </motion.h2>
-          <motion.p 
+            </motion.h2>
+            <motion.p
               variants={fadeInUp}
               className="text-xl text-purple-100 mb-10 max-w-2xl mx-auto"
-          >
-            Join thousands of creators using PodVerse to record, edit, and publish professional podcasts with AI.
-          </motion.p>
+            >
+              Join thousands of creators using PodVerse to record, edit, and publish professional podcasts with AI.
+            </motion.p>
             <motion.div variants={fadeInUp} className="flex flex-col sm:flex-row gap-4 justify-center">
-            <motion.button 
-              onClick={() => navigate('/signup-email')}
+              <motion.button
+                onClick={() => navigate('/signup-email')}
                 whileHover={{ scale: 1.03, boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.3)' }}
                 whileTap={{ scale: 0.97 }}
                 className="bg-white px-10 py-4 rounded-full font-bold text-lg shadow-xl transition-all flex items-center justify-center gap-2"
                 style={{ color: colors.primary }}
-            >
-              Get Started Free
-              <FaArrowRight />
-            </motion.button>
-            <motion.button 
+              >
+                Get Started Free
+                <FaArrowRight />
+              </motion.button>
+              <motion.button
                 whileHover={{ scale: 1.03, backgroundColor: 'rgba(255,255,255,0.15)' }}
                 whileTap={{ scale: 0.97 }}
-              onClick={() => document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' })}
+                onClick={() => document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' })}
                 className="px-10 py-4 rounded-full font-bold text-lg text-white border-2 border-white/30 hover:border-white/60 transition-all"
-            >
-              View Pricing
-            </motion.button>
+              >
+                View Pricing
+              </motion.button>
             </motion.div>
           </motion.div>
         </div>
@@ -850,11 +850,11 @@ function LandingPage() {
                     <li key={link}>
                       <a href="#" className="text-gray-500 hover:text-purple-600 transition-colors">
                         {link}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ))}
 
             {/* Newsletter */}
@@ -862,8 +862,8 @@ function LandingPage() {
               <h4 className="font-bold text-gray-900 mb-4">Stay Updated</h4>
               <p className="text-gray-500 text-sm mb-4">Get the latest tips and updates.</p>
               <div className="flex gap-2">
-                <input 
-                  type="email" 
+                <input
+                  type="email"
                   placeholder="Your email"
                   className="flex-1 px-4 py-3 rounded-xl bg-white border border-gray-200 focus:border-purple-400 focus:ring-2 focus:ring-purple-100 outline-none transition-all text-sm"
                 />
