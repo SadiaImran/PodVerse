@@ -278,18 +278,10 @@ function LandingPage() {
           <div className="absolute inset-0 bg-gradient-to-b from-white via-white/95 to-white" />
         </div>
 
-        {/* Static Bubble Circles */}
+        {/* Subtle background accent */}
         <div
-          className="absolute top-20 right-20 w-80 h-80 rounded-full pointer-events-none"
-          style={{ backgroundColor: colors.primaryLight, opacity: 0.15 }}
-        />
-        <div
-          className="absolute bottom-20 left-20 w-[450px] h-[450px] rounded-full pointer-events-none"
-          style={{ backgroundColor: colors.primary, opacity: 0.12 }}
-        />
-        <div
-          className="absolute top-1/2 left-1/3 w-64 h-64 rounded-full pointer-events-none"
-          style={{ backgroundColor: colors.accent, opacity: 0.08 }}
+          className="absolute -top-40 -right-40 w-[600px] h-[600px] rounded-full pointer-events-none blur-3xl"
+          style={{ backgroundColor: colors.primaryLight, opacity: 0.08 }}
         />
 
         <div className="max-w-7xl mx-auto relative z-10">
@@ -359,15 +351,15 @@ function LandingPage() {
               </motion.div>
 
               {/* Stats */}
-              <motion.div variants={fadeInUp} className="flex justify-center lg:justify-start gap-6 lg:gap-10">
+              <motion.div variants={fadeInUp} className="flex justify-center lg:justify-start gap-8 lg:gap-12">
                 {[
                   { value: '10K+', label: 'Creators' },
                   { value: '50K+', label: 'Podcasts' },
                   { value: '99%', label: 'Satisfaction' }
                 ].map((stat, i) => (
-                  <div key={i} className="text-center lg:text-left px-4 py-3 rounded-2xl bg-white/60 backdrop-blur-sm border border-purple-100/50 shadow-sm">
-                    <div className="text-2xl lg:text-3xl font-bold" style={{ color: colors.primary }}>{stat.value}</div>
-                    <div className="text-sm text-gray-500 font-medium">{stat.label}</div>
+                  <div key={i} className="text-center lg:text-left">
+                    <div className="text-3xl lg:text-4xl font-bold" style={{ color: colors.primary }}>{stat.value}</div>
+                    <div className="text-sm text-gray-500">{stat.label}</div>
                   </div>
                 ))}
               </motion.div>
@@ -463,15 +455,6 @@ function LandingPage() {
 
       {/* How It Works Section */}
       <section id="how-it-works" className="py-24 px-6 relative overflow-hidden bg-white">
-        {/* Static Bubble Circles */}
-        <div
-          className="absolute -left-32 top-20 w-96 h-96 rounded-full pointer-events-none"
-          style={{ backgroundColor: colors.primaryLight, opacity: 0.12 }}
-        />
-        <div
-          className="absolute -right-20 bottom-10 w-80 h-80 rounded-full pointer-events-none"
-          style={{ backgroundColor: colors.primary, opacity: 0.1 }}
-        />
 
         <div className="max-w-7xl mx-auto relative z-10">
           <motion.div
@@ -539,15 +522,6 @@ function LandingPage() {
 
       {/* Pricing Section */}
       <section id="pricing" className="py-24 px-6 relative overflow-hidden" style={{ backgroundColor: colors.bg }}>
-        {/* Subtle bubble decorations */}
-        <div
-          className="absolute top-20 right-10 w-64 h-64 rounded-full pointer-events-none"
-          style={{ backgroundColor: colors.primary, opacity: 0.06 }}
-        />
-        <div
-          className="absolute bottom-20 left-10 w-80 h-80 rounded-full pointer-events-none"
-          style={{ backgroundColor: colors.accent, opacity: 0.05 }}
-        />
         <div className="max-w-7xl mx-auto relative z-10">
           <motion.div
             initial="hidden"
@@ -612,13 +586,9 @@ function LandingPage() {
             <motion.div
               variants={fadeInUp}
               whileHover={{ y: -8 }}
-              className="bg-white rounded-3xl p-8 shadow-2xl border-2 flex flex-col h-full relative md:-translate-y-4"
+              className="bg-white rounded-3xl p-8 shadow-2xl border-2 flex flex-col h-full relative md:-translate-y-4 overflow-hidden"
               style={{ borderColor: colors.primary }}
             >
-              <div
-                className="absolute top-0 left-0 right-0 h-1.5 rounded-t-3xl"
-                style={{ background: `linear-gradient(90deg, ${colors.primary} 0%, ${colors.accent} 100%)` }}
-              />
               <div className="mb-6 flex items-center justify-between">
                 <span className="px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide text-white" style={{ backgroundColor: colors.primary }}>
                   Pro
@@ -759,10 +729,9 @@ function LandingPage() {
           style={{ background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.primaryDark} 100%)` }}
         />
 
-        {/* Static Bubble Circles */}
-        <div className="absolute top-10 left-10 w-72 h-72 bg-white/10 rounded-full pointer-events-none" />
-        <div className="absolute bottom-10 right-10 w-96 h-96 bg-white/8 rounded-full pointer-events-none" />
-        <div className="absolute top-1/2 right-1/4 w-48 h-48 bg-purple-300/15 rounded-full pointer-events-none" />
+        {/* Subtle decorative elements */}
+        <div className="absolute top-0 right-0 w-96 h-96 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-80 h-80 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2 blur-3xl pointer-events-none" />
 
         <div className="max-w-4xl mx-auto text-center relative z-10">
           <motion.div
