@@ -343,7 +343,7 @@ const ActivityFeed = () => {
   if (loading) {
     return (
       <div className="text-center py-20">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-light-purple mx-auto mb-4"></div>
         <p className="text-gray-500 text-lg">Loading your feed...</p>
       </div>
     );

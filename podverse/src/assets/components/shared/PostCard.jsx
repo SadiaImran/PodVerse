@@ -4,6 +4,112 @@ import { useNavigate } from 'react-router-dom';
 import ProfileMarry from '../../images/icon-profile-marry.png';
 import { supabase } from '../../supabaseClient';
 
+// Helper function to get fresh signed URL from Supabase storage
+const getFreshSignedUrl = async (url) => {
+  if (!url) return null;
+  
+  // If not a Supabase URL, return as-is
+  if (!url.includes('supabase.co')) {
+    return url;
+  }
+  
+  // If it's already a signed URL, try to get a fresh one
+  if (url.includes('/storage/v1/object/sign/')) {
+    try {
+      // Extract bucket and path from signed URL
+      const parts = url.split('/storage/v1/object/sign/');
+      if (parts.length === 2) {
+        const pathWithToken = parts[1];
+        const pathParts = pathWithToken.split('?')[0].split('/');
+        if (pathParts.length >= 2) {
+          const bucket = pathParts[0];
+          const filePath = pathParts.slice(1).join('/');
+          
+          // Get fresh signed URL
+          const { data, error } = await supabase.storage
+            .from(bucket)
+            .createSignedUrl(filePath, 604800); // 7 days
+          
+          if (!error && data) {
+            return data.signedUrl || data.signed_url || data.url || url;
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error getting fresh signed URL:', err);
+    }
+  }
+  
+  // If it's a public URL, try to get signed URL
+  if (url.includes('/storage/v1/object/public/')) {
+    try {
+      const parts = url.split('/storage/v1/object/public/');
+      if (parts.length === 2) {
+        const pathParts = parts[1].split('/');
+        if (pathParts.length >= 2) {
+          const bucket = pathParts[0];
+          const filePath = pathParts.slice(1).join('/').split('?')[0];
+          
+          const { data, error } = await supabase.storage
+            .from(bucket)
+            .createSignedUrl(filePath, 604800);
+          
+          if (!error && data) {
+            return data.signedUrl || data.signed_url || data.url || url;
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error getting signed URL from public:', err);
+    }
+  }
+  
+  // Fallback: return original URL
+  return url;
+};
+
+// Helper function to get signed URL from Supabase storage path (fallback)
+const getSignedUrl = async (url) => {
+  if (!url) return null;
+  
+  // First try public URL
+  const publicUrl = getPublicUrl(url);
+  if (publicUrl && publicUrl !== url) {
+    return publicUrl;
+  }
+  
+  // If already a signed URL or external URL, return as-is
+  if (url.includes('/object/sign/') || !url.includes('supabase.co')) {
+    return url;
+  }
+  
+  // If it's a public URL, try to get signed URL as fallback
+  if (url.includes('/storage/v1/object/public/')) {
+    try {
+      const parts = url.split('/storage/v1/object/public/');
+      if (parts.length === 2) {
+        const pathParts = parts[1].split('/');
+        if (pathParts.length >= 2) {
+          const bucket = pathParts[0];
+          const filePath = pathParts.slice(1).join('/').split('?')[0];
+          
+          const { data, error } = await supabase.storage
+            .from(bucket)
+            .createSignedUrl(filePath, 604800); // 7 days
+          
+          if (!error && data) {
+            return data.signedUrl || data.signed_url || data.url || url;
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error getting signed URL:', err);
+    }
+  }
+  
+  return url;
+};
+
 /**
  * Premium PostCard Component
  * 
@@ -44,6 +150,10 @@ const PostCard = ({
   const [summaryVisible, setSummaryVisible] = useState(false);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState(null);
+  const [videoError, setVideoError] = useState(false);
+  const [thumbnailError, setThumbnailError] = useState(false);
+  const [videoUrl, setVideoUrl] = useState(null);
+  const [thumbnailUrl, setThumbnailUrl] = useState(null);
   const videoRef = useRef(null);
   const commentInputRef = useRef(null);
   const viewTracked = useRef(false);
@@ -57,7 +167,7 @@ const PostCard = ({
     }
   }, [isPlaying, post.id, onView]);
 
-  // Update state when post prop changes
+  // Update state when post prop changes and get signed URLs
   useEffect(() => {
     setLiked(post.user_liked || false);
     setLikesCount(post.likes || 0);
@@ -68,16 +178,79 @@ const PostCard = ({
     setSummaryVisible(false);
     setSummaryError(null);
     setSummaryLoading(false);
+    setVideoError(false);
+    setThumbnailError(false);
+    
+    // Get URLs for video and thumbnail - use signed URLs if available
+    const loadUrls = async () => {
+      if (post.video_url) {
+        // Use signed URL if available, otherwise use as-is
+        const validVideoUrl = getValidUrl(post.video_url);
+        setVideoUrl(validVideoUrl || post.video_url);
+      } else {
+        setVideoUrl(null);
+      }
+      
+      if (post.thumbnail_url) {
+        // For thumbnails, use signed URL if available
+        const validThumbUrl = getValidUrl(post.thumbnail_url);
+        setThumbnailUrl(validThumbUrl || post.thumbnail_url);
+      } else {
+        setThumbnailUrl(null);
+      }
+    };
+    
+    loadUrls();
   }, [post]);
 
-  const handleVideoPlay = () => {
-    if (videoRef.current) {
+  const handleVideoPlay = async () => {
+    if (!videoRef.current) return;
+    
+    // If video has error, try to reload
+    if (videoError && videoUrl) {
+      try {
+        setVideoError(false);
+        videoRef.current.load();
+        await videoRef.current.play();
+        setIsPlaying(true);
+        return;
+      } catch (err) {
+        console.error('Error reloading video:', err);
+        return;
+      }
+    }
+    
+    if (!videoUrl) return;
+    
+    try {
       if (isPlaying) {
         videoRef.current.pause();
+        setIsPlaying(false);
       } else {
-        videoRef.current.play();
+        // Check if video is ready to play
+        if (videoRef.current.readyState >= 2) {
+          await videoRef.current.play();
+          setIsPlaying(true);
+        } else {
+          // Wait for video to load
+          videoRef.current.load();
+          const playWhenReady = async () => {
+            try {
+              await videoRef.current.play();
+              setIsPlaying(true);
+            } catch (err) {
+              console.error('Error playing video:', err);
+              setVideoError(true);
+            }
+          };
+          
+          videoRef.current.addEventListener('canplay', playWhenReady, { once: true });
+          videoRef.current.addEventListener('loadeddata', playWhenReady, { once: true });
+        }
       }
-      setIsPlaying(!isPlaying);
+    } catch (err) {
+      console.error('Error in handleVideoPlay:', err);
+      // Don't set error immediately, might be a temporary issue
     }
   };
 
@@ -398,56 +571,146 @@ const PostCard = ({
         className="relative bg-black group/video cursor-pointer overflow-hidden"
         onClick={handleVideoPlay}
       >
-        <video
-          ref={videoRef}
-          className="w-full aspect-video object-cover"
-          poster={post.thumbnail_url}
-          onPlay={() => setIsPlaying(true)}
-          onPause={() => setIsPlaying(false)}
-          onLoadedMetadata={() => {
-            if (videoRef.current) {
-              setIsMuted(videoRef.current.muted);
-            }
-          }}
-          muted={isMuted}
-          loop
-        >
-          <source src={post.video_url} type="video/mp4" />
-        </video>
+        {/* Thumbnail - shown when video is not playing */}
+        {!isPlaying && thumbnailUrl && !thumbnailError && (
+          <img
+            src={thumbnailUrl}
+            alt={post.title || 'Video thumbnail'}
+            className="absolute inset-0 w-full h-full object-cover z-10"
+            onError={() => {
+              setThumbnailError(true);
+            }}
+          />
+        )}
+        
+        {/* Video */}
+        {videoUrl && !videoError ? (
+          <video
+            ref={videoRef}
+            key={videoUrl} // Force re-render when URL changes
+            className="w-full aspect-video object-cover"
+            poster={thumbnailUrl && !thumbnailError ? thumbnailUrl : undefined}
+            onPlay={() => {
+              setIsPlaying(true);
+              if (videoRef.current) {
+                setIsMuted(videoRef.current.muted);
+              }
+            }}
+            onPause={() => {
+              setIsPlaying(false);
+            }}
+            onLoadedMetadata={() => {
+              if (videoRef.current) {
+                setIsMuted(videoRef.current.muted);
+              }
+            }}
+            onLoadedData={() => {
+              // Video data loaded, ready to play
+              if (videoRef.current) {
+                setIsMuted(videoRef.current.muted);
+              }
+            }}
+            onCanPlay={() => {
+              // Video can start playing
+            }}
+            onError={async (e) => {
+              const video = e.target;
+              const error = video.error;
+              
+              console.error('Video error:', {
+                code: error?.code,
+                message: error?.message,
+                networkState: video.networkState,
+                readyState: video.readyState,
+                url: videoUrl?.substring(0, 100)
+              });
+              
+              // Try to get a fresh signed URL
+              if (post.video_url && post.video_url.includes('supabase.co')) {
+                try {
+                  console.log('Attempting to get fresh signed URL...');
+                  const freshUrl = await getFreshSignedUrl(post.video_url);
+                  if (freshUrl && freshUrl !== videoUrl) {
+                    console.log('Got fresh signed URL, retrying...');
+                    setVideoError(false);
+                    setTimeout(() => {
+                      setVideoUrl(freshUrl);
+                    }, 200);
+                    return;
+                  }
+                } catch (err) {
+                  console.error('Error getting fresh URL:', err);
+                }
+              }
+              
+              // If all else fails, mark as error
+              setVideoError(true);
+            }}
+            onAbort={() => {
+              // Video loading was aborted
+              console.log('Video loading aborted');
+            }}
+            muted={isMuted}
+            loop
+            preload="auto"
+            playsInline
+            controls={false}
+          >
+            <source src={videoUrl} type="video/mp4" />
+            Your browser does not support the video tag.
+          </video>
+        ) : videoError ? (
+          <div className="w-full aspect-video flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900">
+            <div className="text-center">
+              <Play className="w-16 h-16 text-white/50 mx-auto mb-3" />
+              <p className="text-white/70 text-sm">Video unavailable</p>
+            </div>
+          </div>
+        ) : (
+          <div className="w-full aspect-video flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white/30"></div>
+          </div>
+        )}
         
         {/* Video Overlay Gradient */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover/video:opacity-100 transition-opacity duration-300" />
 
         {/* Play/Pause Button */}
-        <div
-          className={`absolute inset-0 flex items-center justify-center transition-opacity duration-300 ${
-            isPlaying ? 'opacity-0 pointer-events-none' : 'opacity-0 group-hover/video:opacity-100 pointer-events-auto'
-          }`}
-          style={{ visibility: isPlaying ? 'hidden' : 'visible' }}
-        >
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              handleVideoPlay();
-            }}
-            className="w-20 h-20 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md rounded-full flex items-center justify-center hover:bg-white dark:hover:bg-gray-800 hover:scale-110 transition-all shadow-2xl"
-            style={{ color: '#6057C7' }}
+        {!videoError && videoUrl && (
+          <div
+            className={`absolute inset-0 flex items-center justify-center transition-opacity duration-300 z-20 ${
+              isPlaying ? 'opacity-0 pointer-events-none' : 'opacity-100 pointer-events-auto'
+            }`}
+            style={{ visibility: isPlaying ? 'hidden' : 'visible' }}
           >
-            {isPlaying ? (
-              <Pause size={32} className="fill-current" />
-            ) : (
-              <Play size={32} className="ml-1 fill-current" />
-            )}
-          </button>
-        </div>
+            <button
+              onClick={async (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                await handleVideoPlay();
+              }}
+              onMouseDown={(e) => e.preventDefault()}
+              className="w-20 h-20 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md rounded-full flex items-center justify-center hover:bg-white dark:hover:bg-gray-800 hover:scale-110 transition-all shadow-2xl"
+              style={{ color: '#6057C7' }}
+            >
+              {isPlaying ? (
+                <Pause size={32} className="fill-current" />
+              ) : (
+                <Play size={32} className="ml-1 fill-current" />
+              )}
+            </button>
+          </div>
+        )}
 
         {/* Volume Control */}
-        <button
-          onClick={handleMute}
-          className="absolute bottom-4 right-4 w-10 h-10 bg-black/70 dark:bg-gray-900/70 backdrop-blur-md rounded-full flex items-center justify-center text-white hover:bg-black/90 dark:hover:bg-gray-800/90 transition-all shadow-lg opacity-0 group-hover/video:opacity-100"
-        >
-          {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
-        </button>
+        {!videoError && videoUrl && isPlaying && (
+          <button
+            onClick={handleMute}
+            className="absolute bottom-4 right-4 w-10 h-10 bg-black/70 dark:bg-gray-900/70 backdrop-blur-md rounded-full flex items-center justify-center text-white hover:bg-black/90 dark:hover:bg-gray-800/90 transition-all shadow-lg z-20"
+          >
+            {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+          </button>
+        )}
 
         {/* Views Badge */}
         <div className="absolute top-4 right-4 px-3 py-1.5 bg-black/70 dark:bg-gray-900/70 backdrop-blur-md rounded-full flex items-center gap-1.5 text-white text-xs font-semibold">

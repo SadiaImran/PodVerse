@@ -130,17 +130,17 @@ function PodcastPostBox() {
 
   return (
     <>
-      <div className="relative bg-white dark:bg-gray-900 p-8 rounded-3xl shadow-lg border border-gray-100 dark:border-gray-800 mb-6 hover:shadow-2xl transition-all duration-500 overflow-hidden group">
+      <div className="relative bg-white dark:bg-gray-900 p-6 sm:p-8 rounded-3xl shadow-lg border border-light-lavender/30 dark:border-gray-800 hover:shadow-2xl transition-all duration-500 overflow-hidden group">
         {/* Background Gradient */}
-        <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/50 via-purple-50/30 to-pink-50/50 dark:from-indigo-900/10 dark:via-purple-900/10 dark:to-pink-900/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+        <div className="absolute inset-0 bg-gradient-to-br from-light-lavender/20 via-light-purple/10 to-pink-50/30 dark:from-light-purple/10 dark:via-light-lavender/10 dark:to-pink-900/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
         
         <div className="relative flex items-start gap-4">
           <div className="relative flex-shrink-0">
-            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 rounded-full opacity-0 group-hover:opacity-100 blur-md transition-opacity duration-300" />
+            <div className="absolute inset-0 bg-gradient-to-br from-light-purple via-light-lavender to-pink-500 rounded-full opacity-0 group-hover:opacity-100 blur-md transition-opacity duration-300" />
             <img
               src={profileUrl}
               alt={profileName}
-              className="relative w-14 h-14 rounded-full object-cover border-2 border-white dark:border-gray-800 ring-2 ring-indigo-100 dark:ring-indigo-900/50 group-hover:ring-indigo-300 dark:group-hover:ring-indigo-600 transition-all duration-300"
+              className="relative w-14 h-14 rounded-full object-cover border-2 border-white dark:border-gray-800 ring-2 ring-light-lavender/50 dark:ring-light-purple/30 group-hover:ring-light-purple dark:group-hover:ring-light-purple transition-all duration-300"
               onError={(e) => {
                 e.target.src = ProfileMarry;
               }}
@@ -170,7 +170,7 @@ function PodcastPostBox() {
 
               <button
                 onClick={handleCreateNewClick}
-                className="relative flex items-center gap-3 p-4 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 transition-all group/btn shadow-lg shadow-purple-500/30 hover:shadow-xl hover:shadow-purple-500/40 hover:scale-[1.02] overflow-hidden"
+                className="relative flex items-center gap-3 p-4 rounded-2xl bg-light-purple hover:bg-light-purple/90 transition-all group/btn shadow-lg shadow-light-purple/30 hover:shadow-xl hover:shadow-light-purple/40 hover:scale-[1.02] overflow-hidden"
               >
                 <div className="absolute inset-0 bg-white/0 group-hover/btn:bg-white/10 transition-colors" />
                 <div className="relative w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center text-white group-hover/btn:scale-110 group-hover/btn:rotate-3 transition-all duration-300">
@@ -235,13 +235,13 @@ function PodcastPostBox() {
                             className="w-full h-full object-cover"
                           />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-100 to-pink-100">
-                            <Play className="w-12 h-12 text-purple-400" />
+                          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-light-lavender/30 to-pink-100">
+                            <Play className="w-12 h-12 text-light-purple" />
                           </div>
                         )}
                         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all flex items-center justify-center">
                           <div className="w-12 h-12 bg-white/90 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Play className="w-6 h-6 text-purple-600 ml-1" />
+                            <Play className="w-6 h-6 text-light-purple ml-1" />
                           </div>
                         </div>
                       </div>
@@ -279,7 +279,7 @@ function PodcastPostBox() {
             </button>
 
             <div className="text-center mb-6">
-              <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center mx-auto mb-4">
+              <div className="w-16 h-16 bg-light-purple rounded-full flex items-center justify-center mx-auto mb-4">
                 <Video className="w-8 h-8 text-white" />
               </div>
               <h2 className="text-2xl font-bold text-gray-900 mb-2">Create New Podcast?</h2>
@@ -295,7 +295,7 @@ function PodcastPostBox() {
               </button>
               <button
                 onClick={confirmCreateNew}
-                className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl hover:from-purple-700 hover:to-pink-700 transition-all font-semibold shadow-lg shadow-purple-500/30"
+                className="flex-1 px-6 py-3 bg-light-purple text-white rounded-xl hover:bg-light-purple/90 transition-all font-semibold shadow-lg shadow-light-purple/30"
               >
                 Yes, Create
               </button>
