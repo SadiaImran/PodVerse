@@ -73,7 +73,7 @@ const AudioEditor = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
-  
+
   // State for audio tracks/clips
   const [audioClips, setAudioClips] = useState([]);
   const [audioBuffers, setAudioBuffers] = useState({});
@@ -91,7 +91,7 @@ const AudioEditor = () => {
   const finalizedAudioBlobRef = useRef(null);
 
   // Refs
-  const waveformContainerRef = useRef(null);  
+  const waveformContainerRef = useRef(null);
   const waveformRef = useRef(null);
   const wavesurferRef = useRef(null);
   const regionsRef = useRef(null);
@@ -100,7 +100,7 @@ const AudioEditor = () => {
 
   const getMinZoomLevel = useCallback(() => {
     if (!waveformContainerRef.current || !totalDuration) return 0.1;
-    
+
     const containerWidth = waveformContainerRef.current.clientWidth - 48;
     const minZoom = containerWidth / (totalDuration * 50);
     return Math.max(minZoom, 0.1);
@@ -153,7 +153,7 @@ const AudioEditor = () => {
         console.error("Error destroying wavesurfer:", e);
       }
       if (audioCtxRef.current) {
-        audioCtxRef.current.close().catch(() => {});
+        audioCtxRef.current.close().catch(() => { });
         audioCtxRef.current = null;
       }
     };
@@ -162,25 +162,31 @@ const AudioEditor = () => {
   // Store original recording path for overwrite
   const [originalRecordingPath, setOriginalRecordingPath] = useState(null);
 
+  // Store recording filename for finalize
+  const [recordingFilename, setRecordingFilename] = useState(null);
+
   // Load recording from URL if provided (from recording modal)
   useEffect(() => {
     if (recordingLoaded || audioClips.length > 0) return; // Don't reload if already loaded or clips exist
-    
+
     const recordingUrl = location.state?.recordingUrl || sessionStorage.getItem('recordingUrl');
-    const recordingFilename = sessionStorage.getItem('recordingFilename') || 'recording.ogg';
-    
+    const storedFilename = sessionStorage.getItem('recordingFilename') || 'recording.ogg';
+
     if (recordingUrl) {
+      // Store the filename in state for later use in finalize
+      setRecordingFilename(storedFilename);
+
       // Load recording as audio track
       const loadRecordingFromUrl = async () => {
         try {
           console.log('Loading recording from URL:', recordingUrl);
-          
+
           // Create audio element to get duration
           const audio = new Audio();
           audio.crossOrigin = 'anonymous';
           audio.preload = 'auto';
           audio.src = recordingUrl;
-          
+
           await new Promise((resolve, reject) => {
             let timeoutRef;
             const cleanup = () => {
@@ -209,23 +215,23 @@ const AudioEditor = () => {
               reject(new Error('Timeout loading audio'));
             }, 20000); // Allow up to 20s for signed URLs / large files
           });
-          
+
           const duration = audio.duration;
           const clipId = `recording-${Date.now()}`;
-          const friendlyName = getFriendlyTrackName(recordingFilename || recordingUrl, 'Recording');
-          
+          const friendlyName = getFriendlyTrackName(storedFilename || recordingUrl, 'Recording');
+
           const clip = {
             id: clipId,
-            name: recordingFilename || friendlyName,
+            name: storedFilename || friendlyName,
             displayName: friendlyName,
-            originalName: recordingFilename || extractFileName(recordingUrl),
+            originalName: storedFilename || extractFileName(recordingUrl),
             url: recordingUrl,
             duration,
             startTime: 0,
             endTime: duration,
             color: 'bg-green-500'
           };
-          
+
           // Try to load audio buffer for waveform
           try {
             const response = await fetch(recordingUrl);
@@ -236,10 +242,10 @@ const AudioEditor = () => {
           } catch (bufferError) {
             console.warn('Could not load audio buffer for waveform:', bufferError);
           }
-          
+
           setAudioClips([clip]);
           setRecordingLoaded(true);
-          
+
           // Extract and store original recording path before cleanup
           let storagePath = null;
           if (recordingUrl.includes('/storage/v1/object/sign/recordings/')) {
@@ -253,23 +259,23 @@ const AudioEditor = () => {
               storagePath = urlParts[1].split('?')[0];
             }
           }
-          
+
           // Fallback to filename if path extraction failed
-          if (!storagePath && recordingFilename) {
-            storagePath = recordingFilename;
+          if (!storagePath && storedFilename) {
+            storagePath = storedFilename;
           }
-          
+
           // Store original path for overwrite
           if (storagePath) {
             setOriginalRecordingPath(storagePath);
             sessionStorage.setItem('originalRecordingPath', storagePath);
             console.log('📁 Original recording path stored for overwrite:', storagePath);
           }
-          
+
           // Clean up sessionStorage (but keep originalRecordingPath)
           sessionStorage.removeItem('recordingUrl');
           sessionStorage.removeItem('recordingFilename');
-          
+
           console.log('Recording loaded successfully');
         } catch (error) {
           console.error('Error loading recording from URL:', error);
@@ -278,7 +284,7 @@ const AudioEditor = () => {
           sessionStorage.removeItem('recordingFilename');
         }
       };
-      
+
       loadRecordingFromUrl();
     }
   }, [location.state, recordingLoaded, audioClips.length]);
@@ -361,7 +367,7 @@ const AudioEditor = () => {
       // Just set the total duration to the longest track
       const maxDuration = Math.max(...clips.map(clip => clip.duration));
       setTotalDuration(maxDuration);
-      
+
       // No need for regions since we're using individual track waveforms
       console.log(`Loaded ${clips.length} tracks, max duration: ${maxDuration}s`);
     } catch (err) {
@@ -383,10 +389,10 @@ const AudioEditor = () => {
         name: stockTrack.name || friendlyName,
         originalName: stockTrack.originalName || stockTrack.name || stockTrack.filename || stockTrack.path || friendlyName
       };
-      
+
       // Create audio buffer for the stock track
       const newBuffers = { ...audioBuffers };
-      
+
       try {
         // Fetch the audio file and create buffer
         const response = await fetch(normalizedTrack.url);
@@ -402,12 +408,12 @@ const AudioEditor = () => {
       const updatedClips = [...audioClips, normalizedTrack];
       setAudioClips(updatedClips);
       setAudioBuffers(newBuffers);
-      
+
       // Small delay to ensure URL is properly set before loading
       setTimeout(async () => {
         await loadCombinedAudio(updatedClips);
       }, 100);
-      
+
       console.log('Stock audio added successfully to main panel');
     } catch (error) {
       console.error('Error adding stock audio to main panel:', error);
@@ -512,7 +518,7 @@ const AudioEditor = () => {
         formData.append('user_id', metaPayload.userId || 'unknown');
         formData.append('kb_id', metaPayload.kbId);
         formData.append('podcast_title', metaPayload.podcastTitle);
-        
+
         // Add original recording path to overwrite if available
         const originalPath = originalRecordingPath || sessionStorage.getItem('originalRecordingPath');
         if (originalPath) {
@@ -730,14 +736,14 @@ const AudioEditor = () => {
       <div className="min-h-screen bg-gray-50">
         <div className="flex h-screen">
           {/* Pass props to Sidebar */}
-          <Sidebar 
+          <Sidebar
             onFileUpload={handleFileUpload}
             audioTracks={audioClips}
             onAddStockAudio={handleAddStockAudio}
           />
-          
+
           {/* Pass props to MainPanel */}
-          <MainPanel 
+          <MainPanel
             audioTracks={audioClips}
             audioBuffers={audioBuffers}
             onRemoveTrack={removeClip}
@@ -758,8 +764,8 @@ const AudioEditor = () => {
         </div>
 
         {/* Hidden WaveSurfer container for audio processing */}
-        <div 
-          ref={waveformRef} 
+        <div
+          ref={waveformRef}
           className="hidden"
         ></div>
 
