@@ -290,6 +290,13 @@ const AutoAudioGeneration = ({ formData, setFormData, goBack }) => {
         // Store audio URL in sessionStorage using the keys the audio editor expects
         sessionStorage.setItem('recordingUrl', audioUrl);
         sessionStorage.setItem('recordingFilename', filename);
+        
+        // Store script data for skipping diarization in video generation
+        if (formData.generatedScript) {
+            sessionStorage.setItem('autoAudioScriptData', JSON.stringify(formData.generatedScript));
+            sessionStorage.setItem('autoAudioDuration', audioDuration.toString());
+            console.log('📝 Stored script data for video generation');
+        }
 
         console.log('📤 Sending to editor:', { audioUrl, filename });
 

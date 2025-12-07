@@ -637,11 +637,28 @@ const AudioEditor = () => {
       { type: finalizedAudioBlobRef.current.type || 'audio/wav' }
     );
 
+    // Check if script data exists (from automatic audio generation)
+    const scriptDataStr = sessionStorage.getItem('autoAudioScriptData');
+    const audioDuration = parseFloat(sessionStorage.getItem('autoAudioDuration') || '0');
+    let scriptData = null;
+    
+    if (scriptDataStr) {
+      try {
+        scriptData = JSON.parse(scriptDataStr);
+        console.log('✅ Found script data from automatic audio generation');
+      } catch (e) {
+        console.warn('Failed to parse script data:', e);
+      }
+    }
+
     navigate('/video-generation', {
       state: {
         source: 'audio-edit',
         audioFile,
         audioFileName: finalizedAudioName,
+        fromAutoAudio: !!scriptData,
+        scriptData: scriptData,
+        audioDuration: audioDuration
       },
     });
   }, [finalizedAudioName, navigate]);

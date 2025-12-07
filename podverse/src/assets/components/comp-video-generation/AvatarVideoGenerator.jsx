@@ -133,12 +133,63 @@ function AvatarVideoGenerator() {
   };
 
   const [error, setError] = useState("");
+  const [skipDiarization, setSkipDiarization] = useState(false);
+  const [precomputedUtterances, setPrecomputedUtterances] = useState(null);
+
+  // Convert script data to utterances format for skipping diarization
+  const convertScriptToUtterances = (scriptData, totalDuration) => {
+    if (!scriptData || !Array.isArray(scriptData)) return null;
+    
+    let currentTime = 0;
+    const utterances = [];
+    
+    scriptData.forEach((line, index) => {
+      // Estimate duration based on text length (rough estimate: 150 words per minute)
+      const wordCount = (line.text || '').split(/\s+/).length;
+      const estimatedDuration = (wordCount / 150) * 60 * 1000; // Convert to milliseconds
+      
+      const start = currentTime;
+      const end = currentTime + estimatedDuration;
+      
+      // Map HOST/GUEST to A/B (or use existing speaker field if available)
+      let speaker = 'A';
+      if (line.speaker_label) {
+        speaker = line.speaker_label === 'HOST' ? 'A' : 'B';
+      } else if (line.speaker) {
+        // If speaker is already A/B, use it directly
+        speaker = line.speaker === 'A' || line.speaker === 'B' ? line.speaker : 'A';
+      }
+      
+      utterances.push({
+        speaker: speaker,
+        text: line.text || '',
+        start: start / 1000, // Convert to seconds
+        end: end / 1000,
+        id: line.id || `utterance_${index}`
+      });
+      
+      currentTime = end + 300; // Add 300ms gap between utterances
+    });
+    
+    console.log(`✅ Converted ${utterances.length} script lines to utterances`);
+    return utterances;
+  };
 
   useEffect(() => {
     const initializeAudioFromNavigation = async () => {
       if (location.state?.audioFile) {
         setAudioFile(location.state.audioFile);
         setAudioFileName(location.state.audioFileName || location.state.audioFile.name || 'final_audio.wav');
+        
+        // Check if coming from automatic audio generation
+        if (location.state?.fromAutoAudio && location.state?.scriptData) {
+          setSkipDiarization(true);
+          // Convert script data to utterances format
+          const utterances = convertScriptToUtterances(location.state.scriptData, location.state.audioDuration || 0);
+          setPrecomputedUtterances(utterances);
+          console.log('✅ Skipping diarization - using precomputed utterances from script');
+        }
+        
         navigate('.', { replace: true, state: null });
         sessionStorage.removeItem('videoGenAudioDataUrl');
         sessionStorage.removeItem('videoGenAudioName');
@@ -198,6 +249,23 @@ function AvatarVideoGenerator() {
         }
       } catch (err) {
         console.warn('Failed to parse video generation metadata:', err);
+      }
+
+      // Check sessionStorage for script data from automatic audio generation
+      const scriptDataStr = sessionStorage.getItem('autoAudioScriptData');
+      const audioDurationStr = sessionStorage.getItem('autoAudioDuration');
+      
+      if (scriptDataStr && !skipDiarization) {
+        try {
+          const scriptData = JSON.parse(scriptDataStr);
+          const audioDuration = parseFloat(audioDurationStr || '0');
+          setSkipDiarization(true);
+          const utterances = convertScriptToUtterances(scriptData, audioDuration);
+          setPrecomputedUtterances(utterances);
+          console.log('✅ Loaded script data from sessionStorage - will skip diarization');
+        } catch (err) {
+          console.warn('Failed to parse script data from sessionStorage:', err);
+        }
       }
     };
 
@@ -620,6 +688,13 @@ function AvatarVideoGenerator() {
       formData.append('add_subtitles', addSubtitles);
 
       formData.append('split_screen_mode', splitScreenMode);
+
+      // NEW: Skip diarization if utterances are precomputed (from automatic audio generation)
+      if (skipDiarization && precomputedUtterances) {
+        formData.append('skip_diarization', 'true');
+        formData.append('precomputed_utterances', JSON.stringify(precomputedUtterances));
+        console.log('📤 Sending precomputed utterances to skip diarization');
+      }
 
       // Check if testing mode is enabled
       if (isTestingMode) {
@@ -1565,7 +1640,7 @@ function AvatarVideoGenerator() {
                       <span>Progress</span>
                       <span>{jobStatus.progress}%</span>
                     </div>
-                    <div className="w-full rounded-full h-4 overflow-hidden shadow-inner border" style={{ backgroundColor: `${theme.colors.lavender}40`, borderColor: `${theme.colors.lavender}50` }}>
+                    <div className="w-full rounded-full h-4 overflow-hidden shadow-inner border bg-light-lavender border-light-lavender" >
                       <div
                         className={`h-full rounded-full transition-all duration-500 shadow-lg`}
                         style={{ width: `${jobStatus.progress}%`, ...getProgressStyle() }}
