@@ -22,6 +22,7 @@ from module_admin.module_admin_route import router as admin_router
 from module_subscription.subscription_route import router as subscription_router
 from module_visuals.module_visuals_route import router as visuals_router
 from module_ai_visuals.module_ai_visuals_route import router as ai_visuals_router
+from module_auto_podcast.module_auto_podcast import router as auto_podcast_router
 from fastapi.staticfiles import StaticFiles
 
 import tempfile
@@ -98,3 +99,9 @@ app.include_router(voices_router)
 app.include_router(faq_router)
 app.include_router(social_media_router)
 app.include_router(admin_router)
+app.include_router(auto_podcast_router, prefix="/auto-podcast", tags=["auto-podcast"])
+
+# Ensure auto-podcast output directory exists
+os.makedirs("module_auto_podcast/output", exist_ok=True)
+os.makedirs("module_auto_podcast/temp", exist_ok=True)
+
