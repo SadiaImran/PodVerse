@@ -35,20 +35,41 @@ os.makedirs(TEMP_DIR, exist_ok=True)
 
 # Clean up old temp files on startup
 def cleanup_temp_folder():
-    """Remove old preview and segment files from temp folder"""
+    """Remove old preview, segment, and output files from temp/output folders"""
     try:
-        count = 0
+        temp_count = 0
+        output_count = 0
+        
+        # Clean temp folder
         for filename in os.listdir(TEMP_DIR):
             file_path = os.path.join(TEMP_DIR, filename)
-            # Delete preview files and segment files
-            if filename.startswith("preview_") or filename.startswith("segment_") or filename.startswith("silence_"):
+            # Delete preview files, segment files, silence files, concat lists
+            if (filename.startswith("preview_") or 
+                filename.startswith("segment_") or 
+                filename.startswith("silence_") or
+                filename.startswith("concat_list_")):
                 try:
                     os.remove(file_path)
-                    count += 1
+                    temp_count += 1
                 except:
                     pass
-        if count > 0:
-            print(f"🧹 Cleaned up {count} temp files from auto-podcast")
+        
+        # Clean output folder (old generated podcasts)
+        for filename in os.listdir(OUTPUT_DIR):
+            file_path = os.path.join(OUTPUT_DIR, filename)
+            # Only delete .wav and .mp3 files
+            if filename.endswith(".wav") or filename.endswith(".mp3"):
+                try:
+                    # Check if file is older than 1 hour
+                    file_age = time.time() - os.path.getmtime(file_path)
+                    if file_age > 3600:  # 1 hour
+                        os.remove(file_path)
+                        output_count += 1
+                except:
+                    pass
+        
+        if temp_count > 0 or output_count > 0:
+            print(f"🧹 Auto-podcast cleanup: {temp_count} temp files, {output_count} old output files")
     except Exception as e:
         print(f"⚠️ Temp cleanup error: {e}")
 
@@ -784,9 +805,18 @@ async def merge_podcast_audio(
         # Get file info
         file_size = os.path.getsize(output_path) if os.path.exists(output_path) else 0
         
-        # Clean up temp files
-        cleanup_temp_files(audio_files + [concat_list_path, silence_path])
+        # Clean up temp files (segments, concat list, silence)
+        files_to_clean = audio_files + [concat_list_path, silence_path]
+        cleaned_count = 0
+        for f in files_to_clean:
+            if f and os.path.exists(f):
+                try:
+                    os.remove(f)
+                    cleaned_count += 1
+                except Exception as e:
+                    print(f"⚠️ Failed to delete {f}: {e}")
         
+        print(f"🧹 Cleaned up {cleaned_count} temp segment files")
         print(f"✅ Merged audio saved: {output_filename} ({file_size} bytes)")
         
         return JSONResponse(content={
@@ -864,10 +894,11 @@ def cleanup_temp_files(file_paths: List[str]):
 
 # ========= DOWNLOAD ENDPOINT =========
 @router.get("/download/{filename}")
-async def download_audio(filename: str):
+async def download_audio(filename: str, background_tasks: BackgroundTasks):
     """
     Download generated podcast audio file.
     No auth required - files are protected by unique random filenames.
+    File is automatically deleted 60 seconds after download.
     """
     # Security: only allow specific extensions and no path traversal
     if ".." in filename or "/" in filename or "\\" in filename:
@@ -880,6 +911,9 @@ async def download_audio(filename: str):
     
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="File not found")
+    
+    # Schedule file deletion after download (give time for upload to Supabase)
+    background_tasks.add_task(delete_file_after_delay, file_path, delay=60)
     
     # Determine media type based on extension
     media_type = "audio/mpeg" if filename.endswith('.mp3') else "audio/wav"
