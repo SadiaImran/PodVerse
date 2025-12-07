@@ -135,8 +135,8 @@ const AutoVoiceSetup = ({ formData, setFormData, goNext, goBack }) => {
             <div
                 onClick={() => onSelect(voice)}
                 className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${isSelected
-                        ? 'border-[#6057C7] bg-purple-50'
-                        : 'border-gray-200 hover:border-purple-300 bg-white'
+                        ? 'border-[#6057C7] bg-light-lavender/30'
+                        : 'border-gray-200 hover:border-light-lavender/50 bg-white'
                     }`}
             >
                 {/* Avatar */}
@@ -162,7 +162,7 @@ const AutoVoiceSetup = ({ formData, setFormData, goNext, goBack }) => {
                     }}
                     className={`w-8 h-8 rounded-full flex items-center justify-center transition-all flex-shrink-0 ${isPreviewing
                             ? 'bg-[#6057C7] text-white'
-                            : 'bg-gray-100 text-gray-500 hover:bg-purple-100 hover:text-[#6057C7]'
+                            : 'bg-gray-100 text-gray-500 hover:bg-light-lavender/30 hover:text-[#6057C7]'
                         }`}
                 >
                     {isLoading ? (
@@ -235,7 +235,7 @@ const AutoVoiceSetup = ({ formData, setFormData, goNext, goBack }) => {
                     {/* Guest Voice */}
                     <div className="border border-gray-200 rounded-xl p-4">
                         <div className="flex items-center gap-2 mb-2">
-                            <div className="w-7 h-7 rounded-md bg-indigo-500 flex items-center justify-center">
+                            <div className="w-7 h-7 rounded-md bg-light-purple flex items-center justify-center">
                                 <Users className="w-4 h-4 text-white" />
                             </div>
                             <div>
@@ -260,7 +260,7 @@ const AutoVoiceSetup = ({ formData, setFormData, goNext, goBack }) => {
                 </div>
 
                 {/* Selected Summary */}
-                <div className="flex items-center justify-center gap-8 p-4 rounded-xl bg-purple-50 mb-6">
+                <div className="flex items-center justify-center gap-8 p-4 rounded-xl bg-light-lavender/30 mb-6">
                     <div className="flex items-center gap-2">
                         <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-medium ${hostVoice?.gender === 'male' ? 'bg-blue-500' : 'bg-pink-500'
                             }`}>

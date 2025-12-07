@@ -99,13 +99,13 @@ const SubscriptionSuccessPage = () => {
 
     return (
         <BaseLayout homeScreen={false} autoCollapse={true}>
-            <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50 py-12 px-4">
+            <div className="min-h-screen bg-gradient-to-br from-light-lavender/20 via-white to-blue-50 py-12 px-4">
                 <div className="max-w-2xl mx-auto">
                     <div className="bg-white rounded-2xl shadow-lg p-8 md:p-12 text-center">
                         {loading ? (
                             <>
-                                <div className="w-20 h-20 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                                    <Loader2 size={40} className="text-purple-600 animate-spin" />
+                                <div className="w-20 h-20 bg-light-lavender/30 rounded-full flex items-center justify-center mx-auto mb-6">
+                                    <Loader2 size={40} className="text-light-purple animate-spin" />
                                 </div>
                                 <h1 className="text-3xl font-bold text-gray-900 mb-4">
                                     Processing Your Subscription
@@ -152,13 +152,13 @@ const SubscriptionSuccessPage = () => {
                                 <div className="flex flex-col sm:flex-row gap-4 justify-center">
                                     <button
                                         onClick={() => navigate('/subscription')}
-                                        className="px-6 py-3 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition-colors"
+                                        className="px-6 py-3 bg-light-purple text-white rounded-lg font-semibold hover:bg-light-purple/90 transition-colors"
                                     >
                                         View Subscription
                                     </button>
                                     <button
                                         onClick={() => navigate('/home')}
-                                        className="px-6 py-3 bg-white text-gray-700 border-2 border-gray-300 rounded-lg font-semibold hover:border-purple-500 hover:text-purple-600 transition-colors"
+                                        className="px-6 py-3 bg-white text-gray-700 border-2 border-gray-300 rounded-lg font-semibold hover:border-light-purple hover:text-light-purple transition-colors"
                                     >
                                         Go to Home
                                     </button>
