@@ -18,7 +18,7 @@ const ModeSelection = ({ formData, setFormData, goNext, goBack }) => {
                 "Live recording with LiveKit",
                 "Spontaneous content creation"
             ],
-            gradient: "from-violet-500 to-purple-600",
+            gradient: "from-light-purple to-light-purple",
             recommended: false
         },
         {
@@ -33,7 +33,7 @@ const ModeSelection = ({ formData, setFormData, goNext, goBack }) => {
                 "Choose voices for each speaker",
                 "Merged final audio output"
             ],
-            gradient: "from-purple-500 to-indigo-600",
+            gradient: "from-light-purple to-light-lavender",
             recommended: true
         }
     ];

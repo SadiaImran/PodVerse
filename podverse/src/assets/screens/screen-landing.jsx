@@ -30,12 +30,12 @@ import {
 import banner1 from '../images/banner-1.png';
 import aiTechVideo from '../images/AI Tech Insights.mp4';
 
-// Unified color palette
+// Unified color palette - using PodVerse theme colors
 const colors = {
-  primary: '#7C3AED',      // Vibrant purple
-  primaryDark: '#5B21B6',  // Darker purple
-  primaryLight: '#A78BFA', // Light purple
-  accent: '#8B5CF6',       // Accent purple
+  primary: '#6057C7',      // light-purple (main purple)
+  primaryDark: '#2F2867',  // deepPurple (darker purple)
+  primaryLight: '#A388E7', // lavender (light purple)
+  accent: '#7d6ce3',       // lightPurple (accent purple)
   bg: '#FAF5FF',           // Very light purple bg
   text: '#1F2937',         // Dark gray text
   textMuted: '#6B7280',    // Muted text
@@ -151,7 +151,7 @@ function LandingPage() {
         initial={{ y: -100 }}
         animate={{ y: 0 }}
         transition={{ duration: 0.6, ease: "easeOut" }}
-        className="fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-xl border-b border-purple-100/50 shadow-sm"
+        className="fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-xl border-b border-light-lavender/30 shadow-sm"
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16 lg:h-20">
@@ -194,7 +194,7 @@ function LandingPage() {
                 onClick={() => navigate('/signin-email')}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                className="px-5 py-2.5 text-purple-600 font-semibold rounded-full hover:bg-purple-50 transition-all"
+                className="px-5 py-2.5 text-light-purple font-semibold rounded-full hover:bg-light-lavender/20 transition-all"
               >
                 Sign In
               </motion.button>
@@ -213,7 +213,7 @@ function LandingPage() {
             {/* Mobile Menu Button */}
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="lg:hidden p-2 rounded-lg text-gray-600 hover:text-purple-600 hover:bg-purple-50 transition-colors"
+              className="lg:hidden p-2 rounded-lg text-gray-600 hover:text-light-purple hover:bg-light-lavender/20 transition-colors"
             >
               {isMobileMenuOpen ? <FaTimes className="text-xl" /> : <FaBars className="text-xl" />}
             </button>
@@ -226,7 +226,7 @@ function LandingPage() {
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
-                className="lg:hidden border-t border-purple-100 py-4"
+                className="lg:hidden border-t border-light-lavender/30 py-4"
               >
                 <div className="flex flex-col gap-2">
                   {['About', 'Features', 'How It Works', 'Pricing'].map((item) => (
@@ -239,10 +239,10 @@ function LandingPage() {
                       {item}
                     </a>
                   ))}
-                  <div className="pt-4 mt-2 border-t border-purple-100 flex flex-col gap-2">
+                  <div className="pt-4 mt-2 border-t border-light-lavender/30 flex flex-col gap-2">
                     <button
                       onClick={() => { navigate('/signin-email'); setIsMobileMenuOpen(false); }}
-                      className="w-full py-3 text-purple-600 font-semibold rounded-full border-2 border-purple-200 hover:bg-purple-50 transition-all"
+                      className="w-full py-3 text-light-purple font-semibold rounded-full border-2 border-light-lavender/50 hover:bg-light-lavender/20 transition-all"
                     >
                       Sign In
                     </button>
@@ -381,7 +381,7 @@ function LandingPage() {
               <motion.div
                 whileHover={{ scale: 1.02 }}
                 transition={{ duration: 0.4 }}
-                className="rounded-3xl overflow-hidden shadow-2xl border-2 border-purple-100/80 bg-white"
+                className="rounded-3xl overflow-hidden shadow-2xl border-2 border-light-lavender/40 bg-white"
               >
                 <img
                   src={banner1}
@@ -429,7 +429,7 @@ function LandingPage() {
                 key={index}
                 variants={fadeInUp}
                 whileHover={{ y: -8, boxShadow: '0 30px 60px -15px rgba(124, 58, 237, 0.2)' }}
-                className="bg-white rounded-3xl p-8 shadow-lg border border-purple-100/60 transition-all duration-300 group relative overflow-hidden"
+                className="bg-white rounded-3xl p-8 shadow-lg border border-light-lavender/30 transition-all duration-300 group relative overflow-hidden"
               >
                 {/* Subtle gradient overlay on hover */}
                 <div
@@ -485,7 +485,7 @@ function LandingPage() {
             className="grid md:grid-cols-3 gap-8 relative"
           >
             {/* Connecting line */}
-            <div className="hidden md:block absolute top-24 left-[16.67%] right-[16.67%] h-0.5 bg-gradient-to-r from-purple-200 via-purple-300 to-purple-200" />
+            <div className="hidden md:block absolute top-24 left-[16.67%] right-[16.67%] h-0.5 bg-gradient-to-r from-light-lavender/50 via-light-purple/50 to-light-lavender/50" />
 
             {steps.map((step, index) => (
               <motion.div
@@ -554,7 +554,7 @@ function LandingPage() {
             <motion.div
               variants={fadeInUp}
               whileHover={{ y: -8 }}
-              className="bg-white rounded-3xl p-8 shadow-lg border border-purple-100/50 flex flex-col h-full"
+              className="bg-white rounded-3xl p-8 shadow-lg border border-light-lavender/30 flex flex-col h-full"
             >
               <div className="mb-6">
                 <span className="px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide bg-gray-100 text-gray-600">
@@ -624,7 +624,7 @@ function LandingPage() {
             <motion.div
               variants={fadeInUp}
               whileHover={{ y: -8 }}
-              className="bg-white rounded-3xl p-8 shadow-lg border border-purple-100/50 flex flex-col h-full"
+              className="bg-white rounded-3xl p-8 shadow-lg border border-light-lavender/30 flex flex-col h-full"
             >
               <div className="mb-6">
                 <span className="px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide bg-gray-100 text-gray-600">
@@ -688,7 +688,7 @@ function LandingPage() {
               >
                 <button
                   onClick={() => setOpenFaqIndex(openFaqIndex === index ? null : index)}
-                  className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-purple-50/50 transition-colors"
+                  className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-light-lavender/20 transition-colors"
                 >
                   <span className={`text-lg font-medium transition-colors ${openFaqIndex === index ? 'text-purple-600' : 'text-gray-800'}`}>
                     {faq.question}
@@ -748,7 +748,7 @@ function LandingPage() {
             </motion.h2>
             <motion.p
               variants={fadeInUp}
-              className="text-xl text-purple-100 mb-10 max-w-2xl mx-auto"
+              className="text-xl text-light-lavender/50 mb-10 max-w-2xl mx-auto"
             >
               Join thousands of creators using PodVerse to record, edit, and publish professional podcasts with AI.
             </motion.p>
@@ -817,7 +817,7 @@ function LandingPage() {
                 <ul className="space-y-3">
                   {col.links.map((link) => (
                     <li key={link}>
-                      <a href="#" className="text-gray-500 hover:text-purple-600 transition-colors">
+                      <a href="#" className="text-gray-500 hover:text-light-purple transition-colors">
                         {link}
                       </a>
                     </li>
@@ -851,9 +851,9 @@ function LandingPage() {
               © {new Date().getFullYear()} PodVerse. All rights reserved.
             </p>
             <div className="flex gap-6 text-sm text-gray-400">
-              <a href="#" className="hover:text-purple-600 transition-colors">Terms</a>
-              <a href="#" className="hover:text-purple-600 transition-colors">Privacy</a>
-              <a href="#" className="hover:text-purple-600 transition-colors">Cookies</a>
+              <a href="#" className="hover:text-light-purple transition-colors">Terms</a>
+              <a href="#" className="hover:text-light-purple transition-colors">Privacy</a>
+              <a href="#" className="hover:text-light-purple transition-colors">Cookies</a>
             </div>
           </div>
         </div>

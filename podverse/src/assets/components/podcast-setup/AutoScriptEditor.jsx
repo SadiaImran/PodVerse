@@ -179,7 +179,7 @@ const AutoScriptEditor = ({ formData, setFormData, goNext, goBack }) => {
                                     type="text"
                                     value={hostName}
                                     onChange={(e) => setHostName(e.target.value)}
-                                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-[#6057C7] focus:ring-2 focus:ring-purple-100 outline-none transition-all"
+                                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-[#6057C7] focus:ring-2 focus:ring-light-lavender/30 outline-none transition-all"
                                     placeholder="e.g., Alex"
                                 />
                             </div>
@@ -193,7 +193,7 @@ const AutoScriptEditor = ({ formData, setFormData, goNext, goBack }) => {
                                     type="text"
                                     value={guestName}
                                     onChange={(e) => setGuestName(e.target.value)}
-                                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-[#6057C7] focus:ring-2 focus:ring-purple-100 outline-none transition-all"
+                                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-[#6057C7] focus:ring-2 focus:ring-light-lavender/30 outline-none transition-all"
                                     placeholder="e.g., Jordan"
                                 />
                             </div>
@@ -206,7 +206,7 @@ const AutoScriptEditor = ({ formData, setFormData, goNext, goBack }) => {
                                 <select
                                     value={duration}
                                     onChange={(e) => setDuration(parseInt(e.target.value))}
-                                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-[#6057C7] focus:ring-2 focus:ring-purple-100 outline-none transition-all"
+                                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-[#6057C7] focus:ring-2 focus:ring-light-lavender/30 outline-none transition-all"
                                 >
                                     <option value={3}>~3 minutes</option>
                                     <option value={5}>~5 minutes</option>
@@ -223,7 +223,7 @@ const AutoScriptEditor = ({ formData, setFormData, goNext, goBack }) => {
                                 <select
                                     value={tone}
                                     onChange={(e) => setTone(e.target.value)}
-                                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-[#6057C7] focus:ring-2 focus:ring-purple-100 outline-none transition-all"
+                                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-[#6057C7] focus:ring-2 focus:ring-light-lavender/30 outline-none transition-all"
                                 >
                                     {toneOptions.map(opt => (
                                         <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -302,8 +302,8 @@ const AutoScriptEditor = ({ formData, setFormData, goNext, goBack }) => {
                                             {/* Speaker Avatar */}
                                             <div
                                                 className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${line.speaker_label === 'HOST'
-                                                        ? 'bg-gradient-to-br from-violet-500 to-purple-600'
-                                                        : 'bg-gradient-to-br from-purple-500 to-indigo-600'
+                                                        ? 'bg-gradient-to-br from-light-purple to-light-purple'
+                                                        : 'bg-gradient-to-br from-light-purple to-light-lavender'
                                                     }`}
                                             >
                                                 {line.speaker_label === 'HOST' ? (
@@ -329,7 +329,7 @@ const AutoScriptEditor = ({ formData, setFormData, goNext, goBack }) => {
                                                         <textarea
                                                             value={editText}
                                                             onChange={(e) => setEditText(e.target.value)}
-                                                            className="w-full px-3 py-2 rounded-lg border border-[#6057C7] focus:ring-2 focus:ring-purple-100 outline-none resize-none"
+                                                            className="w-full px-3 py-2 rounded-lg border border-[#6057C7] focus:ring-2 focus:ring-light-lavender/30 outline-none resize-none"
                                                             rows={3}
                                                             autoFocus
                                                         />

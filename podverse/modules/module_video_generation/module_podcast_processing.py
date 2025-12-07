@@ -744,6 +744,8 @@ def process_podcast_background(
     user_id: Optional[str],
     kb_id: Optional[str],
     podcast_title: Optional[str],
+    skip_diarization: bool = False,
+    precomputed_utterances: Optional[List[Dict]] = None
 ):
     """Background task to process podcast audio into avatar videos."""
     temp_files = [audio_file_path]
@@ -751,11 +753,55 @@ def process_podcast_background(
     transcript_signed_url = None
     
     try:
-        # Step 1: Diarization
-        update_job_status(job_id, status="diarizing", progress=20, message="Running speaker diarization...")
-        
-        utterances, audio_files = transcribe_and_diarize(audio_file_path, split_screen_mode=split_screen_mode)
-        temp_files.extend(audio_files.values())
+        # Step 1: Diarization (skip if precomputed utterances provided)
+        if skip_diarization and precomputed_utterances:
+            print("⏭️ Skipping diarization - using precomputed utterances")
+            update_job_status(job_id, status="processing", progress=20, message="Using precomputed speaker data...")
+            utterances = precomputed_utterances
+            # Still need to extract audio files from the merged audio using utterances
+            from pydub import AudioSegment
+            audio = AudioSegment.from_file(audio_file_path)
+            audio_files = {}
+            
+            for speaker_label in ["A", "B"]:
+                segments = [u for u in utterances if u.get("speaker") == speaker_label]
+                
+                if not segments:
+                    print(f"⚠️ No segments for Speaker {speaker_label}")
+                    continue
+                
+                if split_screen_mode:
+                    speaker_audio = AudioSegment.silent(duration=len(audio))
+                    for seg in segments:
+                        start_ms = min(int(float(seg.get("start", 0)) * 1000), len(audio))
+                        end_ms = min(int(float(seg.get("end", 0)) * 1000), len(audio))
+                        if start_ms < end_ms:
+                            speaker_audio = speaker_audio.overlay(
+                                audio[start_ms:end_ms], 
+                                position=start_ms
+                            )
+                else:
+                    speaker_audio = AudioSegment.empty()
+                    for seg in segments:
+                        start_ms = min(int(float(seg.get("start", 0)) * 1000), len(audio))
+                        end_ms = min(int(float(seg.get("end", 0)) * 1000), len(audio))
+                        if start_ms < end_ms:
+                            speaker_audio += audio[start_ms:end_ms]
+                
+                if len(speaker_audio) > 0:
+                    out_path = os.path.join(tempfile.gettempdir(), f"speaker_{speaker_label}.wav")
+                    speaker_audio.export(out_path, format="wav")
+                    audio_files[speaker_label] = out_path
+                    duration = len(speaker_audio) / 1000
+                    print(f"✅ Exported Speaker {speaker_label}: {duration:.1f}s")
+            
+            temp_files.extend(audio_files.values())
+        else:
+            # Normal diarization flow
+            update_job_status(job_id, status="diarizing", progress=20, message="Running speaker diarization...")
+            
+            utterances, audio_files = transcribe_and_diarize(audio_file_path, split_screen_mode=split_screen_mode)
+            temp_files.extend(audio_files.values())
         
         print(f"\n📊 Diarization Summary:")
         print(f"  Total utterances: {len(utterances)}")
@@ -1104,7 +1150,9 @@ async def process_podcast(
     kb_id: Optional[str] = Form(None),
     podcast_title: Optional[str] = Form(None),
     authorization: str = Depends(verify_token),
-    split_screen_mode: bool = Form(False)
+    split_screen_mode: bool = Form(False),
+    skip_diarization: Optional[str] = Form(None),  # NEW: Skip diarization flag
+    precomputed_utterances: Optional[str] = Form(None)  # NEW: Precomputed utterances JSON
 ):
     """Process uploaded podcast audio into avatar videos."""
     import uuid
@@ -1131,6 +1179,17 @@ async def process_podcast(
         raise HTTPException(status_code=500, detail=f"Failed to save audio file: {str(e)}")
     
     job_id = str(uuid.uuid4())
+    
+    # Parse precomputed utterances if provided
+    utterances_data = None
+    if skip_diarization == 'true' and precomputed_utterances:
+        try:
+            import json
+            utterances_data = json.loads(precomputed_utterances)
+            print(f"✅ Received precomputed utterances: {len(utterances_data)} segments")
+        except Exception as e:
+            print(f"⚠️ Failed to parse precomputed utterances: {e}")
+            utterances_data = None
     
     job = ProcessingStatus(
         job_id=job_id,
@@ -1162,6 +1221,8 @@ async def process_podcast(
         user_id=user_id,
         kb_id=kb_id,
         podcast_title=podcast_title,
+        skip_diarization=skip_diarization == 'true',
+        precomputed_utterances=utterances_data
     )
     
     return {

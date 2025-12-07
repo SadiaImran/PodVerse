@@ -637,11 +637,28 @@ const AudioEditor = () => {
       { type: finalizedAudioBlobRef.current.type || 'audio/wav' }
     );
 
+    // Check if script data exists (from automatic audio generation)
+    const scriptDataStr = sessionStorage.getItem('autoAudioScriptData');
+    const audioDuration = parseFloat(sessionStorage.getItem('autoAudioDuration') || '0');
+    let scriptData = null;
+    
+    if (scriptDataStr) {
+      try {
+        scriptData = JSON.parse(scriptDataStr);
+        console.log('✅ Found script data from automatic audio generation');
+      } catch (e) {
+        console.warn('Failed to parse script data:', e);
+      }
+    }
+
     navigate('/video-generation', {
       state: {
         source: 'audio-edit',
         audioFile,
         audioFileName: finalizedAudioName,
+        fromAutoAudio: !!scriptData,
+        scriptData: scriptData,
+        audioDuration: audioDuration
       },
     });
   }, [finalizedAudioName, navigate]);
@@ -683,7 +700,7 @@ const AudioEditor = () => {
           startTime: 0, // All tracks start from the beginning
           endTime: duration,
           file,
-          color: 'bg-purple-500'
+          color: 'bg-light-purple'
         };
 
         // Load audio buffer for individual track waveforms
@@ -876,7 +893,7 @@ const AudioEditor = () => {
         {finalizeModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
             <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl p-8 space-y-6 animate-slide-in-right">
-              <div className="flex items-center gap-3 text-indigo-600 font-semibold">
+              <div className="flex items-center gap-3 text-light-purple font-semibold">
                 <Play className="w-6 h-6" />
                 <span>Audio Finalized</span>
               </div>
@@ -896,7 +913,7 @@ const AudioEditor = () => {
                 </button>
                 <button
                   onClick={handleGoToVideoGeneration}
-                  className="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-600 text-white font-semibold shadow-md hover:shadow-lg transition-all"
+                  className="flex-1 px-4 py-3 rounded-xl bg-light-purple text-white font-semibold shadow-md hover:shadow-lg hover:bg-light-purple/90 transition-all"
                 >
                   Go to Video Generation
                 </button>

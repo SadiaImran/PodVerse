@@ -253,11 +253,11 @@ const SubscriptionPage = () => {
 
   return (
     <BaseLayout homeScreen={false} autoCollapse={true}>
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50 py-12 px-4">
+      <div className="min-h-screen bg-gradient-to-br from-light-lavender/20 via-white to-blue-50 py-12 px-4">
         <div className="max-w-7xl mx-auto">
           {/* Header */}
           <div className="text-center mb-12">
-            <div className="inline-flex items-center gap-2 bg-purple-100 text-purple-700 px-4 py-2 rounded-full text-sm font-medium mb-4">
+            <div className="inline-flex items-center gap-2 bg-light-lavender/30 text-light-purple px-4 py-2 rounded-full text-sm font-medium mb-4">
               <Crown size={16} />
               <span>Upgrade Your Podcasting Experience</span>
             </div>
@@ -312,7 +312,7 @@ const SubscriptionPage = () => {
               return (
                 <div
                   key={index}
-                  className={`relative bg-white rounded-2xl shadow-lg overflow-hidden transition-all hover:shadow-xl ${plan.popular && !showCurrentBadge ? 'ring-2 ring-purple-500 transform scale-105' : ''
+                  className={`relative bg-white rounded-2xl shadow-lg overflow-hidden transition-all hover:shadow-xl ${plan.popular && !showCurrentBadge ? 'ring-2 ring-light-purple transform scale-105' : ''
                     } ${showCurrentBadge ? 'ring-2 ring-green-500 border-green-500' : ''
                     }`}
                 >
@@ -322,7 +322,7 @@ const SubscriptionPage = () => {
                     </div>
                   )}
                   {plan.popular && !showCurrentBadge && (
-                    <div className="absolute top-0 left-0 right-0 bg-gradient-to-r from-purple-600 to-blue-600 text-white text-center py-2 text-sm font-semibold">
+                    <div className="absolute top-0 left-0 right-0 bg-gradient-to-r from-light-purple to-blue-600 text-white text-center py-2 text-sm font-semibold">
                       Most Popular
                     </div>
                   )}
@@ -340,8 +340,8 @@ const SubscriptionPage = () => {
                       onClick={() => plan.planType && handleSubscribe(plan.planType)}
                       disabled={shouldDisablePlanButton(plan)}
                       className={`w-full py-3 px-6 rounded-lg font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed ${plan.buttonVariant === 'primary'
-                        ? 'bg-purple-600 text-white hover:bg-purple-700 shadow-md hover:shadow-lg'
-                        : 'bg-white text-gray-700 border-2 border-gray-300 hover:border-purple-500 hover:text-purple-600'
+                        ? 'bg-light-purple text-white hover:bg-light-purple/90 shadow-md hover:shadow-lg'
+                        : 'bg-white text-gray-700 border-2 border-gray-300 hover:border-light-purple hover:text-light-purple'
                         }`}
                     >
                       {renderPlanButtonLabel(plan)}
@@ -350,7 +350,7 @@ const SubscriptionPage = () => {
                     <ul className="mt-8 space-y-4">
                       {plan.features.map((feature, idx) => (
                         <li key={idx} className="flex items-start gap-3">
-                          <Check size={20} className="text-purple-600 flex-shrink-0 mt-0.5" />
+                          <Check size={20} className="text-light-purple flex-shrink-0 mt-0.5" />
                           <span className="text-gray-700 text-sm">{feature}</span>
                         </li>
                       ))}
@@ -391,8 +391,8 @@ const SubscriptionPage = () => {
                 }
               ].map((feature, index) => (
                 <div key={index} className="text-center">
-                  <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <feature.icon size={32} className="text-purple-600" />
+                  <div className="w-16 h-16 bg-light-lavender/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <feature.icon size={32} className="text-light-purple" />
                   </div>
                   <h3 className="font-semibold text-gray-900 mb-2">{feature.title}</h3>
                   <p className="text-gray-600 text-sm">{feature.description}</p>

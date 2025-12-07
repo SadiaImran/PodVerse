@@ -133,12 +133,63 @@ function AvatarVideoGenerator() {
   };
 
   const [error, setError] = useState("");
+  const [skipDiarization, setSkipDiarization] = useState(false);
+  const [precomputedUtterances, setPrecomputedUtterances] = useState(null);
+
+  // Convert script data to utterances format for skipping diarization
+  const convertScriptToUtterances = (scriptData, totalDuration) => {
+    if (!scriptData || !Array.isArray(scriptData)) return null;
+    
+    let currentTime = 0;
+    const utterances = [];
+    
+    scriptData.forEach((line, index) => {
+      // Estimate duration based on text length (rough estimate: 150 words per minute)
+      const wordCount = (line.text || '').split(/\s+/).length;
+      const estimatedDuration = (wordCount / 150) * 60 * 1000; // Convert to milliseconds
+      
+      const start = currentTime;
+      const end = currentTime + estimatedDuration;
+      
+      // Map HOST/GUEST to A/B (or use existing speaker field if available)
+      let speaker = 'A';
+      if (line.speaker_label) {
+        speaker = line.speaker_label === 'HOST' ? 'A' : 'B';
+      } else if (line.speaker) {
+        // If speaker is already A/B, use it directly
+        speaker = line.speaker === 'A' || line.speaker === 'B' ? line.speaker : 'A';
+      }
+      
+      utterances.push({
+        speaker: speaker,
+        text: line.text || '',
+        start: start / 1000, // Convert to seconds
+        end: end / 1000,
+        id: line.id || `utterance_${index}`
+      });
+      
+      currentTime = end + 300; // Add 300ms gap between utterances
+    });
+    
+    console.log(`✅ Converted ${utterances.length} script lines to utterances`);
+    return utterances;
+  };
 
   useEffect(() => {
     const initializeAudioFromNavigation = async () => {
       if (location.state?.audioFile) {
         setAudioFile(location.state.audioFile);
         setAudioFileName(location.state.audioFileName || location.state.audioFile.name || 'final_audio.wav');
+        
+        // Check if coming from automatic audio generation
+        if (location.state?.fromAutoAudio && location.state?.scriptData) {
+          setSkipDiarization(true);
+          // Convert script data to utterances format
+          const utterances = convertScriptToUtterances(location.state.scriptData, location.state.audioDuration || 0);
+          setPrecomputedUtterances(utterances);
+          console.log('✅ Skipping diarization - using precomputed utterances from script');
+        }
+        
         navigate('.', { replace: true, state: null });
         sessionStorage.removeItem('videoGenAudioDataUrl');
         sessionStorage.removeItem('videoGenAudioName');
@@ -198,6 +249,23 @@ function AvatarVideoGenerator() {
         }
       } catch (err) {
         console.warn('Failed to parse video generation metadata:', err);
+      }
+
+      // Check sessionStorage for script data from automatic audio generation
+      const scriptDataStr = sessionStorage.getItem('autoAudioScriptData');
+      const audioDurationStr = sessionStorage.getItem('autoAudioDuration');
+      
+      if (scriptDataStr && !skipDiarization) {
+        try {
+          const scriptData = JSON.parse(scriptDataStr);
+          const audioDuration = parseFloat(audioDurationStr || '0');
+          setSkipDiarization(true);
+          const utterances = convertScriptToUtterances(scriptData, audioDuration);
+          setPrecomputedUtterances(utterances);
+          console.log('✅ Loaded script data from sessionStorage - will skip diarization');
+        } catch (err) {
+          console.warn('Failed to parse script data from sessionStorage:', err);
+        }
       }
     };
 
@@ -621,6 +689,13 @@ function AvatarVideoGenerator() {
 
       formData.append('split_screen_mode', splitScreenMode);
 
+      // NEW: Skip diarization if utterances are precomputed (from automatic audio generation)
+      if (skipDiarization && precomputedUtterances) {
+        formData.append('skip_diarization', 'true');
+        formData.append('precomputed_utterances', JSON.stringify(precomputedUtterances));
+        console.log('📤 Sending precomputed utterances to skip diarization');
+      }
+
       // Check if testing mode is enabled
       if (isTestingMode) {
         console.log("🧪 Testing Mode: Simulating video generation...");
@@ -864,7 +939,7 @@ function AvatarVideoGenerator() {
     <div className="bg-white/80 backdrop-blur-xl rounded-2xl p-4 sm:p-5 border border-light-lavender/40 shadow-xl hover:shadow-2xl transition-all duration-500 shadow-light-purple/5">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-lg ${speaker === 'A' ? 'bg-light-lightPurple shadow-light-purple/30' : 'bg-gradient-to-br from-pink-500 via-rose-500 to-pink-600 shadow-pink-500/30'}`}>
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-lg ${speaker === 'A' ? 'bg-light-purple shadow-light-purple/30' : 'bg-gradient-to-br from-pink-500 via-rose-500 to-pink-600 shadow-pink-500/30'}`}>
             <Users className="w-5 h-5 text-white" />
           </div>
           <div>
@@ -900,13 +975,13 @@ function AvatarVideoGenerator() {
           {templates.length > 0 && (
             <div>
               <label className="text-slate-900 font-bold mb-4 block flex items-center gap-2.5 text-base sm:text-lg">
-                <div className="w-6 h-6 rounded-lg bg-light-lightPurple flex items-center justify-center">
+                <div className="w-6 h-6 rounded-lg bg-light-purple flex items-center justify-center">
                   <Sparkles className="w-4 h-4 text-white" />
                 </div>
                 Choose from Templates
               </label>
               {loadingTemplates ? (
-                <div className="flex items-center justify-center py-12 rounded-2xl border border-light-lavender/50 bg-gradient-to-br from-light-lavender/30 to-light-lightPurple/30">
+                <div className="flex items-center justify-center py-12 rounded-2xl border border-light-lavender/50 bg-gradient-to-br from-light-lavender/30 to-light-purple/30">
                   <Loader2 className="w-10 h-10 animate-spin text-light-purple" />
                 </div>
               ) : (
@@ -950,7 +1025,7 @@ function AvatarVideoGenerator() {
           
           <div>
             <label className="text-slate-900 font-bold mb-4 block flex items-center gap-2.5 text-base sm:text-lg">
-              <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-light-purple to-light-deepPurple flex items-center justify-center">
+              <div className="w-6 h-6 rounded-lg bg-light-purple flex items-center justify-center">
                 <ImageIcon className="w-4 h-4 text-white" />
               </div>
               Upload Custom Photo
@@ -960,7 +1035,7 @@ function AvatarVideoGenerator() {
                 <img
                   src={imagePreview}
                   alt={`Speaker ${speaker}`}
-                  className="w-full h-56 sm:h-64 object-cover rounded-2xl border-2 border-light-lightPurple/60 shadow-2xl"
+                  className="w-full h-56 sm:h-64 object-cover rounded-2xl border-2 border-light-purple/60 shadow-2xl"
                 />
                 <button
                   onClick={() => {
@@ -982,8 +1057,8 @@ function AvatarVideoGenerator() {
                 </button>
               </div>
             ) : (
-              <label className="flex flex-col items-center justify-center w-full h-40 sm:h-44 border-2 border-dashed border-light-lightPurple/60 rounded-2xl cursor-pointer backdrop-blur-sm transition-all duration-300 group shadow-md hover:shadow-lg bg-gradient-to-br from-light-lavender/30 to-light-lightPurple/30 hover:from-light-lavender/40 hover:to-light-lightPurple/40 hover:border-light-lightPurple/80">
-                <div className="w-14 h-14 sm:w-16 sm:h-16 mb-3 rounded-2xl bg-gradient-to-br from-light-lightPurple to-light-purple flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+              <label className="flex flex-col items-center justify-center w-full h-40 sm:h-44 border-2 border-dashed border-light-purple/60 rounded-2xl cursor-pointer backdrop-blur-sm transition-all duration-300 group shadow-md hover:shadow-lg bg-gradient-to-br from-light-lavender/30 to-light-purple/30 hover:from-light-lavender/40 hover:to-light-purple/40 hover:border-light-purple/80">
+                <div className="w-14 h-14 sm:w-16 sm:h-16 mb-3 rounded-2xl bg-light-purple flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
                   <ImageIcon className="w-7 h-7 sm:w-8 sm:h-8 text-white" />
                 </div>
                 <p className="text-base sm:text-lg font-bold text-light-purple transition-colors group-hover:text-light-purple">Click to upload photo</p>
@@ -1092,7 +1167,7 @@ function AvatarVideoGenerator() {
             Select Avatar
           </label>
           {loadingAvatars ? (
-            <div className="flex items-center justify-center py-8 rounded-xl border border-light-lavender/50 bg-gradient-to-br from-light-lavender/30 to-light-lightPurple/30">
+            <div className="flex items-center justify-center py-8 rounded-xl border border-light-lavender/50 bg-gradient-to-br from-light-lavender/30 to-light-purple/30">
               <Loader2 className="w-8 h-8 animate-spin text-light-purple" />
             </div>
           ) : (
@@ -1108,7 +1183,7 @@ function AvatarVideoGenerator() {
                     //     ? 'ring-2 shadow-lg bg-white'
                     //     : 'bg-white hover:shadow-md'
                     // }`}
-                    className={isSelected ? 'border-light-purple ring-2 ring-light-lavender/50 shadow-lg shadow-light-purple/40 bg-gradient-to-br from-light-lavender/30 to-light-lightPurple/30' : 'border-light-lavender/60 hover:border-light-lightPurple/80'}
+                    className={isSelected ? 'border-light-purple ring-2 ring-light-lavender/50 shadow-lg shadow-light-purple/40 bg-gradient-to-br from-light-lavender/30 to-light-purple/30' : 'border-light-lavender/60 hover:border-light-purple/80'}
                   >
                     <div className="w-full aspect-square bg-gradient-to-br from-slate-100 to-slate-200">
                       {a.preview_image_url ? (
@@ -1135,7 +1210,7 @@ function AvatarVideoGenerator() {
             </div>
           )}
           {avatar && (
-            <div className="mt-3 text-xs backdrop-blur-sm rounded-lg p-2.5 border-2 border-light-lavender/60 shadow-md bg-gradient-to-r from-light-lavender/30 to-light-lightPurple/30 text-light-purple">
+            <div className="mt-3 text-xs backdrop-blur-sm rounded-lg p-2.5 border-2 border-light-lavender/60 shadow-md bg-gradient-to-r from-light-lavender/30 to-light-purple/30 text-light-purple">
               <p className="font-semibold">
                 Selected: <span className="font-bold text-light-purple">{avatar.avatar_name}</span>
               </p>
@@ -1189,7 +1264,7 @@ function AvatarVideoGenerator() {
                 </option>
               ))}
             </select>
-            <div className="flex items-start gap-2.5 text-sm backdrop-blur-sm rounded-xl p-3.5 border-2 border-light-lavender/60 shadow-md bg-gradient-to-r from-light-lavender/30 to-light-lightPurple/30 text-light-deepPurple">
+            <div className="flex items-start gap-2.5 text-sm backdrop-blur-sm rounded-xl p-3.5 border-2 border-light-lavender/60 shadow-md bg-gradient-to-r from-light-lavender/30 to-light-purple/30 text-light-purple">
               <div className="w-5 h-5 rounded-lg bg-light-purple flex items-center justify-center flex-shrink-0 mt-0.5">
                 <Info className="w-3.5 h-3.5 text-white" />
               </div>
@@ -1215,12 +1290,12 @@ function AvatarVideoGenerator() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-light-lavender/20 to-light-lightPurple/30 py-4 px-2 sm:px-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-light-lavender/20 to-light-purple/30 py-4 px-2 sm:px-4">
       <div className="w-full">
         {/* Header - Left Aligned */}
         <div className="mb-4">
           <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-500 mb-2 flex items-center gap-2.5">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-light-lightPurple flex items-center justify-center shadow-lg relative">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-light-purple flex items-center justify-center shadow-lg relative">
               <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full blur-sm opacity-60 bg-light-secondary"></div>
               <div className="absolute -bottom-1 -left-1 w-3 h-3 rounded-full blur-sm opacity-60 bg-light-lavender"></div>
               <Video className="w-5 h-5 sm:w-6 sm:h-6 text-white relative z-10" />
@@ -1235,7 +1310,7 @@ function AvatarVideoGenerator() {
           <div className="w-full">
             <div className="bg-white rounded-xl p-5 border border-slate-200/60 shadow-sm max-w-2xl">
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-light-purple to-light-deepPurple flex items-center justify-center shadow-md">
+                <div className="w-9 h-9 rounded-lg bg-light-purple flex items-center justify-center shadow-md">
                   <Upload className="w-5 h-5 text-white" />
                 </div>
                 <div>
@@ -1270,9 +1345,9 @@ function AvatarVideoGenerator() {
                     </div>
                   </div>
                 ) : (
-                  <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-light-lightPurple/80 hover:border-light-lavender rounded-xl cursor-pointer bg-slate-50/50 hover:bg-slate-100/70 transition-all duration-300 group">
+                  <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-light-purple/80 hover:border-light-lavender rounded-xl cursor-pointer bg-slate-50/50 hover:bg-slate-100/70 transition-all duration-300 group">
                     <div className="flex flex-col items-center justify-center">
-                      <div className="w-16 h-16 mb-3 rounded-xl bg-gradient-to-br from-light-purple to-light-deepPurple flex items-center justify-center shadow-md group-hover:scale-105 transition-transform duration-300">
+                      <div className="w-16 h-16 mb-3 rounded-xl bg-light-purple flex items-center justify-center shadow-md group-hover:scale-105 transition-transform duration-300">
                         <Upload className="w-8 h-8 text-white" />
                       </div>
                       <p className="mb-1.5 text-sm font-semibold text-slate-700 transition-colors text-light-purple/80 group-hover:text-light-purple">
@@ -1451,7 +1526,7 @@ function AvatarVideoGenerator() {
                 {/* Speakers Preview */}
                 <div className="grid grid-cols-2 gap-3">
                   {/* Speaker A */}
-                  <div className="rounded-lg border border-light-lavender/60 bg-gradient-to-br from-light-lavender/20 to-light-lightPurple/20 p-4">
+                  <div className="rounded-lg border border-light-lavender/60 bg-gradient-to-br from-light-lavender/20 to-light-purple/20 p-4">
                     <div className="flex items-center gap-3 mb-3">
                       <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-light-purple bg-light-lavender/40 flex items-center justify-center flex-shrink-0">
                         {speakerAPreviewImage ? (
@@ -1531,14 +1606,14 @@ function AvatarVideoGenerator() {
           {jobStatus && (
               <div className="bg-white/80 backdrop-blur-xl rounded-3xl p-6 sm:p-8 border border-light-lavender/40 shadow-xl shadow-light-purple/5">
                 <h3 className="text-slate-900 font-bold mb-6 flex items-center gap-3 text-lg sm:text-xl">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-light-purple to-light-deepPurple flex items-center justify-center shadow-md">
+                  <div className="w-10 h-10 rounded-xl bg-light-purple flex items-center justify-center shadow-md">
                     <Video className="w-6 h-6 text-white" />
                   </div>
                   Processing Status
                 </h3>
 
                 <div className="space-y-6">
-                  <div className="flex items-center gap-4 backdrop-blur-sm rounded-2xl p-5 border-2 border-light-lavender/60 shadow-lg bg-gradient-to-r from-light-lavender/30 to-light-lightPurple/30">
+                  <div className="flex items-center gap-4 backdrop-blur-sm rounded-2xl p-5 border-2 border-light-lavender/60 shadow-lg bg-gradient-to-r from-light-lavender/30 to-light-purple/30">
                     {jobStatus.status === 'completed' && (
                       <div className="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center shadow-md flex-shrink-0">
                         <CheckCircle2 className="w-6 h-6 text-white" />
@@ -1565,7 +1640,7 @@ function AvatarVideoGenerator() {
                       <span>Progress</span>
                       <span>{jobStatus.progress}%</span>
                     </div>
-                    <div className="w-full rounded-full h-4 overflow-hidden shadow-inner border" style={{ backgroundColor: `${theme.colors.lavender}40`, borderColor: `${theme.colors.lavender}50` }}>
+                    <div className="w-full rounded-full h-4 overflow-hidden shadow-inner border bg-light-lavender border-light-lavender" >
                       <div
                         className={`h-full rounded-full transition-all duration-500 shadow-lg`}
                         style={{ width: `${jobStatus.progress}%`, ...getProgressStyle() }}
@@ -1616,7 +1691,7 @@ function AvatarVideoGenerator() {
 
                       {/* NEW: Split Screen Mode - Show both videos prominently */}
                       {splitScreenMode && (jobStatus.speaker_a_video || jobStatus.speaker_b_video) && (
-                        <div className="bg-gradient-to-r from-cyan-50 via-blue-50 to-indigo-50 rounded-2xl p-6 border-2 border-cyan-200 backdrop-blur-sm">
+                        <div className="bg-gradient-to-r from-cyan-50 via-blue-50 to-light-lavender/30 rounded-2xl p-6 border-2 border-cyan-200 backdrop-blur-sm">
                           <div className="flex items-center justify-between mb-6">
                             <p className="text-gray-900 font-bold flex items-center gap-2 text-lg">
                               <Users className="w-6 h-6" />
@@ -1708,7 +1783,7 @@ function AvatarVideoGenerator() {
                           <button
                             onClick={handleProceedClick}
                             disabled={!jobStatus.supabase_video_url || jobStatus.status !== 'completed'}
-                            className="w-full bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 disabled:from-gray-500 disabled:to-gray-600 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-xl transition-all duration-300 shadow-lg hover:shadow-indigo-500/50 flex items-center justify-center gap-2"
+                            className="w-full bg-light-purple hover:bg-light-purple/90 disabled:from-gray-500 disabled:to-gray-600 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-xl transition-all duration-300 shadow-lg hover:shadow-light-purple/50 flex items-center justify-center gap-2"
                           >
                             <Play className="w-5 h-5" />
                             Proceed
@@ -1773,7 +1848,7 @@ function AvatarVideoGenerator() {
           {/* Proceed Modal */}
           {showProceedModal && jobStatus?.status === 'completed' && jobStatus?.supabase_video_url && (
             <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-              <div className="rounded-3xl shadow-2xl p-6 sm:p-8 max-w-md w-full text-center border-2 border-light-purple/30 relative backdrop-blur-xl bg-light-lightPurple">
+              <div className="rounded-3xl shadow-2xl p-6 sm:p-8 max-w-md w-full text-center border-2 border-light-purple/30 relative backdrop-blur-xl bg-light-purple">
                 <button
                   onClick={() => setShowProceedModal(false)}
                   className="absolute top-4 right-4 text-white/80 hover:text-white transition-all duration-300 hover:scale-110 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center"
@@ -1792,7 +1867,7 @@ function AvatarVideoGenerator() {
                 <div className="flex flex-col gap-3 sm:gap-4">
                   <button
                     onClick={handleGenerateNewVideo}
-                    className="w-full px-6 py-3.5 bg-white/10 backdrop-blur-sm border-2 border-light-lightPurple/50 text-light-lavender/90 rounded-xl font-bold hover:bg-white/20 transition-all duration-300 shadow-lg hover:shadow-xl flex items-center justify-center gap-2 transform hover:scale-[1.02]"
+                    className="w-full px-6 py-3.5 bg-white/10 backdrop-blur-sm border-2 border-light-purple/50 text-light-lavender/90 rounded-xl font-bold hover:bg-white/20 transition-all duration-300 shadow-lg hover:shadow-xl flex items-center justify-center gap-2 transform hover:scale-[1.02]"
                   >
                     <Video className="w-5 h-5" />
                     Generate New Video
