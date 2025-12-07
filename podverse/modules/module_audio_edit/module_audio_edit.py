@@ -135,7 +135,64 @@ def export_audio(input_path: str, format: str, output_name: str):
         raise HTTPException(status_code=500, detail=f"Error exporting audio: {e}")
 
 
+
+def remove_silence(input_path: str, threshold_db: int, min_silence_duration: float, output_name: str):
+    """
+    Removes silence from audio using FFmpeg silenceremove filter.
+    threshold_db: Silence threshold in dB (e.g., -40). Anything below this is silence.
+    min_silence_duration: Minimum duration in seconds to consider as silence (e.g., 0.5).
+    """
+    output_path = os.path.join(TEMP_DIR, output_name)
+    try:
+        # start_periods=1 : Remove silence from the beginning
+        # stop_periods=-1 : Remove silence from the middle/end (recurses)
+        
+        # Construct filter string for precision
+        # We use subprocess for complex filter strings usually, but ffmpeg-python handles args well.
+        
+        stream = ffmpeg.input(input_path)
+        stream = stream.filter(
+            'silenceremove',
+            start_periods=1,
+            start_duration=min_silence_duration,
+            start_threshold=f'{threshold_db}dB',
+            stop_periods=-1,
+            stop_duration=min_silence_duration,
+            stop_threshold=f'{threshold_db}dB'
+        )
+        
+        stream.output(output_path).overwrite_output().run(quiet=True)
+        return output_path
+    except ffmpeg.Error as e:
+        error_message = e.stderr.decode() if e.stderr else str(e)
+        print(f"FFmpeg Error: {error_message}")
+        raise HTTPException(status_code=500, detail=f"FFmpeg error removing silence: {error_message}")
+    except Exception as e:
+        print(f"General Error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error removing silence: {e}")
+
+
 # ---------------- AUDIO API ROUTES ----------------
+
+@router.post("/remove-silence")
+async def remove_silence_api(
+    file: UploadFile, 
+    threshold: int = Form(-40, description="Threshold in dB (e.g. -40)"), 
+    duration: float = Form(0.5, description="Min duration of silence in seconds")
+):
+    """
+    Auto-removes silence from the uploaded audio file.
+    """
+    safe_name = sanitize_filename(file.filename, "uploaded_audio.wav")
+    input_path = os.path.join(TEMP_DIR, safe_name)
+    with open(input_path, "wb") as f:
+        f.write(await file.read())
+        
+    output_filename = sanitize_filename(f"nosilence_{safe_name}", f"nosilence_{safe_name}")
+    output_path = remove_silence(input_path, threshold, duration, output_filename)
+    
+    return FileResponse(output_path, filename=os.path.basename(output_path))
+
 
 @router.post("/split")
 async def split_audio_api(file: UploadFile, start_time: float = Form(...), duration: float = Form(...)):

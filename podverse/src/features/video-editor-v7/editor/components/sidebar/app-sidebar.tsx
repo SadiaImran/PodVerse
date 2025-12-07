@@ -10,6 +10,7 @@ import {
   Sticker,
   Layout,
   ChevronLeft,
+  Sparkles,
 } from "lucide-react";
 import {
   Sidebar,
@@ -37,6 +38,7 @@ import { ImageOverlayPanel } from "../overlays/images/image-overlay-panel";
 import { LocalMediaPanel } from "../overlays/local-media/local-media-panel";
 import { StickersPanel } from "../overlays/stickers/stickers-panel";
 import { TemplateOverlayPanel } from "../overlays/templates/template-overlay-panel";
+import { AiVisualsPanel } from "../overlays/ai-visuals/ai-visuals-panel";
 import { useEditorContext } from "../../contexts/editor-context";
 import { Button } from "@/components/ui/button";
 import PodVerseLogo from "../../../../../assets/images/logo.png";
@@ -74,6 +76,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         return "Stickers";
       case OverlayType.TEMPLATE:
         return "Template";
+      case OverlayType.AI_VISUALS:
+        return "AI Assets";
       default:
         return "Unknown";
     }
@@ -136,6 +140,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       panel: OverlayType.TEMPLATE,
       type: OverlayType.TEMPLATE,
     },
+    {
+      title: getPanelTitle(OverlayType.AI_VISUALS),
+      url: "#",
+      icon: Sparkles,
+      panel: OverlayType.AI_VISUALS,
+      type: OverlayType.AI_VISUALS,
+    },
   ];
 
   /**
@@ -160,6 +171,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         return <LocalMediaPanel />;
       case OverlayType.TEMPLATE:
         return <TemplateOverlayPanel />;
+      case OverlayType.AI_VISUALS:
+        return <AiVisualsPanel />;
       default:
         return null;
     }

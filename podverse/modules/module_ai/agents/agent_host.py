@@ -644,6 +644,38 @@ async def entrypoint_host(ctx: agents.JobContext):
 
     await asyncio.sleep(1)
 
+    # --- FETCH FLOW BEFORE SESSION START ---
+    print(f"📋 Fetching conversation flow BEFORE session start...")
+    try:
+        await agent.fetch_conversation_flow()
+        
+        # If flow fetched successfully, inject it into instructions immediately
+        if agent.conversation_flow:
+            topics = agent.conversation_flow.get("topics", [])
+            if topics:
+                topic_list = "\n".join([f"- {t['title']}: {', '.join(t['questions'][:2])}" for t in topics])
+                
+                # Inject into strict instructions
+                flow_instruction = f"""\n\n**CONVERSATION ROADMAP (STRICTLY FOLLOW):**
+                You have a planned roadmap for this interview. You MUST follow these topics in order:
+                {topic_list}
+                
+                Current Status: You are at the BEGINNING.
+                Task: Start with the first topic's questions.
+                Rule: Do NOT jump ahead. Wait for the guest to answer before moving to the next question.
+                """
+                
+                if hasattr(agent, '_instructions'):
+                    agent._instructions += flow_instruction
+                else:
+                    agent.instructions += flow_instruction
+                print("✅ Injected conversation flow into Agent System Instructions")
+                
+    except Exception as e:
+        print(f"⚠️ Flow fetch failed: {e}")
+        traceback.print_exc()
+    # ---------------------------------------
+
     try:
         # Configure RoomInputOptions for TRUE realtime - no delays, immediate response
         # The agent will respond to audio chunks immediately, not waiting for transcript
@@ -666,12 +698,10 @@ async def entrypoint_host(ctx: agents.JobContext):
         traceback.print_exc()
         return
 
-    print(f"📋 Fetching conversation flow...")
-    try:
-        await agent.fetch_conversation_flow()
-    except Exception as e:
-        print(f"⚠️ Flow fetch failed: {e}")
-        traceback.print_exc()
+    
+    # Flow is already fetched above
+    print(f"📋 Checking conversation flow state...")
+
 
     initial_context = ""
     doc_title = "your uploaded content"

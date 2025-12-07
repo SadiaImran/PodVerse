@@ -920,105 +920,94 @@ const fetchLiveKitToken = async () => {
     // Ignore segments if paused
     if (isPaused) return;
     
-    // Performance debugging
-    const startTime = performance.now();
-    
     segments.forEach(segment => {
       if (segment.text && segment.text.trim()) {
         const isAgent = participant?.identity?.includes('agent');
         const speaker = isAgent ? 'AI Assistant' : 'You';
         
-        if (!segment.final) {
-          if (isAgent) {
-            // Only update if different to avoid unnecessary re-renders
-            if (currentStreamingSpeaker !== 'AI Assistant') {
-              setCurrentStreamingSpeaker('AI Assistant');
+        // Logic to update transcript with deduplication and merging
+        setTranscript(prev => {
+          const lastMsg = prev[prev.length - 1];
+          const isSameSpeaker = lastMsg && lastMsg.speaker === speaker;
+          
+          // Case 1: Streaming update (Partial)
+          if (!segment.final) {
+            if (isAgent) {
+               if (currentStreamingSpeaker !== 'AI Assistant') setCurrentStreamingSpeaker('AI Assistant');
+               if (streamingText !== segment.text) setStreamingText(segment.text);
+            } else {
+               if (currentStreamingSpeaker !== 'You') setCurrentStreamingSpeaker('You');
+               if (streamingText !== segment.text) setStreamingText(segment.text);
             }
-            if (streamingText !== segment.text) {
-              setStreamingText(segment.text);
-            }
-            // Write streaming directly into the AI bubble - Optimized for performance
-            setTranscript(prev => {
-              const lastMessage = prev[prev.length - 1];
-              if (lastMessage && lastMessage.speaker === 'AI Assistant' && lastMessage.isStreaming) {
-                // Update existing streaming message (more efficient)
-                const newTranscript = [...prev];
-                newTranscript[newTranscript.length - 1] = { 
-                  ...lastMessage, 
-                  text: segment.text 
-                };
-                return newTranscript;
-              }
-              // Create new streaming message
+
+            if (isSameSpeaker && lastMsg.isStreaming) {
+              // Update existing streaming bubble
+              const newTranscript = [...prev];
+              newTranscript[newTranscript.length - 1] = { ...lastMsg, text: segment.text };
+              return newTranscript;
+            } else {
+              // Create new streaming bubble
               return [...prev, { 
-                speaker: 'AI Assistant', 
+                speaker, 
                 text: segment.text, 
                 timestamp: new Date().toISOString(), 
-                isStreaming: true 
+                isStreaming: true,
+                id: Date.now() + Math.random() 
               }];
-            });
-            setIsSpeaking(true);
-            setIsProcessing(false);
-          } else {
-            // Only update if different to avoid unnecessary re-renders
-            if (currentStreamingSpeaker !== 'You') {
-              setCurrentStreamingSpeaker('You');
             }
-            if (streamingText !== segment.text) {
-              setStreamingText(segment.text);
+          } 
+          // Case 2: Final segment (Commit)
+          else {
+            // Clear streaming states
+            if ((isAgent && currentStreamingSpeaker === 'AI Assistant') || (!isAgent && currentStreamingSpeaker === 'You')) {
+              setStreamingText('');
+              setCurrentStreamingSpeaker(null);
             }
-          }
-        } else {
-          if (isAgent) {
-            // Optimized handling of final AI messages
-            setTranscript(prev => {
-              const lastMessage = prev[prev.length - 1];
-              if (lastMessage && lastMessage.speaker === 'AI Assistant' && lastMessage.isStreaming) {
-                // Replace streaming message with final message (more efficient)
-                const newTranscript = [...prev];
-                newTranscript[newTranscript.length - 1] = { 
-                  ...lastMessage, 
-                  text: segment.text, 
-                  isStreaming: false 
-                };
-                return newTranscript;
-              }
-              // Add new final message
-              return [...prev, { 
-                speaker: 'AI Assistant', 
+            if (isAgent) setTimeout(() => setIsSpeaking(false), 200);
+
+            // Deduplication: If exact same text exists at end, ignore
+            if (isSameSpeaker && lastMsg.text.trim() === segment.text.trim()) {
+              return prev;
+            }
+
+            if (isSameSpeaker && lastMsg.isStreaming) {
+              // Finalize the streaming bubble
+              const newTranscript = [...prev];
+              newTranscript[newTranscript.length - 1] = { 
+                ...lastMsg, 
                 text: segment.text, 
-                timestamp: new Date().toISOString(), 
                 isStreaming: false 
-              }];
-            });
-            if (currentStreamingSpeaker === 'AI Assistant') {
-              setStreamingText('');
-              setCurrentStreamingSpeaker(null);
+              };
+              return newTranscript;
+            } 
+            // Merge with previous if same speaker and time is close (optional, keeps UI clean)
+            else if (isSameSpeaker && !lastMsg.isStreaming) {
+               // Optional: Append to previous message if it was recent?
+               // For now, let's treat it as a new sentence/block unless it's a duplicate
+               return [...prev, { 
+                 speaker, 
+                 text: segment.text, 
+                 timestamp: new Date().toISOString(), 
+                 isStreaming: false,
+                 id: Date.now() + Math.random()
+               }];
             }
-            setTimeout(() => setIsSpeaking(false), 200);
-          } else {
-            // finalize user
-            setTranscript(prev => {
-              const lastMessage = prev[prev.length - 1];
-              if (lastMessage && lastMessage.speaker === 'You' && lastMessage.isStreaming) {
-                return [
-                  ...prev.slice(0, -1),
-                  { speaker: 'You', text: segment.text, timestamp: new Date().toISOString(), isStreaming: false }
-                ];
-              }
-              return [...prev, { speaker: 'You', text: segment.text, timestamp: new Date().toISOString(), isStreaming: false }];
-            });
-            if (currentStreamingSpeaker === 'You') {
-              setStreamingText('');
-              setCurrentStreamingSpeaker(null);
+            else {
+              // New final message
+              return [...prev, { 
+                speaker, 
+                text: segment.text, 
+                timestamp: new Date().toISOString(), 
+                isStreaming: false,
+                id: Date.now() + Math.random()
+              }];
             }
           }
-        }
+        });
         
-        // Update conversation history for persistent storage (using the FINAL text for history)
+        // Update conversation history for persistence
         if (segment.final) {
             setConversationHistory(prev => {
-              // Avoid duplicate entries
               const lastEntry = prev[prev.length - 1];
               if (lastEntry && lastEntry.speaker === speaker && lastEntry.text === segment.text) {
                 return prev;
@@ -1028,13 +1017,7 @@ const fetchLiveKitToken = async () => {
         }
       }
     });
-    
-    // Performance debugging
-    const endTime = performance.now();
-    if (endTime - startTime > 10) {
-      console.log(`⚠️ Transcript processing took ${endTime - startTime}ms`);
-    }
-  }, [isPaused, currentStreamingSpeaker]); // Dependency on currentStreamingSpeaker is key for clearing
+  }, [isPaused, currentStreamingSpeaker, streamingText]);
 
   // Set up room event listeners
   useEffect(() => {

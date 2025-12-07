@@ -1,6 +1,10 @@
-import React from "react";
+import React, { useState } from "react";
 import { ImageOverlay } from "../../../types";
-import { PaintBucket, Settings } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Loader2, PaintBucket, Settings } from "lucide-react";
+import axios from "axios";
+import { toast } from "@/hooks/use-toast";
+import { getSupabaseAuthorizedtoken } from "@/assets/supabaseClient";
 import {
   Tabs,
   TabsContent,
@@ -16,6 +20,9 @@ import { ImageSettingsPanel } from "./image-settings-panel";
  * @property {ImageOverlay} localOverlay - Current image overlay being edited
  * @property {Function} setLocalOverlay - Function to update the image overlay
  */
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+
 interface ImageDetailsProps {
   localOverlay: ImageOverlay;
   setLocalOverlay: (overlay: ImageOverlay) => void;
@@ -48,6 +55,86 @@ export const ImageDetails: React.FC<ImageDetailsProps> = ({
   localOverlay,
   setLocalOverlay,
 }) => {
+  const [isRemovingBackground, setIsRemovingBackground] = useState(false);
+
+  const fetchImageAsBlob = async (src: string): Promise<Blob> => {
+    if (!src) {
+      throw new Error("Image source is missing");
+    }
+    const response = await fetch(src, { mode: "cors" });
+    if (!response.ok) {
+      throw new Error(`Failed to download image (${response.status})`);
+    }
+    return response.blob();
+  };
+
+  const handleRemoveBackground = async () => {
+    if (!localOverlay.src) {
+      toast({
+        title: "Missing image",
+        description: "Select or upload an image before removing the background.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsRemovingBackground(true);
+    try {
+      const blob = await fetchImageAsBlob(localOverlay.src);
+      const sanitizedName =
+        (localOverlay.content || "image-overlay")
+          .replace(/[^\w\-]+/g, "_")
+          .slice(0, 40) || `overlay-${localOverlay.id}`;
+      const file = new File([blob], `${sanitizedName}.png`, {
+        type: blob.type || "image/png",
+      });
+
+      const token = await getSupabaseAuthorizedtoken();
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
+      const response = await axios.post(
+        `${API_BASE_URL}/video/api/remove-background`,
+        formData,
+        {
+          headers,
+        }
+      );
+
+      const newSrc = response.data?.image_data;
+      if (!newSrc) {
+        throw new Error("Background removal returned no image.");
+      }
+
+      setLocalOverlay({
+        ...localOverlay,
+        src: newSrc,
+      });
+
+      toast({
+        title: "Background removed",
+        description: "The transparent version is now applied to the overlay.",
+      });
+    } catch (error) {
+      console.error("Background removal failed:", error);
+      toast({
+        title: "Background removal failed",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Unable to remove the background. Try again later.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRemovingBackground(false);
+    }
+  };
+
   const handleStyleChange = (updates: Partial<ImageOverlay["styles"]>) => {
     const updatedOverlay = {
       ...localOverlay,
@@ -62,12 +149,32 @@ export const ImageDetails: React.FC<ImageDetailsProps> = ({
   return (
     <div className="space-y-4">
       {/* Preview */}
-      <div className="relative aspect-[16/7] w-full overflow-hidden rounded-sm border border-border bg-muted/40">
-        <img
-          src={localOverlay.src}
-          alt="Image preview"
-          className="h-full w-full object-cover"
-        />
+      <div className="relative space-y-3">
+        <div className="relative aspect-[16/7] w-full overflow-hidden rounded-sm border border-border bg-muted/40">
+          <img
+            src={localOverlay.src}
+            alt="Image preview"
+            className="h-full w-full object-cover"
+          />
+        </div>
+        <div className="flex justify-end px-1">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleRemoveBackground}
+            disabled={isRemovingBackground}
+            className="transition-all duration-200"
+          >
+            {isRemovingBackground ? (
+              <>
+                <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                Removing...
+              </>
+            ) : (
+              "Remove Background"
+            )}
+          </Button>
+        </div>
       </div>
 
       <Tabs defaultValue="settings" className="w-full">

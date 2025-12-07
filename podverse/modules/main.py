@@ -1,8 +1,13 @@
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from contextlib import asynccontextmanager
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+
+# Import routers
 from module_posts.module_posts_route import router as posts_router
-from module_knowledgeBase.module_knowledgeBase_route import router as knowledge_base_router
+from module_knowledgeBase.module_knowledgeBase_route import router as knowledge_base_router, get_embeddings_model
 from module_knowledgeBase.ai import router as ai_router
 from module_audios.module_audios_route import router as audios_router
 from module_audio_edit.module_audio_edit import router as audio_edit_router
@@ -16,6 +21,7 @@ from module_social_media.routes import router as social_media_router
 from module_admin.module_admin_route import router as admin_router
 from module_subscription.subscription_route import router as subscription_router
 from module_visuals.module_visuals_route import router as visuals_router
+from module_ai_visuals.module_ai_visuals_route import router as ai_visuals_router
 from module_auto_podcast.module_auto_podcast import router as auto_podcast_router
 from fastapi.staticfiles import StaticFiles
 
@@ -27,7 +33,27 @@ import json
 # Ensure output directory exists
 os.makedirs("module_voice_clone/output", exist_ok=True)
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Load heavy models in background
+    print("🚀 Starting up Podverse Backend...")
+    try:
+        loop = asyncio.get_running_loop()
+        # Pre-load embedding model in background thread to avoid blocking startup completely
+        # or we can await it if we want to ensure it's ready before accepting requests
+        print("📥 Pre-loading embedding model...")
+        with ThreadPoolExecutor() as pool:
+            await loop.run_in_executor(pool, get_embeddings_model)
+        print("✅ Embedding model pre-loaded successfully!")
+    except Exception as e:
+        print(f"⚠️ Failed to pre-load embedding model: {e}")
+    
+    yield
+    
+    # Shutdown logic if needed
+    print("🛑 Shutting down Podverse Backend...")
+
+app = FastAPI(lifespan=lifespan)
 
 # Configure CORS
 origins = [
@@ -61,6 +87,7 @@ app.include_router(podcast_router, prefix="/video", tags=["video"])  # Podcast p
 app.include_router(video_router, prefix="/videos", tags=["video"])  # Supabase endpoints: /videos/upload, /videos/list
 app.include_router(subscription_router)
 app.include_router(visuals_router, prefix="", tags=["visuals"])
+app.include_router(ai_visuals_router, prefix="/ai-visuals", tags=["ai-visuals"])
 
 app.mount("/output", StaticFiles(directory="module_voice_clone/output"), name="output")
 
