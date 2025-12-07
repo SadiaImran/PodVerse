@@ -9,6 +9,7 @@ langchain_ollama
 langchain_huggingface
 langchain_community
 gTTS
+edge-tts
 sentence-transformers
 SpeechRecognition
 pyttsx3
