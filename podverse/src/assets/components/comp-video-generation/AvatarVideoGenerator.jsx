@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Upload, Users, Mic, Loader2, CheckCircle2, XCircle, Video, Play, Image as ImageIcon, Sparkles, Zap, ArrowRight, Info, Subtitles, X, TestTube } from "lucide-react";
+import { Upload, Users, Mic, Loader2, CheckCircle2, XCircle, Video, Play, Image as ImageIcon, Sparkles, Zap, ArrowRight, Info, Subtitles, X, TestTube, Pause } from "lucide-react";
 import { getSupabaseAuthorizedtoken } from '../../supabaseClient';
 import axios from 'axios';
 import { useAuth } from "../../context/AuthContext";
@@ -787,11 +787,39 @@ function AvatarVideoGenerator() {
   };
 
   const getProgressColor = () => {
-    if (!jobStatus) return 'bg-gradient-to-r from-purple-500 to-pink-500';
+    if (!jobStatus) return '';
     if (jobStatus.status === 'completed') return 'bg-gradient-to-r from-green-400 to-emerald-500';
     if (jobStatus.status === 'failed') return 'bg-gradient-to-r from-red-400 to-rose-500';
-    return 'bg-gradient-to-r from-purple-500 to-pink-500';
+    return '';
   };
+  
+  const getProgressStyle = () => {
+    if (!jobStatus || jobStatus.status === 'completed' || jobStatus.status === 'failed') return {};
+    return {};
+  };
+
+  // Derived preview data for elegant layout card
+  const speakerAPreviewImage = speakerAUseCustom
+    ? speakerAImagePreview || speakerAAvatar?.preview_image_url
+    : speakerAAvatar?.preview_image_url;
+
+  const speakerBPreviewImage = speakerBUseCustom
+    ? speakerBImagePreview || speakerBAvatar?.preview_image_url
+    : speakerBAvatar?.preview_image_url;
+
+  const speakerAVoiceLabel = speakerAUseOriginalVoice
+    ? 'Original voice from audio'
+    : speakerAVoice
+      ? `${speakerAVoice.name}${speakerAVoice.gender ? ` (${speakerAVoice.gender})` : ''}`
+      : 'No voice selected';
+
+  const speakerBVoiceLabel = speakerBUseOriginalVoice
+    ? 'Original voice from audio'
+    : speakerBVoice
+      ? `${speakerBVoice.name}${speakerBVoice.gender ? ` (${speakerBVoice.gender})` : ''}`
+      : 'No voice selected';
+
+  const primaryAudioLabel = audioFileName || 'No audio selected yet';
 
   const renderSpeakerConfig = (
     speaker, 
@@ -812,23 +840,43 @@ function AvatarVideoGenerator() {
     selectedTemplate,
     setSelectedTemplate,
     loadingTemplates
-  ) => (
-    <div className="bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-xl rounded-3xl p-8 border border-white/30 shadow-2xl hover:shadow-purple-500/20 transition-all duration-300">
-      <div className="flex items-center justify-between mb-6">
+  ) => {
+    const [isPlayingPreview, setIsPlayingPreview] = useState(false);
+    const audioRef = useRef(null);
+
+    const handlePlayPreview = () => {
+      if (!voice?.preview_audio) return;
+      
+      if (isPlayingPreview) {
+        audioRef.current?.pause();
+        setIsPlayingPreview(false);
+      } else {
+        audioRef.current?.play();
+        setIsPlayingPreview(true);
+      }
+    };
+
+    const handleAudioEnded = () => {
+      setIsPlayingPreview(false);
+    };
+
+    return (
+    <div className="bg-white/80 backdrop-blur-xl rounded-2xl p-4 sm:p-5 border border-light-lavender/40 shadow-xl hover:shadow-2xl transition-all duration-500 shadow-light-purple/5">
+      <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
-          <div className={`w-12 h-12 rounded-2xl ${speaker === 'A' ? 'bg-gradient-to-br from-blue-500 to-cyan-500' : 'bg-gradient-to-br from-pink-500 to-rose-500'} flex items-center justify-center shadow-lg`}>
-            <Users className="w-6 h-6 text-white" />
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-lg ${speaker === 'A' ? 'bg-light-lightPurple shadow-light-purple/30' : 'bg-gradient-to-br from-pink-500 via-rose-500 to-pink-600 shadow-pink-500/30'}`}>
+            <Users className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h3 className="text-white font-bold text-xl">Speaker {speaker}</h3>
-            <p className="text-purple-200 text-sm">Configure avatar & voice</p>
+            <h3 className="text-slate-900 font-bold text-base mb-0.5">Speaker {speaker}</h3>
+            <p className="text-slate-500 text-xs font-medium">Avatar & voice</p>
           </div>
         </div>
       </div>
 
       {/* Toggle Custom Avatar */}
-      <div className="mb-6">
-        <label className="flex items-center gap-3 cursor-pointer group">
+      <div className="mb-4">
+        <label className="flex items-center gap-2.5 cursor-pointer group backdrop-blur-sm rounded-xl p-2.5 hover:shadow-md transition-all duration-300 bg-gradient-to-r from-light-lavender/30 to-pink-50/50 border-2 border-light-lavender/50">
           <div className="relative">
             <input
               type="checkbox"
@@ -836,31 +884,33 @@ function AvatarVideoGenerator() {
               onChange={(e) => setUseCustom(e.target.checked)}
               className="sr-only peer"
             />
-            <div className="w-14 h-7 bg-white/20 rounded-full peer peer-checked:bg-gradient-to-r peer-checked:from-purple-500 peer-checked:to-pink-500 transition-all duration-300"></div>
-            <div className="absolute left-1 top-1 w-5 h-5 bg-white rounded-full transition-all duration-300 peer-checked:translate-x-7 shadow-lg"></div>
+            <div className={`w-11 h-6 rounded-full shadow-inner transition-all duration-300 ${useCustom ? 'bg-gradient-to-r from-light-purple to-pink-500' : 'bg-slate-200'}`}></div>
+            <div className={`absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full transition-all duration-300 shadow-lg ${useCustom ? 'translate-x-5' : ''}`}></div>
           </div>
-          <span className="text-white font-medium group-hover:text-purple-200 transition-colors">
-            Use Custom Photo Avatar
+          <span className="text-slate-800 font-semibold transition-colors text-xs sm:text-sm text-light-purple/80">
+            Custom Avatar
           </span>
         </label>
       </div>
 
       {useCustom ? (
-        /* Custom Avatar Upload */
         <div className="space-y-6">
+          {/* Custom Avatar Upload */}
           {/* Template Selection */}
           {templates.length > 0 && (
             <div>
-              <label className="text-white font-semibold mb-3 block flex items-center gap-2">
-                <Sparkles className="w-4 h-4" />
+              <label className="text-slate-900 font-bold mb-4 block flex items-center gap-2.5 text-base sm:text-lg">
+                <div className="w-6 h-6 rounded-lg bg-light-lightPurple flex items-center justify-center">
+                  <Sparkles className="w-4 h-4 text-white" />
+                </div>
                 Choose from Templates
               </label>
               {loadingTemplates ? (
-                <div className="flex items-center justify-center py-8 bg-white/5 rounded-2xl">
-                  <Loader2 className="w-8 h-8 animate-spin text-purple-400" />
+                <div className="flex items-center justify-center py-12 rounded-2xl border border-light-lavender/50 bg-gradient-to-br from-light-lavender/30 to-light-lightPurple/30">
+                  <Loader2 className="w-10 h-10 animate-spin text-light-purple" />
                 </div>
               ) : (
-                <div className="grid grid-cols-3 gap-3 mb-4">
+                <div className="grid grid-cols-3 gap-3 sm:gap-4 mb-5">
                   {templates.map((template) => (
                     <div
                       key={template.id}
@@ -876,22 +926,22 @@ function AvatarVideoGenerator() {
                           setSpeakerBCustomAvatarId(null);
                         }
                       }}
-                      className={`cursor-pointer rounded-2xl overflow-hidden border-3 transition-all duration-300 transform hover:scale-105 ${
+                      className={`cursor-pointer rounded-2xl overflow-hidden border-2 transition-all duration-300 transform hover:scale-105 shadow-md hover:shadow-xl ${
                         selectedTemplate?.id === template.id
-                          ? 'border-purple-400 ring-4 ring-purple-300/50 shadow-xl shadow-purple-500/50'
-                          : 'border-white/20 hover:border-purple-300/60'
+                          ? 'ring-4 shadow-2xl bg-white/80 backdrop-blur-sm'
+                          : 'bg-white/80 backdrop-blur-sm'
                       }`}
                     >
                       <img
                         src={template.url}
                         alt={`Template ${template.id}`}
-                        className="w-full h-24 object-cover"
+                        className="w-full h-24 sm:h-28 object-cover"
                       />
                     </div>
                   ))}
                 </div>
               )}
-              <div className="flex items-center gap-2 text-purple-300 text-sm mb-3">
+              <div className="flex items-center gap-2 text-sm mb-4 font-semibold rounded-lg px-3 py-2 border border-light-lavender/50 bg-light-lavender/30 text-light-purple">
                 <ArrowRight className="w-4 h-4" />
                 <span>Or upload your own photo:</span>
               </div>
@@ -899,8 +949,10 @@ function AvatarVideoGenerator() {
           )}
           
           <div>
-            <label className="text-white font-semibold mb-3 block flex items-center gap-2">
-              <ImageIcon className="w-4 h-4" />
+            <label className="text-slate-900 font-bold mb-4 block flex items-center gap-2.5 text-base sm:text-lg">
+              <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-light-purple to-light-deepPurple flex items-center justify-center">
+                <ImageIcon className="w-4 h-4 text-white" />
+              </div>
               Upload Custom Photo
             </label>
             {imagePreview ? (
@@ -908,7 +960,7 @@ function AvatarVideoGenerator() {
                 <img
                   src={imagePreview}
                   alt={`Speaker ${speaker}`}
-                  className="w-full h-56 object-cover rounded-2xl border-3 border-purple-400 shadow-2xl"
+                  className="w-full h-56 sm:h-64 object-cover rounded-2xl border-2 border-light-lightPurple/60 shadow-2xl"
                 />
                 <button
                   onClick={() => {
@@ -924,16 +976,18 @@ function AvatarVideoGenerator() {
                       setSpeakerBSelectedTemplate(null);
                     }
                   }}
-                  className="absolute top-3 right-3 bg-red-500 hover:bg-red-600 text-white p-2.5 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-all duration-300 transform hover:scale-110"
+                  className="absolute top-3 right-3 bg-red-500 hover:bg-red-600 text-white p-2.5 rounded-full shadow-xl opacity-0 group-hover:opacity-100 transition-all duration-300 transform hover:scale-110 backdrop-blur-sm border-2 border-white/30"
                 >
                   <XCircle className="w-5 h-5" />
                 </button>
               </div>
             ) : (
-              <label className="flex flex-col items-center justify-center w-full h-40 border-3 border-dashed border-purple-300/50 rounded-2xl cursor-pointer bg-white/5 hover:bg-white/10 hover:border-purple-400 transition-all duration-300 group">
-                <ImageIcon className="w-12 h-12 mb-3 text-purple-300 group-hover:text-purple-200 transition-colors" />
-                <p className="text-base font-medium text-purple-200 group-hover:text-white transition-colors">Click to upload photo</p>
-                <p className="text-sm text-purple-300 mt-1">PNG, JPG or JPEG</p>
+              <label className="flex flex-col items-center justify-center w-full h-40 sm:h-44 border-2 border-dashed border-light-lightPurple/60 rounded-2xl cursor-pointer backdrop-blur-sm transition-all duration-300 group shadow-md hover:shadow-lg bg-gradient-to-br from-light-lavender/30 to-light-lightPurple/30 hover:from-light-lavender/40 hover:to-light-lightPurple/40 hover:border-light-lightPurple/80">
+                <div className="w-14 h-14 sm:w-16 sm:h-16 mb-3 rounded-2xl bg-gradient-to-br from-light-lightPurple to-light-purple flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                  <ImageIcon className="w-7 h-7 sm:w-8 sm:h-8 text-white" />
+                </div>
+                <p className="text-base sm:text-lg font-bold text-light-purple transition-colors group-hover:text-light-purple">Click to upload photo</p>
+                <p className="text-sm mt-1 font-medium text-light-purple">PNG, JPG or JPEG</p>
                 <input
                   type="file"
                   className="hidden"
@@ -952,7 +1006,7 @@ function AvatarVideoGenerator() {
           </div>
 
           {(imageFile || imagePreview) && !customAvatarId && (
-            <div className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 border-2 border-purple-400/40 rounded-2xl p-4 backdrop-blur-sm">
+            <div className="backdrop-blur-sm border-2 border-light-lavender/60 rounded-2xl p-4 shadow-md bg-gradient-to-r from-light-lavender/30 to-pink-50/30">
               <label className="flex items-center gap-3 cursor-pointer group">
                 <div className="relative">
                   <input
@@ -969,11 +1023,11 @@ function AvatarVideoGenerator() {
                     disabled={speaker === 'A' ? speakerAProcessingBg : speakerBProcessingBg}
                     className="sr-only peer"
                   />
-                  <div className="w-12 h-6 bg-white/20 rounded-full peer peer-checked:bg-gradient-to-r peer-checked:from-purple-500 peer-checked:to-pink-500 transition-all duration-300"></div>
-                  <div className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full transition-all duration-300 peer-checked:translate-x-6 shadow-md"></div>
+                  <div className={`w-12 h-6 rounded-full shadow-inner transition-all duration-300 ${(speaker === 'A' ? speakerARemoveBg : speakerBRemoveBg) ? 'bg-gradient-to-r from-light-purple to-pink-500' : 'bg-slate-200'}`}></div>
+                  <div className={`absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full transition-all duration-300 shadow-md ${(speaker === 'A' ? speakerARemoveBg : speakerBRemoveBg) ? 'translate-x-6' : ''}`}></div>
                 </div>
                 <div className="flex-1">
-                  <span className="text-white font-medium flex items-center gap-2 group-hover:text-purple-200 transition-colors">
+                  <span className="text-slate-900 font-semibold flex items-center gap-2 transition-colors text-sm sm:text-base text-light-purple/80">
                     {(speaker === 'A' ? speakerAProcessingBg : speakerBProcessingBg) ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
@@ -986,7 +1040,7 @@ function AvatarVideoGenerator() {
                       </>
                     )}
                   </span>
-                  <p className="text-purple-300 text-xs mt-1">
+                  <p className="text-slate-600 text-xs mt-1 font-medium">
                     {(speaker === 'A' ? speakerAProcessingBg : speakerBProcessingBg) 
                       ? "Processing..." 
                       : (speaker === 'A' ? speakerARemoveBg : speakerBRemoveBg)
@@ -1002,7 +1056,7 @@ function AvatarVideoGenerator() {
             <button
               onClick={() => uploadCustomAvatar(speaker)}
               disabled={uploading}
-              className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 disabled:from-gray-500 disabled:to-gray-600 text-white font-bold py-4 px-6 rounded-2xl flex items-center justify-center gap-3 shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 disabled:transform-none"
+              className="w-full disabled:from-gray-400 disabled:via-gray-500 disabled:to-gray-600 text-white font-bold py-4 px-6 rounded-2xl flex items-center justify-center gap-3 shadow-xl hover:shadow-2xl transform hover:scale-[1.02] transition-all duration-300 disabled:transform-none disabled:cursor-not-allowed bg-gradient-to-r from-light-secondary via-light-accent to-light-secondary disabled:from-gray-400 disabled:via-gray-500 disabled:to-gray-600"
             >
               {uploading ? (
                 <>
@@ -1019,57 +1073,60 @@ function AvatarVideoGenerator() {
           )}
 
           {customAvatarId && (
-            <div className="bg-gradient-to-r from-green-500/20 to-emerald-500/20 border-2 border-green-400/60 rounded-2xl p-4 backdrop-blur-sm">
-              <p className="text-green-200 font-semibold flex items-center gap-2 mb-2">
-                <CheckCircle2 className="w-5 h-5" />
+            <div className="bg-gradient-to-br from-emerald-50 to-green-50 border-2 border-emerald-200/60 rounded-2xl p-5 shadow-lg">
+              <p className="text-emerald-700 font-bold flex items-center gap-2 mb-2 text-base">
+                <div className="w-6 h-6 rounded-lg bg-emerald-500 flex items-center justify-center">
+                  <CheckCircle2 className="w-4 h-4 text-white" />
+                </div>
                 Custom avatar ready!
               </p>
-              <p className="text-green-300 text-sm font-mono">ID: {customAvatarId}</p>
+              <p className="text-emerald-700 text-sm font-mono bg-white/60 rounded-lg p-2 border border-emerald-200/50">ID: {customAvatarId}</p>
             </div>
           )}
         </div>
       ) : (
-        /* Standard Avatar Selection */
-        <div className="mb-6">
-          <label className="text-white font-semibold mb-3 block flex items-center gap-2">
-            <Users className="w-4 h-4" />
+        <div className="mb-4">
+          {/* Standard Avatar Selection */}
+          <label className="text-slate-900 font-bold mb-3 block flex items-center gap-2 text-sm sm:text-base">
+            <Users className="w-4 h-4 text-light-purple" />
             Select Avatar
           </label>
           {loadingAvatars ? (
-            <div className="flex items-center justify-center py-8 bg-white/5 rounded-2xl">
-              <Loader2 className="w-8 h-8 animate-spin text-purple-400" />
+            <div className="flex items-center justify-center py-8 rounded-xl border border-light-lavender/50 bg-gradient-to-br from-light-lavender/30 to-light-lightPurple/30">
+              <Loader2 className="w-8 h-8 animate-spin text-light-purple" />
             </div>
           ) : (
-            <div className="grid md:grid-cols-3 gap-4 max-h-80 overflow-y-auto pr-1">
+            <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2 max-h-96 overflow-y-auto pr-1 custom-scrollbar">
               {avatars.map((a) => {
                 const isSelected = avatar?.avatar_id === a.avatar_id;
                 return (
                   <button
                     key={a.avatar_id}
                     onClick={() => setAvatar(a)}
-                    className={`relative rounded-2xl overflow-hidden border-2 transition-all duration-300 text-left ${
-                      isSelected
-                        ? 'border-purple-400 ring-4 ring-purple-300/40 shadow-xl shadow-purple-500/40'
-                        : 'border-white/15 hover:border-purple-200/40'
-                    }`}
+                    // className={`relative rounded-lg overflow-hidden border-2 transition-all duration-300 text-left transform hover:scale-[1.02] ${
+                    //   isSelected
+                    //     ? 'ring-2 shadow-lg bg-white'
+                    //     : 'bg-white hover:shadow-md'
+                    // }`}
+                    className={isSelected ? 'border-light-purple ring-2 ring-light-lavender/50 shadow-lg shadow-light-purple/40 bg-gradient-to-br from-light-lavender/30 to-light-lightPurple/30' : 'border-light-lavender/60 hover:border-light-lightPurple/80'}
                   >
-                    <div className="w-full h-32 bg-black/20">
+                    <div className="w-full aspect-square bg-gradient-to-br from-slate-100 to-slate-200">
                       {a.preview_image_url ? (
                         <img
                           src={a.preview_image_url}
                           alt={a.avatar_name}
-                          className="w-full h-full object-cover"
+                          className="w-full h-full object-cover object-center"
                         />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center text-gray-300 text-sm">
+                        <div className="w-full h-full flex items-center justify-center text-slate-400 text-[10px] font-medium">
                           No preview
                         </div>
                       )}
                     </div>
-                    <div className="p-3 bg-white/10 backdrop-blur-sm">
-                      <p className="text-white font-semibold">{a.avatar_name}</p>
-                      <p className="text-purple-200 text-xs">
-                        {a.gender || 'Unknown gender'}
+                    <div className="p-1.5 bg-white">
+                      <p className="text-slate-900 font-semibold text-[10px] truncate leading-tight">{a.avatar_name}</p>
+                      <p className="text-[9px] font-medium mt-0.5 text-light-purple">
+                        {a.gender || 'Unknown'}
                       </p>
                     </div>
                   </button>
@@ -1078,9 +1135,9 @@ function AvatarVideoGenerator() {
             </div>
           )}
           {avatar && (
-            <div className="mt-3 text-purple-200 text-sm bg-purple-500/10 rounded-xl p-3 border border-purple-400/20">
-              <p>
-                Selected: <span className="font-semibold text-white">{avatar.avatar_name}</span>
+            <div className="mt-3 text-xs backdrop-blur-sm rounded-lg p-2.5 border-2 border-light-lavender/60 shadow-md bg-gradient-to-r from-light-lavender/30 to-light-lightPurple/30 text-light-purple">
+              <p className="font-semibold">
+                Selected: <span className="font-bold text-light-purple">{avatar.avatar_name}</span>
               </p>
             </div>
           )}
@@ -1089,13 +1146,13 @@ function AvatarVideoGenerator() {
 
       {/* Voice Selection */}
       <div className="space-y-4 mt-6">
-        <label className="text-white font-semibold mb-3 block flex items-center gap-2">
-          <Mic className="w-4 h-4" />
+        <label className="text-slate-900 font-bold mb-3 block flex items-center gap-2.5 text-base sm:text-lg">
+          <Mic className="w-5 h-5 text-light-purple" />
           Voice Settings
         </label>
         
         {/* Toggle Original Voice */}
-        <div className="bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border-2 border-blue-400/40 rounded-2xl p-4 backdrop-blur-sm">
+        <div className="bg-gradient-to-r from-blue-50/90 to-cyan-50/90 backdrop-blur-sm border-2 border-blue-200/60 rounded-2xl p-4 shadow-md">
           <label className="flex items-center gap-3 cursor-pointer group">
             <div className="relative">
               <input
@@ -1104,10 +1161,10 @@ function AvatarVideoGenerator() {
                 onChange={(e) => setUseOriginalVoice(e.target.checked)}
                 className="sr-only peer"
               />
-              <div className="w-12 h-6 bg-white/20 rounded-full peer peer-checked:bg-gradient-to-r peer-checked:from-blue-500 peer-checked:to-cyan-500 transition-all duration-300"></div>
+              <div className="w-12 h-6 bg-slate-200 rounded-full peer peer-checked:bg-gradient-to-r peer-checked:from-blue-500 peer-checked:to-cyan-500 transition-all duration-300 shadow-inner"></div>
               <div className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full transition-all duration-300 peer-checked:translate-x-6 shadow-md"></div>
             </div>
-            <span className="text-blue-100 font-medium flex items-center gap-2 group-hover:text-white transition-colors">
+            <span className="text-blue-800 font-semibold flex items-center gap-2 group-hover:text-blue-900 transition-colors text-sm sm:text-base">
               🎤 Use original voice from audio
             </span>
           </label>
@@ -1122,19 +1179,21 @@ function AvatarVideoGenerator() {
                 const selectedVoice = voices.find(v => v.voice_id === e.target.value);
                 setVoice(selectedVoice);
               }}
-              className="w-full px-5 py-4 bg-white/10 border-2 border-purple-300/50 rounded-2xl text-white font-medium focus:outline-none focus:ring-4 focus:ring-purple-400/50 focus:border-purple-400 transition-all duration-300 backdrop-blur-sm hover:bg-white/15"
+              className="w-full px-5 py-4 bg-white/90 backdrop-blur-sm border-2 border-light-lavender/60 rounded-2xl text-slate-900 font-semibold focus:outline-none focus:ring-4 focus:ring-light-lavender/50 focus:border-light-purple transition-all duration-300 shadow-md hover:bg-light-lavender/20"
               disabled={loadingVoices}
             >
               <option value="">Select HeyGen voice...</option>
               {voices.map(v => (
-                <option key={v.voice_id} value={v.voice_id} className="bg-gray-800">
+                <option key={v.voice_id} value={v.voice_id} className="bg-white">
                   {v.name} ({v.gender})
                 </option>
               ))}
             </select>
-            <div className="flex items-start gap-2 text-purple-300 text-sm bg-purple-500/10 rounded-xl p-3 border border-purple-400/20">
-              <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
-              <p>HeyGen voice will replace the original speaker's voice</p>
+            <div className="flex items-start gap-2.5 text-sm backdrop-blur-sm rounded-xl p-3.5 border-2 border-light-lavender/60 shadow-md bg-gradient-to-r from-light-lavender/30 to-light-lightPurple/30 text-light-deepPurple">
+              <div className="w-5 h-5 rounded-lg bg-light-purple flex items-center justify-center flex-shrink-0 mt-0.5">
+                <Info className="w-3.5 h-3.5 text-white" />
+              </div>
+              <p className="font-medium">HeyGen voice will replace the original speaker's voice</p>
             </div>
           </div>
         )}
@@ -1142,76 +1201,84 @@ function AvatarVideoGenerator() {
 
       {/* Configuration Status */}
       {((useCustom && customAvatarId) || (!useCustom && avatar)) && (useOriginalVoice || voice) && (
-        <div className="mt-6 bg-gradient-to-r from-green-500/20 to-emerald-500/20 border-2 border-green-400/60 rounded-2xl p-4 backdrop-blur-sm animate-pulse">
-          <p className="text-green-200 font-semibold flex items-center gap-2">
-            <CheckCircle2 className="w-5 h-5" />
+        <div className="mt-6 bg-gradient-to-br from-emerald-50 to-green-50 border-2 border-emerald-200/60 rounded-2xl p-4 shadow-lg animate-pulse">
+          <p className="text-emerald-800 font-bold flex items-center gap-2.5 text-base">
+            <div className="w-6 h-6 rounded-lg bg-emerald-500 flex items-center justify-center">
+              <CheckCircle2 className="w-4 h-4 text-white" />
+            </div>
             Speaker {speaker} configured successfully!
           </p>
         </div>
       )}
     </div>
-  );
+    );
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-950 via-purple-900 to-pink-900 p-8">
-      <div className="max-w-[1800px] mx-auto">
-        {/* Header */}
-        <div className="text-center mb-12">
-          <div className="inline-flex items-center justify-center gap-3 mb-4 bg-gradient-to-r from-purple-500/20 to-pink-500/20 backdrop-blur-lg border border-white/20 rounded-full px-6 py-3">
-            <Sparkles className="w-5 h-5 text-yellow-300" />
-            <span className="text-purple-200 font-semibold">AI-Powered Video Generation</span>
-          </div>
-          <h1 className="text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-white via-purple-200 to-pink-200 mb-4 flex items-center justify-center gap-4">
-            <Video className="w-14 h-14 text-white drop-shadow-lg" />
-            Podcast to Avatar Videos
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-light-lavender/20 to-light-lightPurple/30 py-4 px-2 sm:px-4">
+      <div className="w-full">
+        {/* Header - Left Aligned */}
+        <div className="mb-4">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-500 mb-2 flex items-center gap-2.5">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-light-lightPurple flex items-center justify-center shadow-lg relative">
+              <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full blur-sm opacity-60 bg-light-secondary"></div>
+              <div className="absolute -bottom-1 -left-1 w-3 h-3 rounded-full blur-sm opacity-60 bg-light-lavender"></div>
+              <Video className="w-5 h-5 sm:w-6 sm:h-6 text-white relative z-10" />
+            </div>
+            <span>Create Avatar Video from Podcast</span>
           </h1>
-          <p className="text-xl text-purple-200 max-w-3xl mx-auto leading-relaxed">
-            Transform your podcast into stunning lip-synced avatar videos with AI-powered speaker separation and voice cloning
-          </p>
         </div>
 
-        {/* Main Content Grid */}
-        <div className="grid xl:grid-cols-[400px_1fr_450px] gap-8">
-          {/* Left Column - Audio Upload */}
-          <div className="space-y-6">
-            <div className="bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-xl rounded-3xl p-8 border border-white/30 shadow-2xl hover:shadow-purple-500/20 transition-all duration-300">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow-lg">
-                  <Upload className="w-6 h-6 text-white" />
+        {/* Main Content - Full Width */}
+        <div className="w-full space-y-4">
+          {/* Audio Upload - Improved UI */}
+          <div className="w-full">
+            <div className="bg-white rounded-xl p-5 border border-slate-200/60 shadow-sm max-w-2xl">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-light-purple to-light-deepPurple flex items-center justify-center shadow-md">
+                  <Upload className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <h3 className="text-white font-bold text-xl">Audio Upload</h3>
-                  <p className="text-purple-200 text-sm">Your podcast file</p>
+                  <h3 className="text-slate-700 font-semibold text-base">Upload Podcast Audio</h3>
+                  <p className="text-slate-500 text-xs mt-0.5">Select your audio file to begin</p>
                 </div>
               </div>
 
-              <div className="mb-6">
+              <div>
                 {audioFileName ? (
-                  <div className="bg-gradient-to-r from-green-500/20 to-emerald-500/20 border-2 border-green-400/60 rounded-2xl p-6 backdrop-blur-sm">
-                    <div className="flex items-center gap-3 mb-3">
-                      <CheckCircle2 className="w-6 h-6 text-green-400" />
-                      <span className="text-green-200 font-bold text-lg">File uploaded!</span>
+                  <div className="bg-gradient-to-br from-emerald-50 to-green-50 border border-emerald-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-9 rounded-lg bg-emerald-500 flex items-center justify-center shadow-sm">
+                          <CheckCircle2 className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                          <p className="text-emerald-800 font-semibold text-sm">File Uploaded</p>
+                          <p className="text-emerald-600 text-xs mt-0.5 truncate max-w-xs">{audioFileName}</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setAudioFile(null);
+                          setAudioFileName("");
+                        }}
+                        className="text-red-600 hover:text-red-700 font-medium flex items-center gap-1.5 transition-colors text-xs px-3 py-1.5 rounded-lg hover:bg-red-50"
+                      >
+                        <XCircle className="w-4 h-4" />
+                        Remove
+                      </button>
                     </div>
-                    <p className="text-green-100 font-medium mb-4 break-all">{audioFileName}</p>
-                    <button
-                      onClick={() => {
-                        setAudioFile(null);
-                        setAudioFileName("");
-                      }}
-                      className="text-red-300 hover:text-red-200 font-semibold flex items-center gap-2 transition-colors"
-                    >
-                      <XCircle className="w-4 h-4" />
-                      Remove file
-                    </button>
                   </div>
                 ) : (
-                  <label className="flex flex-col items-center justify-center w-full h-48 border-3 border-dashed border-purple-300/50 rounded-2xl cursor-pointer bg-white/5 hover:bg-white/10 hover:border-purple-400 transition-all duration-300 group">
+                  <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-light-lightPurple/80 hover:border-light-lavender rounded-xl cursor-pointer bg-slate-50/50 hover:bg-slate-100/70 transition-all duration-300 group">
                     <div className="flex flex-col items-center justify-center">
-                      <Upload className="w-16 h-16 mb-4 text-purple-300 group-hover:text-purple-200 transition-colors" />
-                      <p className="mb-2 text-lg font-bold text-purple-200 group-hover:text-white transition-colors">
-                        Click to upload
+                      <div className="w-16 h-16 mb-3 rounded-xl bg-gradient-to-br from-light-purple to-light-deepPurple flex items-center justify-center shadow-md group-hover:scale-105 transition-transform duration-300">
+                        <Upload className="w-8 h-8 text-white" />
+                      </div>
+                      <p className="mb-1.5 text-sm font-semibold text-slate-700 transition-colors text-light-purple/80 group-hover:text-light-purple">
+                        Click to upload or drag and drop
                       </p>
-                      <p className="text-sm text-purple-300">WAV, MP3, or any audio format</p>
+                      <p className="text-xs text-slate-500 font-medium">WAV, MP3, M4A or any audio format</p>
                     </div>
                     <input
                       type="file"
@@ -1222,137 +1289,13 @@ function AvatarVideoGenerator() {
                   </label>
                 )}
               </div>
-
-              <div className="bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border-2 border-blue-400/40 rounded-2xl p-5 backdrop-blur-sm">
-                <div className="flex items-start gap-3">
-                  <Info className="w-5 h-5 text-blue-300 mt-0.5 flex-shrink-0" />
-                  <div>
-                    <p className="text-blue-200 font-semibold mb-1">Speaker Detection</p>
-                    <p className="text-blue-200 text-sm">AI automatically separates two speakers from your audio</p>
-                  </div>
-                </div>
-              </div>
             </div>
 
-            {/* NEW: Subtitle Toggle Card */}
-            <div className="bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-xl rounded-3xl p-8 border border-white/30 shadow-2xl hover:shadow-purple-500/20 transition-all duration-300">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center shadow-lg">
-                  <Subtitles className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h3 className="text-white font-bold text-xl">Subtitles</h3>
-                  <p className="text-purple-200 text-sm">Add captions to video</p>
-                </div>
-              </div>
-
-              <label className="flex items-center gap-4 cursor-pointer group bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-2 border-amber-400/40 rounded-2xl p-5 hover:border-amber-400/60 transition-all duration-300">
-                <div className="relative">
-                  <input
-                    type="checkbox"
-                    checked={addSubtitles}
-                    onChange={(e) => setAddSubtitles(e.target.checked)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-16 h-8 bg-white/20 rounded-full peer peer-checked:bg-gradient-to-r peer-checked:from-amber-500 peer-checked:to-orange-500 transition-all duration-300"></div>
-                  <div className="absolute left-1 top-1 w-6 h-6 bg-white rounded-full transition-all duration-300 peer-checked:translate-x-8 shadow-lg"></div>
-                </div>
-                <div className="flex-1">
-                  <span className="text-white font-bold text-lg block group-hover:text-amber-100 transition-colors">
-                    Add Subtitles/Captions
-                  </span>
-                  <span className="text-purple-300 text-sm">
-                    {addSubtitles ? "Subtitles will be burned into video" : "No subtitles"}
-                  </span>
-                </div>
-              </label>
-
-              {addSubtitles && (
-                <div className="mt-4 bg-amber-500/20 border-2 border-amber-400/60 rounded-xl p-4">
-                  <p className="text-amber-100 text-sm flex items-start gap-2">
-                    <Sparkles className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                    <span>Subtitles will be auto-generated from speaker transcription and burned into the final video</span>
-                  </p>
-                </div>
-              )}
             </div>
 
-            {/* NEW: Split Screen Mode Toggle Card */}
-            <div className="bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-xl rounded-3xl p-8 border border-white/30 shadow-2xl hover:shadow-purple-500/20 transition-all duration-300">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-500 flex items-center justify-center shadow-lg">
-                  <Users className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h3 className="text-white font-bold text-xl">Split Screen Mode</h3>
-                  <p className="text-purple-200 text-sm">Generate separate speaker videos</p>
-                </div>
-              </div>
-
-              <label className="flex items-center gap-4 cursor-pointer group bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border-2 border-cyan-400/40 rounded-2xl p-5 hover:border-cyan-400/60 transition-all duration-300">
-                <div className="relative">
-                  <input
-                    type="checkbox"
-                    checked={splitScreenMode}
-                    onChange={(e) => setSplitScreenMode(e.target.checked)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-16 h-8 bg-white/20 rounded-full peer peer-checked:bg-gradient-to-r peer-checked:from-cyan-500 peer-checked:to-blue-500 transition-all duration-300"></div>
-                  <div className="absolute left-1 top-1 w-6 h-6 bg-white rounded-full transition-all duration-300 peer-checked:translate-x-8 shadow-lg"></div>
-                </div>
-                <div className="flex-1">
-                  <span className="text-white font-bold text-lg block group-hover:text-cyan-100 transition-colors">
-                    Enable Split Screen Videos
-                  </span>
-                  <span className="text-purple-300 text-sm">
-                    {splitScreenMode ? "Two separate videos with timeline-synced silence" : "Standard merged video"}
-                  </span>
-                </div>
-              </label>
-
-              {splitScreenMode && (
-                <div className="mt-4 bg-cyan-500/20 border-2 border-cyan-400/60 rounded-xl p-4">
-                  <p className="text-cyan-100 text-sm flex items-start gap-2">
-                    <Sparkles className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                    <span>
-                      Each speaker will have their own full-length video with silence during the other speaker's turns. 
-                      Perfect for manual split-screen editing!
-                    </span>
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* How it Works */}
-            <div className="bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border-2 border-yellow-400/40 rounded-2xl p-6 backdrop-blur-sm">
-              <h4 className="font-bold text-yellow-200 mb-4 flex items-center gap-2 text-lg">
-                <Sparkles className="w-5 h-5" />
-                How it works
-              </h4>
-              <ul className="space-y-3">
-                {[
-                  "Upload your podcast audio file",
-                  "AI separates two speakers automatically",
-                  "Choose preset or custom avatars",
-                  "Use original voices or HeyGen TTS",
-                  "Optionally add burned-in subtitles",
-                  "Enable split-screen mode for separate videos",
-                  "Get lip-synced videos for each speaker"
-                ].map((step, index) => (
-                  <li key={index} className="flex items-start gap-3 text-yellow-200/90">
-                    <span className="flex items-center justify-center w-6 h-6 rounded-full bg-yellow-400/20 text-yellow-300 font-bold text-sm flex-shrink-0 mt-0.5">
-                      {index + 1}
-                    </span>
-                    <span className="text-sm leading-relaxed">{step}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-
-          {/* Middle Column - Speaker Configuration */}
-          <div className="space-y-8">
-            {renderSpeakerConfig(
+            {/* Speaker Configuration - Horizontal */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {renderSpeakerConfig(
               'A',
               speakerAAvatar,
               setSpeakerAAvatar,
@@ -1371,9 +1314,9 @@ function AvatarVideoGenerator() {
               speakerASelectedTemplate,
               setSpeakerASelectedTemplate,
               loadingTemplatesA
-            )}
+              )}
 
-            {renderSpeakerConfig(
+              {renderSpeakerConfig(
               'B',
               speakerBAvatar,
               setSpeakerBAvatar,
@@ -1392,118 +1335,259 @@ function AvatarVideoGenerator() {
               speakerBSelectedTemplate,
               setSpeakerBSelectedTemplate,
               loadingTemplatesB
-            )}
-          </div>
+              )}
+            </div>
 
-          {/* Right Column - Processing */}
-          <div className="space-y-6">
-            {/* Testing Mode Toggle */}
-            <div className="bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-xl rounded-3xl p-6 border border-white/30 shadow-2xl">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <TestTube className="w-5 h-5 text-yellow-400" />
-                  <div>
-                    <p className="text-white font-semibold text-sm">Testing Mode</p>
-                    <p className="text-purple-300 text-xs">Use sample video (1 min) instead of API</p>
+          {/* Generate & Preview Section - Side by Side */}
+          <div className="grid grid-cols-1 xl:grid-cols-[1fr_1.8fr] gap-4">
+            {/* Generate Section */}
+            <div className="bg-white/90 backdrop-blur-sm rounded-xl p-5 border border-light-lavender/50 shadow-md">
+              <h3 className="text-slate-900 font-bold text-base mb-4 flex items-center gap-2">
+                <Zap className="w-5 h-5 text-light-purple" />
+                Generate Video
+              </h3>
+              
+              <div className="space-y-4">
+                {/* Options Row */}
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Subtitles Toggle */}
+                  <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2 border border-slate-200">
+                    <Subtitles className="w-4 h-4 text-slate-600" />
+                    <span className="text-sm font-medium text-slate-700">Subtitles</span>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={addSubtitles}
+                        onChange={(e) => setAddSubtitles(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className={`w-9 h-5 rounded-full transition-colors ${addSubtitles ? 'bg-light-purple' : 'bg-slate-300'}`}></div>
+                      <div className={`absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${addSubtitles ? 'translate-x-4' : ''}`}></div>
+                    </label>
+                  </div>
+
+                  {/* Split Screen Toggle */}
+                  <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2 border border-slate-200">
+                    <Users className="w-4 h-4 text-slate-600" />
+                    <span className="text-sm font-medium text-slate-700">Split Screen</span>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={splitScreenMode}
+                        onChange={(e) => setSplitScreenMode(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className={`w-9 h-5 rounded-full transition-colors ${splitScreenMode ? 'bg-light-purple' : 'bg-slate-300'}`}></div>
+                      <div className={`absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${splitScreenMode ? 'translate-x-4' : ''}`}></div>
+                    </label>
+                  </div>
+
+                  {/* Testing Mode Toggle */}
+                  <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2 border border-slate-200">
+                    <TestTube className="w-4 h-4 text-slate-600" />
+                    <span className="text-sm font-medium text-slate-700">Test Mode</span>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={isTestingMode}
+                        onChange={(e) => setIsTestingMode(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-slate-300 rounded-full peer peer-checked:bg-yellow-500 transition-colors"></div>
+                      <div className="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-4"></div>
+                    </label>
                   </div>
                 </div>
+
+                {/* Generate Button */}
                 <button
-                  onClick={() => setIsTestingMode(!isTestingMode)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    isTestingMode ? 'bg-yellow-500' : 'bg-gray-600'
-                  }`}
+                  onClick={handleProcess}
+                  disabled={isProcessing || !audioFile}
+                  className={`w-full disabled:bg-slate-400 disabled:cursor-not-allowed text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:shadow-none ${isProcessing || !audioFile ? 'bg-slate-400' : 'bg-light-purple hover:bg-light-purple/90'}`}
                 >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      isTestingMode ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
+                  {isProcessing ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <span>{isTestingMode ? 'Testing...' : 'Processing...'}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-5 h-5" />
+                      <span>Generate Video</span>
+                    </>
+                  )}
                 </button>
+
+                {error && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-700">
+                    <div className="flex items-start gap-2">
+                      <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                      <p className="text-sm font-medium">{error}</p>
+                    </div>
+                  </div>
+                )}
               </div>
-              {isTestingMode && (
-                <div className="mt-3 p-3 bg-yellow-500/20 border border-yellow-400/50 rounded-xl">
-                  <p className="text-yellow-200 text-xs">
-                    ⚠️ Testing Mode: A sample video will be generated after 5 seconds. No actual API calls will be made.
+            </div>
+
+            {/* Preview Section */}
+            <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 border border-light-lavender/50 shadow-md">
+              <h3 className="text-slate-900 font-bold text-lg mb-5 flex items-center gap-2">
+                <Video className="w-6 h-6 text-light-purple" />
+                Preview
+              </h3>
+              
+              <div className="space-y-4">
+                {/* Audio Status */}
+                <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Mic className="w-5 h-5 text-slate-600" />
+                    <span className="text-sm font-bold text-slate-700">Audio</span>
+                  </div>
+                  <p className="text-sm text-slate-600 truncate font-medium" title={primaryAudioLabel}>
+                    {primaryAudioLabel}
                   </p>
                 </div>
-              )}
-            </div>
-            
-            <div className="bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-xl rounded-3xl p-8 border border-white/30 shadow-2xl sticky top-6">
-              <button
-                onClick={handleProcess}
-                disabled={isProcessing || !audioFile}
-                className="w-full bg-gradient-to-r from-purple-500 via-pink-500 to-rose-500 hover:from-purple-600 hover:via-pink-600 hover:to-rose-600 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed text-white font-bold py-5 px-8 rounded-2xl transition-all duration-300 flex items-center justify-center gap-3 shadow-2xl hover:shadow-purple-500/50 transform hover:scale-105 disabled:transform-none text-lg"
-              >
-                {isProcessing ? (
-                  <>
-                    <Loader2 className="w-6 h-6 animate-spin" />
-                    {isTestingMode ? 'Testing Mode: Processing...' : 'Processing...'}
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-6 h-6" />
-                    {isTestingMode ? 'Generate (Testing Mode)' : 'Generate Avatar Videos'}
-                  </>
-                )}
-              </button>
 
-              {error && (
-                <div className="mt-6 bg-gradient-to-r from-red-500/20 to-rose-500/20 border-2 border-red-400 rounded-2xl p-5 text-red-200 backdrop-blur-sm">
-                  <div className="flex items-start gap-3">
-                    <XCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                    <p className="font-medium">{error}</p>
+                {/* Speakers Preview */}
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Speaker A */}
+                  <div className="rounded-lg border border-light-lavender/60 bg-gradient-to-br from-light-lavender/20 to-light-lightPurple/20 p-4">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-light-purple bg-light-lavender/40 flex items-center justify-center flex-shrink-0">
+                        {speakerAPreviewImage ? (
+                          <img
+                            src={speakerAPreviewImage}
+                            alt="Speaker A"
+                            className="w-full h-full object-cover object-center"
+                          />
+                        ) : (
+                          <Users className="w-6 h-6 text-light-purple" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs uppercase font-bold text-light-purple mb-1">Speaker A</p>
+                        <p className="text-sm font-bold text-slate-900 truncate">
+                          {speakerAUseCustom ? 'Custom' : speakerAAvatar?.avatar_name || 'Not set'}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-600 truncate font-medium" title={speakerAVoiceLabel}>
+                      {speakerAVoiceLabel}
+                    </p>
+                  </div>
+
+                  {/* Speaker B */}
+                  <div className="rounded-lg border border-pink-200/60 bg-gradient-to-br from-pink-50/50 to-rose-50/50 p-4">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-pink-400 bg-pink-100 flex items-center justify-center flex-shrink-0">
+                        {speakerBPreviewImage ? (
+                          <img
+                            src={speakerBPreviewImage}
+                            alt="Speaker B"
+                            className="w-full h-full object-cover object-center"
+                          />
+                        ) : (
+                          <Users className="w-6 h-6 text-pink-600" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs uppercase font-bold text-pink-600 mb-1">Speaker B</p>
+                        <p className="text-sm font-bold text-slate-900 truncate">
+                          {speakerBUseCustom ? 'Custom' : speakerBAvatar?.avatar_name || 'Not set'}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-600 truncate font-medium" title={speakerBVoiceLabel}>
+                      {speakerBVoiceLabel}
+                    </p>
                   </div>
                 </div>
-              )}
-            </div>
 
-            {jobStatus && (
-              <div className="bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-xl rounded-3xl p-8 border border-white/30 shadow-2xl">
-                <h3 className="text-white font-bold mb-6 flex items-center gap-3 text-xl">
-                  <Video className="w-6 h-6" />
+                {/* Settings Summary */}
+                <div className="flex items-center gap-4 bg-slate-50 rounded-lg p-3 border border-slate-200">
+                  <div className="flex items-center gap-2">
+                    <Subtitles className={`w-5 h-5 ${addSubtitles ? 'text-amber-500' : 'text-slate-400'}`} />
+                    <span className="text-sm font-semibold text-slate-700">{addSubtitles ? 'On' : 'Off'}</span>
+                  </div>
+                  <span className="h-5 w-px bg-slate-300" />
+                  <div className="flex items-center gap-2">
+                    <Users className={`w-5 h-5 ${splitScreenMode ? 'text-cyan-500' : 'text-slate-400'}`} />
+                    <span className="text-sm font-semibold text-slate-700">
+                      {splitScreenMode ? 'Split' : 'Single'}
+                    </span>
+                  </div>
+                  <span className="h-5 w-px bg-slate-300" />
+                  <div className="flex items-center gap-2">
+                    <Sparkles className={`w-5 h-5 ${audioFileName ? 'text-green-500' : 'text-slate-400'}`} />
+                    <span className="text-sm font-semibold text-slate-700">
+                      {audioFileName ? 'Ready' : 'Waiting'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {jobStatus && (
+              <div className="bg-white/80 backdrop-blur-xl rounded-3xl p-6 sm:p-8 border border-light-lavender/40 shadow-xl shadow-light-purple/5">
+                <h3 className="text-slate-900 font-bold mb-6 flex items-center gap-3 text-lg sm:text-xl">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-light-purple to-light-deepPurple flex items-center justify-center shadow-md">
+                    <Video className="w-6 h-6 text-white" />
+                  </div>
                   Processing Status
                 </h3>
 
                 <div className="space-y-6">
-                  <div className="flex items-center gap-4 bg-white/10 rounded-2xl p-5 backdrop-blur-sm border border-white/20">
-                    {jobStatus.status === 'completed' && <CheckCircle2 className="w-7 h-7 text-green-400 flex-shrink-0" />}
-                    {jobStatus.status === 'failed' && <XCircle className="w-7 h-7 text-red-400 flex-shrink-0" />}
+                  <div className="flex items-center gap-4 backdrop-blur-sm rounded-2xl p-5 border-2 border-light-lavender/60 shadow-lg bg-gradient-to-r from-light-lavender/30 to-light-lightPurple/30">
+                    {jobStatus.status === 'completed' && (
+                      <div className="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center shadow-md flex-shrink-0">
+                        <CheckCircle2 className="w-6 h-6 text-white" />
+                      </div>
+                    )}
+                    {jobStatus.status === 'failed' && (
+                      <div className="w-10 h-10 rounded-xl bg-red-500 flex items-center justify-center shadow-md flex-shrink-0">
+                        <XCircle className="w-6 h-6 text-white" />
+                      </div>
+                    )}
                     {(jobStatus.status === 'pending' || jobStatus.status === 'diarizing' || jobStatus.status === 'generating_videos') && (
-                      <Loader2 className="w-7 h-7 text-purple-400 animate-spin flex-shrink-0" />
+                      <div className="w-10 h-10 rounded-xl bg-light-purple flex items-center justify-center shadow-md flex-shrink-0">
+                        <Loader2 className="w-6 h-6 text-white animate-spin" />
+                      </div>
                     )}
                     <div className="flex-1">
-                      <p className="text-white font-bold text-lg">{jobStatus.message}</p>
-                      <p className="text-purple-300 text-sm capitalize mt-1">{jobStatus.status}</p>
+                      <p className="text-slate-900 font-bold text-base sm:text-lg">{jobStatus.message}</p>
+                      <p className="text-slate-600 text-sm capitalize mt-1 font-semibold">{jobStatus.status}</p>
                     </div>
                   </div>
 
                   <div>
-                    <div className="flex justify-between text-sm text-purple-200 mb-3 font-semibold">
+                    <div className="flex justify-between text-sm text-slate-700 mb-3 font-bold">
                       <span>Progress</span>
                       <span>{jobStatus.progress}%</span>
                     </div>
-                    <div className="w-full bg-white/20 rounded-full h-3 overflow-hidden shadow-inner">
+                    <div className="w-full rounded-full h-4 overflow-hidden shadow-inner border" style={{ backgroundColor: `${theme.colors.lavender}40`, borderColor: `${theme.colors.lavender}50` }}>
                       <div
-                        className={`${getProgressColor()} h-full rounded-full transition-all duration-500 shadow-lg`}
-                        style={{ width: `${jobStatus.progress}%` }}
+                        className={`h-full rounded-full transition-all duration-500 shadow-lg`}
+                        style={{ width: `${jobStatus.progress}%`, ...getProgressStyle() }}
                       />
                     </div>
                   </div>
 
                   {jobStatus.status === 'completed' && (
                     <div className="space-y-5">
-                      <div className="bg-gradient-to-r from-green-500/20 to-emerald-500/20 border-2 border-green-400/60 rounded-2xl p-4">
-                        <h4 className="text-green-200 font-bold text-lg flex items-center gap-2">
-                          <CheckCircle2 className="w-5 h-5" />
+                      <div className="bg-gradient-to-br from-emerald-50 to-green-50 border-2 border-emerald-200/60 rounded-2xl p-5 shadow-lg">
+                        <h4 className="text-emerald-700 font-bold text-lg flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center shadow-md">
+                            <CheckCircle2 className="w-5 h-5 text-white" />
+                          </div>
                           Videos Ready!
                         </h4>
                       </div>
                       
                       {/* Merged Video - Only show if NOT in split screen mode */}
                       {jobStatus.merged_video_url && !splitScreenMode && (
-                        <div className="bg-gradient-to-r from-purple-500/20 via-pink-500/20 to-rose-500/20 rounded-2xl p-6 border-2 border-purple-400/60 backdrop-blur-sm">
-                          <p className="text-white font-bold mb-4 flex items-center gap-2 text-lg">
+                        <div className="bg-gradient-to-r from-light-lavender/30 via-pink-50 to-rose-50 rounded-2xl p-6 border-2 border-light-lavender/60 backdrop-blur-sm">
+                          <p className="text-gray-900 font-bold mb-4 flex items-center gap-2 text-lg">
                             <Video className="w-6 h-6" />
                             🎙️ Dynamic Podcast Video
                             {addSubtitles && (
@@ -1532,13 +1616,13 @@ function AvatarVideoGenerator() {
 
                       {/* NEW: Split Screen Mode - Show both videos prominently */}
                       {splitScreenMode && (jobStatus.speaker_a_video || jobStatus.speaker_b_video) && (
-                        <div className="bg-gradient-to-r from-cyan-500/20 via-blue-500/20 to-indigo-500/20 rounded-2xl p-6 border-2 border-cyan-400/60 backdrop-blur-sm">
+                        <div className="bg-gradient-to-r from-cyan-50 via-blue-50 to-indigo-50 rounded-2xl p-6 border-2 border-cyan-200 backdrop-blur-sm">
                           <div className="flex items-center justify-between mb-6">
-                            <p className="text-white font-bold flex items-center gap-2 text-lg">
+                            <p className="text-gray-900 font-bold flex items-center gap-2 text-lg">
                               <Users className="w-6 h-6" />
                               Split Screen Videos Ready
                             </p>
-                            <span className="px-4 py-2 bg-cyan-500/30 border border-cyan-400/60 rounded-full text-cyan-100 text-sm font-semibold flex items-center gap-2">
+                            <span className="px-4 py-2 bg-cyan-100 border border-cyan-200 rounded-full text-cyan-700 text-sm font-semibold flex items-center gap-2">
                               <CheckCircle2 className="w-4 h-4" />
                               Timeline-Synced
                             </span>
@@ -1547,8 +1631,8 @@ function AvatarVideoGenerator() {
                           <div className="grid md:grid-cols-2 gap-6">
                             {/* Speaker A Video */}
                             {jobStatus.speaker_a_video && (
-                              <div className="bg-white/5 rounded-xl p-4 border border-white/20">
-                                <p className="text-blue-200 font-semibold mb-3 flex items-center gap-2">
+                              <div className="bg-white rounded-xl p-4 border border-blue-100">
+                                <p className="text-blue-700 font-semibold mb-3 flex items-center gap-2">
                                   <Users className="w-5 h-5" />
                                   Speaker A (Full Timeline)
                                 </p>
@@ -1570,8 +1654,8 @@ function AvatarVideoGenerator() {
 
                             {/* Speaker B Video */}
                             {jobStatus.speaker_b_video && (
-                              <div className="bg-white/5 rounded-xl p-4 border border-white/20">
-                                <p className="text-pink-200 font-semibold mb-3 flex items-center gap-2">
+                              <div className="bg-white rounded-xl p-4 border border-pink-100">
+                                <p className="text-pink-700 font-semibold mb-3 flex items-center gap-2">
                                   <Users className="w-5 h-5" />
                                   Speaker B (Full Timeline)
                                 </p>
@@ -1593,8 +1677,8 @@ function AvatarVideoGenerator() {
                           </div>
 
                           {/* Info Box */}
-                          <div className="mt-6 bg-cyan-500/20 border-2 border-cyan-400/60 rounded-xl p-4">
-                            <p className="text-cyan-100 text-sm flex items-start gap-2">
+                          <div className="mt-6 bg-cyan-50 border-2 border-cyan-200 rounded-xl p-4">
+                            <p className="text-cyan-800 text-sm flex items-start gap-2">
                               <Info className="w-5 h-5 mt-0.5 flex-shrink-0" />
                               <span>
                                 <strong>Perfect for editing:</strong> Both videos have the same duration with synchronized silence periods.
@@ -1607,8 +1691,8 @@ function AvatarVideoGenerator() {
 
                       {/* Supabase Storage Info */}
                       {jobStatus.supabase_video_url && jobStatus.status === 'completed' && (
-                        <div className="bg-gradient-to-r from-emerald-500/15 to-teal-500/15 rounded-2xl p-6 border-2 border-emerald-400/50 backdrop-blur-sm space-y-4">
-                          <p className="text-emerald-100 font-semibold flex items-center gap-2 text-lg">
+                        <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-2xl p-6 border-2 border-emerald-200 backdrop-blur-sm space-y-4">
+                          <p className="text-emerald-800 font-semibold flex items-center gap-2 text-lg">
                             <Sparkles className="w-5 h-5" />
                             Video Saved to Supabase Storage
                           </p>
@@ -1616,7 +1700,7 @@ function AvatarVideoGenerator() {
                             href={jobStatus.supabase_video_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 text-white font-semibold px-4 py-2 rounded-xl bg-emerald-500/80 hover:bg-emerald-500 transition-all duration-300"
+                            className="inline-flex items-center gap-2 text-white font-semibold px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 transition-all duration-300"
                           >
                             <Upload className="w-4 h-4" />
                             View Video
@@ -1634,8 +1718,8 @@ function AvatarVideoGenerator() {
                       
                       {/* Individual Videos (Collapsed Details) - Only show if NOT in split screen mode */}
                       {!splitScreenMode && (
-                        <details className="bg-white/10 rounded-2xl p-5 backdrop-blur-sm border border-white/20 hover:bg-white/15 transition-all duration-300">
-                          <summary className="text-white font-bold cursor-pointer flex items-center gap-2 text-base">
+                        <details className="bg-white rounded-2xl p-5 border border-light-lavender/40 transition-all duration-300 hover:bg-light-lavender/20">
+                          <summary className="text-gray-900 font-bold cursor-pointer flex items-center gap-2 text-base">
                             <ArrowRight className="w-5 h-5" />
                             View Individual Speaker Videos
                           </summary>
@@ -1643,7 +1727,7 @@ function AvatarVideoGenerator() {
                           <div className="mt-5 space-y-4">
                             {jobStatus.speaker_a_video && (
                               <div>
-                                <p className="text-purple-200 font-semibold mb-2 flex items-center gap-2">
+                                <p className="font-semibold mb-2 flex items-center gap-2 text-light-purple">
                                   <Users className="w-4 h-4" />
                                   Speaker A
                                 </p>
@@ -1657,7 +1741,7 @@ function AvatarVideoGenerator() {
                             
                             {jobStatus.speaker_b_video && (
                               <div>
-                                <p className="text-purple-200 font-semibold mb-2 flex items-center gap-2">
+                                <p className="font-semibold mb-2 flex items-center gap-2 text-light-purple">
                                   <Users className="w-4 h-4" />
                                   Speaker B
                                 </p>
@@ -1675,8 +1759,8 @@ function AvatarVideoGenerator() {
                   )}
 
                   {jobStatus.error && (
-                    <div className="bg-gradient-to-r from-red-500/20 to-rose-500/20 border-2 border-red-400 rounded-2xl p-4 backdrop-blur-sm">
-                      <p className="text-red-200 font-medium flex items-center gap-2">
+                    <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-4">
+                      <p className="text-red-700 font-medium flex items-center gap-2">
                         <XCircle className="w-5 h-5" />
                         Error: {jobStatus.error}
                       </p>
@@ -1685,51 +1769,52 @@ function AvatarVideoGenerator() {
                 </div>
               </div>
             )}
-          </div>
+
+          {/* Proceed Modal */}
+          {showProceedModal && jobStatus?.status === 'completed' && jobStatus?.supabase_video_url && (
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+              <div className="rounded-3xl shadow-2xl p-6 sm:p-8 max-w-md w-full text-center border-2 border-light-purple/30 relative backdrop-blur-xl bg-light-lightPurple">
+                <button
+                  onClick={() => setShowProceedModal(false)}
+                  className="absolute top-4 right-4 text-white/80 hover:text-white transition-all duration-300 hover:scale-110 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+                
+                <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-yellow-400 to-amber-500 flex items-center justify-center shadow-2xl animate-pulse">
+                  <Sparkles className="w-12 h-12 text-white" />
+                </div>
+                <h2 className="text-2xl sm:text-3xl font-bold text-white mb-4">Video Ready!</h2>
+                <p className="leading-relaxed mb-8 font-medium text-sm sm:text-base text-light-lavender/90">
+                  Your podcast video has been generated and saved to Supabase storage. What would you like to do next?
+                </p>
+                
+                <div className="flex flex-col gap-3 sm:gap-4">
+                  <button
+                    onClick={handleGenerateNewVideo}
+                    className="w-full px-6 py-3.5 bg-white/10 backdrop-blur-sm border-2 border-light-lightPurple/50 text-light-lavender/90 rounded-xl font-bold hover:bg-white/20 transition-all duration-300 shadow-lg hover:shadow-xl flex items-center justify-center gap-2 transform hover:scale-[1.02]"
+                  >
+                    <Video className="w-5 h-5" />
+                    Generate New Video
+                  </button>
+                  
+                  <button
+                    onClick={handleProceedToEditing}
+                    className="w-full px-6 py-3.5 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-xl font-bold hover:from-emerald-600 hover:to-green-700 transition-all duration-300 shadow-xl hover:shadow-2xl flex items-center justify-center gap-2 transform hover:scale-[1.02]"
+                  >
+                    <Play className="w-5 h-5" />
+                    Proceed with Video Editing
+                  </button>
+                </div>
+                
+                <p className="text-xs mt-6 font-medium text-light-lavender/70">
+                  Note: Your edited video will overwrite the original in Supabase storage
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
-
-      {/* Proceed Modal */}
-      {showProceedModal && jobStatus?.status === 'completed' && jobStatus?.supabase_video_url && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
-          <div className="bg-gradient-to-br from-purple-800 to-indigo-900 rounded-3xl shadow-2xl p-8 max-w-md w-full text-center border border-purple-600 relative">
-            <button
-              onClick={() => setShowProceedModal(false)}
-              className="absolute top-4 right-4 text-white/70 hover:text-white transition-colors"
-            >
-              <X className="w-6 h-6" />
-            </button>
-            
-            <Sparkles className="w-16 h-16 text-yellow-300 mx-auto mb-6 animate-pulse" />
-            <h2 className="text-3xl font-bold text-white mb-4">Video Ready!</h2>
-            <p className="text-purple-200 leading-relaxed mb-8">
-              Your podcast video has been generated and saved to Supabase storage. What would you like to do next?
-            </p>
-            
-            <div className="flex flex-col gap-4">
-              <button
-                onClick={handleGenerateNewVideo}
-                className="w-full px-6 py-3 bg-white/10 border border-purple-400 text-purple-200 rounded-xl font-semibold hover:bg-white/20 transition-all duration-300 shadow-md flex items-center justify-center gap-2"
-              >
-                <Video className="w-5 h-5" />
-                Generate New Video
-              </button>
-              
-              <button
-                onClick={handleProceedToEditing}
-                className="w-full px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-bold hover:from-green-600 hover:to-emerald-700 transition-all duration-300 shadow-lg flex items-center justify-center gap-2"
-              >
-                <Play className="w-5 h-5" />
-                Proceed with Video Editing
-              </button>
-            </div>
-            
-            <p className="text-purple-300 text-xs mt-6">
-              Note: Your edited video will overwrite the original in Supabase storage
-            </p>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

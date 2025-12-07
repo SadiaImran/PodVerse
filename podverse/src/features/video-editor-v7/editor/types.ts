@@ -9,6 +9,7 @@ export enum OverlayType {
   LOCAL_DIR = "local-dir",
   STICKER = "sticker",
   TEMPLATE = "template",
+  AI_VISUALS = "ai-visuals",
 }
 // Base overlay properties
 type BaseOverlay = {

@@ -21,6 +21,7 @@ from module_social_media.routes import router as social_media_router
 from module_admin.module_admin_route import router as admin_router
 from module_subscription.subscription_route import router as subscription_router
 from module_visuals.module_visuals_route import router as visuals_router
+from module_ai_visuals.module_ai_visuals_route import router as ai_visuals_router
 from fastapi.staticfiles import StaticFiles
 
 import tempfile
@@ -85,6 +86,7 @@ app.include_router(podcast_router, prefix="/video", tags=["video"])  # Podcast p
 app.include_router(video_router, prefix="/videos", tags=["video"])  # Supabase endpoints: /videos/upload, /videos/list
 app.include_router(subscription_router)
 app.include_router(visuals_router, prefix="", tags=["visuals"])
+app.include_router(ai_visuals_router, prefix="/ai-visuals", tags=["ai-visuals"])
 
 app.mount("/output", StaticFiles(directory="module_voice_clone/output"), name="output")
 
