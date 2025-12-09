@@ -4,6 +4,39 @@ import { useNavigate } from 'react-router-dom';
 import ProfileMarry from '../../images/icon-profile-marry.png';
 import { supabase } from '../../supabaseClient.js';
 
+// Extract bucket and path from Supabase URL
+const extractStoragePath = (url) => {
+  if (!url || !url.includes('supabase.co')) return null;
+  const signSplit = url.split('/storage/v1/object/sign/');
+  const publicSplit = url.split('/storage/v1/object/public/');
+  let path = null;
+  if (signSplit.length === 2) path = signSplit[1].split('?')[0];
+  else if (publicSplit.length === 2) path = publicSplit[1].split('?')[0];
+  if (!path) return null;
+  const parts = path.split('/');
+  if (parts.length < 2) return null;
+  return { bucket: parts[0], filePath: parts.slice(1).join('/') };
+};
+
+// Get fresh signed URL (fallback to original on error)
+const getFreshSignedUrl = async (url) => {
+  if (!url) return null;
+  const info = extractStoragePath(url);
+  if (!info) return url; // non-supabase URL
+  const { bucket, filePath } = info;
+  try {
+    const { data, error } = await supabase.storage
+      .from(bucket)
+      .createSignedUrl(filePath, 604800); // 7 days
+    if (!error && data) {
+      return data.signedUrl || data.signed_url || data.url || url;
+    }
+  } catch (err) {
+    console.error('Error getting fresh signed URL (modal):', err);
+  }
+  return url;
+};
+
 /**
  * PostModal Component
  * 
@@ -30,6 +63,7 @@ const PostModal = ({
   const [loadingComment, setLoadingComment] = useState(false);
   const [videoLoaded, setVideoLoaded] = useState(false);
   const [videoError, setVideoError] = useState(false);
+  const [videoUrlResolved, setVideoUrlResolved] = useState(post?.video_url || post?.media_url || null);
   const [userProfile, setUserProfile] = useState(null);
   const [summaryVisible, setSummaryVisible] = useState(false);
   const [summaryData, setSummaryData] = useState(null);
@@ -92,9 +126,21 @@ const PostModal = ({
     }
   }, [post]);
 
-  // Load video when modal opens
+  // Load video when modal opens (and resolve signed URL)
   useEffect(() => {
-    if (isOpen && post && videoRef.current) {
+    const loadVideo = async () => {
+      if (post?.video_url || post?.media_url) {
+        const fresh = await getFreshSignedUrl(post.video_url || post.media_url);
+        setVideoUrlResolved(fresh || post.video_url || post.media_url);
+      } else {
+        setVideoUrlResolved(null);
+      }
+    };
+    loadVideo();
+  }, [post]);
+
+  useEffect(() => {
+    if (isOpen && videoRef.current) {
       const video = videoRef.current;
       video.load();
       
@@ -103,7 +149,17 @@ const PostModal = ({
         setVideoError(false);
       };
       
-      const handleError = () => {
+      const handleError = async () => {
+        // Try one retry with a fresh signed URL
+        if (post?.video_url || post?.media_url) {
+          const fresh = await getFreshSignedUrl(post.video_url || post.media_url);
+          if (fresh && fresh !== videoUrlResolved) {
+            setVideoUrlResolved(fresh);
+            setVideoLoaded(false);
+            setVideoError(false);
+            return;
+          }
+        }
         setVideoError(true);
         setVideoLoaded(false);
       };
@@ -116,7 +172,7 @@ const PostModal = ({
         video.removeEventListener('error', handleError);
       };
     }
-  }, [isOpen, post]);
+  }, [isOpen, videoUrlResolved, post]);
 
   // Track view when modal opens
   useEffect(() => {
@@ -151,7 +207,7 @@ const PostModal = ({
 
   if (!isOpen || !post) return null;
 
-  const videoUrl = post.video_url || post.media_url;
+  const videoUrl = videoUrlResolved;
   const profile = post.profiles || {};
   // Use database profile if available, otherwise fallback to post profile
   const displayProfile = userProfile || profile;
@@ -373,7 +429,7 @@ const PostModal = ({
               <video
                 ref={videoRef}
                 src={videoUrl}
-                className={`w-full h-full ${videoLoaded ? 'block' : 'hidden'}`}
+                className="w-full h-full"
                 muted={isMuted}
                 loop
                 playsInline
@@ -389,7 +445,6 @@ const PostModal = ({
                   setVideoLoaded(false);
                 }}
                 style={{ 
-                  display: videoLoaded ? 'block' : 'none',
                   width: '100%',
                   height: '100%',
                   objectFit: 'contain'
@@ -398,41 +453,56 @@ const PostModal = ({
               
               {/* Video Controls Overlay */}
               {videoLoaded && (
-                <div
-                  className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/30 transition-all group pointer-events-none"
-                  style={{ visibility: isPlaying ? 'hidden' : 'visible' }}
-                >
-                  <button
-                    onClick={handlePlayPause}
-                    className="w-20 h-20 rounded-full flex items-center justify-center transition-all shadow-2xl pointer-events-auto"
-                    style={{ backgroundColor: 'rgba(255, 255, 255, 0.95)' }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = 'scale(1.1)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = 'scale(1)';
-                    }}
+                <>
+                  {/* Center play/pause when paused */}
+                  <div
+                    className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/30 transition-all group pointer-events-none"
+                    style={{ visibility: isPlaying ? 'hidden' : 'visible' }}
                   >
-                    {isPlaying ? (
-                      <Pause size={36} style={{ color: '#6057C7' }} />
-                    ) : (
-                      <Play size={36} fill="#6057C7" style={{ color: '#6057C7', marginLeft: '4px' }} />
-                    )}
-                  </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handlePlayPause();
+                      }}
+                      className="w-20 h-20 rounded-full flex items-center justify-center transition-all shadow-2xl pointer-events-auto"
+                      style={{ backgroundColor: 'rgba(255, 255, 255, 0.95)' }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'scale(1.1)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'scale(1)';
+                      }}
+                    >
+                      {isPlaying ? (
+                        <Pause size={36} style={{ color: '#6057C7' }} />
+                      ) : (
+                        <Play size={36} fill="#6057C7" style={{ color: '#6057C7', marginLeft: '4px' }} />
+                      )}
+                    </button>
+                  </div>
                   
-                  {/* Mute button */}
-                  <button
-                    onClick={handleMuteToggle}
-                    className="absolute bottom-5 right-5 p-3 rounded-full transition-all hover:scale-110 pointer-events-auto"
-                    style={{ backgroundColor: 'rgba(0, 0, 0, 0.7)' }}
-                  >
-                    {isMuted ? (
-                      <VolumeX size={20} style={{ color: '#ffffff' }} />
-                    ) : (
-                      <Volume2 size={20} style={{ color: '#ffffff' }} />
-                    )}
-                  </button>
-                </div>
+                  {/* Always-visible bottom controls */}
+                  <div className="absolute bottom-3 right-3 flex items-center gap-2 bg-black/70 text-white rounded-full px-3 py-1.5 shadow-lg pointer-events-auto">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handlePlayPause();
+                      }}
+                      className="p-2 rounded-full hover:bg-white/10 transition-colors"
+                    >
+                      {isPlaying ? <Pause size={18} /> : <Play size={18} className="ml-1" />}
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleMuteToggle();
+                      }}
+                      className="p-2 rounded-full hover:bg-white/10 transition-colors"
+                    >
+                      {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+                    </button>
+                  </div>
+                </>
               )}
             </>
           ) : (

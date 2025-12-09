@@ -4,109 +4,47 @@ import { useNavigate } from 'react-router-dom';
 import ProfileMarry from '../../images/icon-profile-marry.png';
 import { supabase } from '../../supabaseClient';
 
-// Helper function to get fresh signed URL from Supabase storage
-const getFreshSignedUrl = async (url) => {
-  if (!url) return null;
-  
-  // If not a Supabase URL, return as-is
-  if (!url.includes('supabase.co')) {
-    return url;
+// Helper: extract bucket and file path from a Supabase storage URL (public or signed)
+const extractStoragePath = (url) => {
+  if (!url || !url.includes('supabase.co')) return null;
+
+  // Handles both /sign/ and /public/ URLs
+  const signSplit = url.split('/storage/v1/object/sign/');
+  const publicSplit = url.split('/storage/v1/object/public/');
+  let path = null;
+
+  if (signSplit.length === 2) {
+    path = signSplit[1].split('?')[0]; // remove token
+  } else if (publicSplit.length === 2) {
+    path = publicSplit[1].split('?')[0];
   }
-  
-  // If it's already a signed URL, try to get a fresh one
-  if (url.includes('/storage/v1/object/sign/')) {
-    try {
-      // Extract bucket and path from signed URL
-      const parts = url.split('/storage/v1/object/sign/');
-      if (parts.length === 2) {
-        const pathWithToken = parts[1];
-        const pathParts = pathWithToken.split('?')[0].split('/');
-        if (pathParts.length >= 2) {
-          const bucket = pathParts[0];
-          const filePath = pathParts.slice(1).join('/');
-          
-          // Get fresh signed URL
-          const { data, error } = await supabase.storage
-            .from(bucket)
-            .createSignedUrl(filePath, 604800); // 7 days
-          
-          if (!error && data) {
-            return data.signedUrl || data.signed_url || data.url || url;
-          }
-        }
-      }
-    } catch (err) {
-      console.error('Error getting fresh signed URL:', err);
-    }
-  }
-  
-  // If it's a public URL, try to get signed URL
-  if (url.includes('/storage/v1/object/public/')) {
-    try {
-      const parts = url.split('/storage/v1/object/public/');
-      if (parts.length === 2) {
-        const pathParts = parts[1].split('/');
-        if (pathParts.length >= 2) {
-          const bucket = pathParts[0];
-          const filePath = pathParts.slice(1).join('/').split('?')[0];
-          
-          const { data, error } = await supabase.storage
-            .from(bucket)
-            .createSignedUrl(filePath, 604800);
-          
-          if (!error && data) {
-            return data.signedUrl || data.signed_url || data.url || url;
-          }
-        }
-      }
-    } catch (err) {
-      console.error('Error getting signed URL from public:', err);
-    }
-  }
-  
-  // Fallback: return original URL
-  return url;
+
+  if (!path) return null;
+  const parts = path.split('/');
+  if (parts.length < 2) return null;
+  return { bucket: parts[0], filePath: parts.slice(1).join('/') };
 };
 
-// Helper function to get signed URL from Supabase storage path (fallback)
-const getSignedUrl = async (url) => {
+// Helper: always try to get a fresh signed URL (most reliable for private buckets)
+const getFreshSignedUrl = async (url) => {
   if (!url) return null;
-  
-  // First try public URL
-  const publicUrl = getPublicUrl(url);
-  if (publicUrl && publicUrl !== url) {
-    return publicUrl;
-  }
-  
-  // If already a signed URL or external URL, return as-is
-  if (url.includes('/object/sign/') || !url.includes('supabase.co')) {
-    return url;
-  }
-  
-  // If it's a public URL, try to get signed URL as fallback
-  if (url.includes('/storage/v1/object/public/')) {
-    try {
-      const parts = url.split('/storage/v1/object/public/');
-      if (parts.length === 2) {
-        const pathParts = parts[1].split('/');
-        if (pathParts.length >= 2) {
-          const bucket = pathParts[0];
-          const filePath = pathParts.slice(1).join('/').split('?')[0];
-          
-          const { data, error } = await supabase.storage
-            .from(bucket)
-            .createSignedUrl(filePath, 604800); // 7 days
-          
-          if (!error && data) {
-            return data.signedUrl || data.signed_url || data.url || url;
-          }
-        }
-      }
-    } catch (err) {
-      console.error('Error getting signed URL:', err);
+  const storageInfo = extractStoragePath(url);
+  if (!storageInfo) return url; // non-supabase URL, return as-is
+
+  const { bucket, filePath } = storageInfo;
+  try {
+    const { data, error } = await supabase.storage
+      .from(bucket)
+      .createSignedUrl(filePath, 604800); // 7 days
+
+    if (!error && data) {
+      return data.signedUrl || data.signed_url || data.url || url;
     }
+  } catch (err) {
+    console.error('Error getting fresh signed URL:', err);
   }
-  
+
+  // Fallback to original URL if signing fails
   return url;
 };
 
@@ -181,20 +119,28 @@ const PostCard = ({
     setVideoError(false);
     setThumbnailError(false);
     
-    // Get URLs for video and thumbnail - use signed URLs if available
+    // Get URLs for video and thumbnail - always try fresh signed URLs
     const loadUrls = async () => {
       if (post.video_url) {
-        // Use signed URL if available, otherwise use as-is
-        const validVideoUrl = getValidUrl(post.video_url);
-        setVideoUrl(validVideoUrl || post.video_url);
+        try {
+          const freshVideoUrl = await getFreshSignedUrl(post.video_url);
+          setVideoUrl(freshVideoUrl || post.video_url);
+        } catch (err) {
+          console.error('Error loading video URL:', err);
+          setVideoUrl(post.video_url);
+        }
       } else {
         setVideoUrl(null);
       }
       
       if (post.thumbnail_url) {
-        // For thumbnails, use signed URL if available
-        const validThumbUrl = getValidUrl(post.thumbnail_url);
-        setThumbnailUrl(validThumbUrl || post.thumbnail_url);
+        try {
+          const freshThumbUrl = await getFreshSignedUrl(post.thumbnail_url);
+          setThumbnailUrl(freshThumbUrl || post.thumbnail_url);
+        } catch (err) {
+          console.error('Error loading thumbnail URL:', err);
+          setThumbnailUrl(post.thumbnail_url);
+        }
       } else {
         setThumbnailUrl(null);
       }

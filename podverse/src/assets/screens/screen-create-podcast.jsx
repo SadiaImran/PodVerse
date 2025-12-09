@@ -10,6 +10,53 @@ import CreateProjectModal from "../components/shared/CreateProjectModal";
 
 const API_BASE_URL = 'http://localhost:8000';
 
+// Helpers to resolve Supabase storage URLs to fresh signed URLs
+const extractStoragePath = (url) => {
+  if (!url || !url.includes('supabase.co')) return null;
+  const signSplit = url.split('/storage/v1/object/sign/');
+  const publicSplit = url.split('/storage/v1/object/public/');
+  let path = null;
+  if (signSplit.length === 2) path = signSplit[1].split('?')[0];
+  else if (publicSplit.length === 2) path = publicSplit[1].split('?')[0];
+  if (!path) return null;
+  const parts = path.split('/');
+  if (parts.length < 2) return null;
+  return { bucket: parts[0], filePath: parts.slice(1).join('/') };
+};
+
+const getFreshSignedUrl = async (url) => {
+  if (!url) return null;
+  const info = extractStoragePath(url);
+  if (!info) return url;
+  const { bucket, filePath } = info;
+  try {
+    const { data, error } = await supabase.storage
+      .from(bucket)
+      .createSignedUrl(filePath, 604800); // 7 days
+    if (!error && data) {
+      return data.signedUrl || data.signed_url || data.url || url;
+    }
+  } catch (err) {
+    console.error('Error getting signed URL (create-podcast):', err);
+  }
+  return url;
+};
+
+const resolveMediaUrls = async (postList = []) => {
+  return Promise.all(
+    postList.map(async (p) => {
+      const resolved = { ...p };
+      if (p.video_url || p.media_url) {
+        resolved.video_url_resolved = await getFreshSignedUrl(p.video_url || p.media_url);
+      }
+      if (p.thumbnail_url) {
+        resolved.thumbnail_url_resolved = await getFreshSignedUrl(p.thumbnail_url);
+      }
+      return resolved;
+    })
+  );
+};
+
 const CreatePodcastPage = () => {
   const navigate = useNavigate();
   const [fullName, setFullName] = useState("");
@@ -106,13 +153,18 @@ const CreatePodcastPage = () => {
         }
 
         const result = await response.json();
-        const userPosts = result.posts || [];
-        const savedPosts = result.saved_posts || [];
+        const userPostsRaw = result.posts || [];
+        const savedPostsRaw = result.saved_posts || [];
+
+        // Resolve signed URLs for all posts
+        const resolvedDrafts = await resolveMediaUrls(userPostsRaw.filter(post => post.status === 'draft'));
+        const resolvedPublished = await resolveMediaUrls(userPostsRaw.filter(post => post.status === 'published' || !post.status));
+        const resolvedSaved = await resolveMediaUrls(savedPostsRaw);
 
         setPosts({
-          drafts: userPosts.filter(post => post.status === 'draft'),
-          published: userPosts.filter(post => post.status === 'published' || !post.status),
-          saved: savedPosts
+          drafts: resolvedDrafts,
+          published: resolvedPublished,
+          saved: resolvedSaved
         });
       } catch (fetchError) {
         console.error("Error loading posts from API, trying Supabase fallback:", fetchError);
@@ -126,9 +178,12 @@ const CreatePodcastPage = () => {
             .order('created_at', { ascending: false });
 
           if (!postsError && postsData) {
+            const resolvedDrafts = await resolveMediaUrls(postsData.filter(post => post.status === 'draft'));
+            const resolvedPublished = await resolveMediaUrls(postsData.filter(post => post.status === 'published' || !post.status));
+
             setPosts({
-              drafts: postsData.filter(post => post.status === 'draft'),
-              published: postsData.filter(post => post.status === 'published' || !post.status),
+              drafts: resolvedDrafts,
+              published: resolvedPublished,
               saved: []
             });
           } else {
@@ -432,8 +487,8 @@ const CreatePodcastPage = () => {
                 ))
               ) : filteredVideos.length > 0 ? (
                 filteredVideos.map((video) => {
-                  const videoUrl = video.video_url || video.media_url;
-                  const thumbnailUrl = video.thumbnail_url || videoUrl;
+                  const videoUrl = video.video_url_resolved || video.video_url || video.media_url;
+                  const thumbnailUrl = video.thumbnail_url_resolved || video.thumbnail_url || videoUrl;
                   const title = video.title || video.podcastTitle || 'Untitled';
                   
                   return (
